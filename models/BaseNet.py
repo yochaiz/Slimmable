@@ -4,7 +4,7 @@ from math import floor
 from torch.nn import Module, ModuleList, Conv2d, BatchNorm2d
 from torch.nn.functional import conv2d
 
-from HtmlLogger import HtmlLogger
+from utils.HtmlLogger import HtmlLogger
 
 
 # abstract class for model block
@@ -16,6 +16,17 @@ class Block(Module):
 
 # abstract class for model layer
 class Layer(Block):
+    def __init__(self, nFiltersList):
+        super(Layer, self).__init__()
+
+        # save list of number of filters
+        self.nFiltersList = nFiltersList
+        # init current number of filters index
+        self.nFiltersCurrIdx = 0
+
+    def getCurrFilterIdx(self):
+        return self.nFiltersCurrIdx
+
     @abstractmethod
     def getAllWidths(self):
         raise NotImplementedError('subclasses must override getAllWidths()!')
@@ -27,15 +38,10 @@ class Layer(Block):
 
 class ConvLayer(Layer):
     def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride):
-        super(ConvLayer, self).__init__()
+        super(ConvLayer, self).__init__([int(x * out_planes) for x in widthRatioList])
 
         # init conv2d module
         self.conv = Conv2d(in_planes, out_planes, kernel_size, stride=stride, padding=floor(kernel_size / 2), bias=False)
-
-        # save number of filters options
-        self.nFiltersList = [int(x * out_planes) for x in widthRatioList]
-        # init current number of filters
-        self.nFiltersCurrIdx = 0
         # init independent batchnorm module for number of filters
         self.bn = ModuleList([BatchNorm2d(n) for n in self.nFiltersList])
 
