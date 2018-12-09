@@ -1,8 +1,9 @@
-from argparse import ArgumentParser
-from inspect import isclass
-from time import strftime
 from datetime import datetime
 from numpy import random as nprandom
+from sys import exit, argv
+from os import getpid, environ
+from socket import gethostname
+from traceback import format_exc
 
 from torch.multiprocessing import set_start_method
 import torch.backends.cudnn as cudnn
@@ -10,56 +11,16 @@ from torch.cuda import is_available, set_device
 from torch.cuda import manual_seed as cuda_manual_seed
 from torch import manual_seed as torch_manual_seed
 
-import models
-from utils import create_exp_dir
-
-
-def parseArgs():
-    modelNames = [name for (name, obj) in models.__dict__.items() if isclass(obj) and name.islower()]
-    datasets = dict(cifar10=10, cifar100=100, imagenet=1000)
-
-    parser = ArgumentParser("Slimmable")
-    parser.add_argument('--data', type=str, required=True, help='location of the data corpus')
-    parser.add_argument('--dataset', metavar='DATASET', default='cifar10', choices=datasets.keys(), help='dataset name')
-    parser.add_argument('--model', metavar='MODEL', default='resnet18', choices=modelNames)
-    parser.add_argument('--batch_size', type=int, default=250, help='batch size')
-    parser.add_argument('--learning_rate', type=float, default=0.01, help='init learning rate')
-    parser.add_argument('--learning_rate_min', type=float, default=1E-8, help='min learning rate')
-    parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
-    parser.add_argument('--weight_decay', type=float, default=4e-5, help='weight decay')
-    parser.add_argument('--gpu', type=str, default='0', help='gpu device id, e.g. 0,1,3')
-
-    parser.add_argument('--train_portion', type=float, default=0.5, help='portion of training data')
-
-    parser.add_argument('--kernel', type=int, default=3, help='conv kernel size, e.g. 1,3,5')
-
-    parser.add_argument('--width', type=str, required=True, help='list of width values, e.g. 0.25,0.5,0.75,1.0')
-
-    args = parser.parse_args()
-
-    # update GPUs list
-    if type(args.gpu) is str:
-        args.gpu = [int(i) for i in args.gpu.split(',')]
-
-    # convert width to list
-    args.width = [float(x) for x in args.width.split(',')]
-    assert (0 < max(args.width) <= 1)
-
-    # set number of model output classes
-    args.nClasses = datasets[args.dataset]
-
-    # create folder
-    args.time = strftime("%Y%m%d-%H%M%S")
-    args.lmbda = 0.0  # TODO: replace with real lambda
-    args.folderName = '{},[{}],[{}],[{}]'.format(args.width, args.lmbda, args.dataset, args.time)
-    args.save = '../results/{}'.format(args.folderName)
-    args.codeZip = create_exp_dir(args.save)
-
-    return args
-
+import trainRegimes
+from utils.HtmlLogger import HtmlLogger
+from utils.email import sendEmail
+from utils.args import parseArgs
 
 if __name__ == '__main__':
+    # load command line arguments
     args = parseArgs()
+    # init main logger
+    logger = HtmlLogger(args.save, 'log')
 
     if not is_available():
         print('no gpu device available')
@@ -78,11 +39,30 @@ if __name__ == '__main__':
     except RuntimeError:
         raise ValueError('spawn failed')
 
-    # build model for uniform distribution of bits
-    modelClass = models.__dict__[args.model]
-    # init model
-    model = modelClass(args)
-    model = model.cuda()
-    print(model)
+    try:
+        # log command line
+        logger.addInfoTable(title='Command line', rows=[[' '.join(argv)], ['PID:[{}]'.format(getpid())], ['Hostname', gethostname()],
+                                                        ['CUDA_VISIBLE_DEVICES', environ.get('CUDA_VISIBLE_DEVICES')]])
+        # build regime for alphas optimization
+        alphasRegimeClass = trainRegimes.__dict__[args.train_regime]
+        alphasRegime = alphasRegimeClass(args, logger)
+        # train according to chosen regime
+        alphasRegime.train()
+        logger.addInfoToDataTable('Done !')
 
-    a = 5
+    except Exception as e:
+        # create message content
+        messageContent = '[{}] stopped due to error [{}] \n traceback:[{}]'. \
+            format(args.folderName, str(e), format_exc())
+
+        # create data table if exception happened before we create data table
+        if logger.dataTableCols is None:
+            logger.createDataTable('Exception', ['Error message'])
+        # log to logger
+        logger.addInfoToDataTable(messageContent, color='lightsalmon')
+        # send e-mail with error details
+        subject = '[{}] stopped'.format(args.folderName)
+        sendEmail(['yochaiz.cs@gmail.com'], subject, messageContent)
+
+        # forward exception
+        raise e
