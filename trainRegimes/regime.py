@@ -64,7 +64,7 @@ class TrainRegime:
         # load data
         self.train_queue, self.search_queue, self.valid_queue = load_data(args)
         # load pre-trained model
-        model.loadPreTrained(args.pre_trained, logger, args)
+        model.loadPreTrained(args.pre_trained, logger)
 
         # log parameters
         logParameters(logger, args, model)
