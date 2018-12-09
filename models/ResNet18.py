@@ -10,7 +10,7 @@ class Input:
         self.input_size = input_size
 
     # number of channels in input
-    def nCurrFilters(self):
+    def currWidth(self):
         return self.channels
 
     def outputChannels(self):
