@@ -78,7 +78,6 @@ class ResNet18(BaseNet):
         widthRatioList = widthRatioList.copy()
 
         blocksPlanes = self.initBlocksPlanes()
-        # TODO: get input size from dataset and calculate input_size per block
 
         # create list of blocks from blocksPlanes
         blocks = ModuleList()
