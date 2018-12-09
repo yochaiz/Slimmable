@@ -28,7 +28,6 @@ class TrainRegime:
     epochNumKey = 'Epoch #'
     batchNumKey = 'Batch #'
     pathFlopsRatioKey = 'Path flops ratio'
-    optFlopsRatioKey = 'Optimal flops ratio'
     validFlopsRatioKey = 'Validation flops ratio'
     timeKey = 'Time'
     lrKey = 'Optimizer lr'
@@ -36,7 +35,7 @@ class TrainRegime:
     forwardCountersKey = 'Forward counters'
 
     # init formats for keys
-    formats = {validLossKey: '{:.5f}', validAccKey: '{:.3f}', optFlopsRatioKey: '{:.3f}', timeKey: '{:.3f}',
+    formats = {validLossKey: '{:.5f}', validAccKey: '{:.3f}', timeKey: '{:.3f}',
                archLossKey: '{:.5f}', lrKey: '{:.5f}', flopsLossKey: '{:.5f}', crossEntropyKey: '{:.5f}',
                trainLossKey: '{:.5f}', trainAccKey: '{:.3f}', pathFlopsRatioKey: '{:.3f}', validFlopsRatioKey: '{:.3f}'
                }
@@ -64,6 +63,8 @@ class TrainRegime:
 
         # load data
         self.train_queue, self.search_queue, self.valid_queue = load_data(args)
+        # load pre-trained model
+        model.loadPreTrained(args.pre_trained, logger, args)
 
         # log parameters
         logParameters(logger, args, model)
@@ -310,7 +311,7 @@ class TrainRegime:
                                             ['Epochs as optimum', nEpochsOptimum], ['Update time', logger.getTimeStr()]])
 
             # save model checkpoint
-            save_checkpoint(self.trainFolderPath, model, args, best_prec1, is_best, filename)
+            save_checkpoint(self.trainFolderPath, model, optimizer, best_prec1, is_best, filename)
 
             # add data to main logger table
             logger.addDataRow(trainData)
