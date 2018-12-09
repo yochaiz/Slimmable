@@ -46,8 +46,8 @@ if __name__ == '__main__':
         # build regime for alphas optimization
         alphasRegimeClass = trainRegimes.__dict__[args.train_regime]
         alphasRegime = alphasRegimeClass(args, logger)
-        # train according to chosen regime
-        alphasRegime.train()
+        # # train according to chosen regime
+        # alphasRegime.train()
         logger.addInfoToDataTable('Done !')
 
     except Exception as e:

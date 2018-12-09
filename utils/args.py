@@ -19,7 +19,8 @@ def saveArgsToJSON(args):
 def parseArgs():
     modelNames = [name for (name, obj) in models.__dict__.items() if isclass(obj) and name.islower()]
     trainRegimesNames = [name for (name, obj) in trainRegimes.__dict__.items() if isclass(obj) and name.islower()]
-    datasets = dict(cifar10=10, cifar100=100, imagenet=1000)
+    # init datasets parameters (nClasses, input_size)
+    datasets = dict(cifar10=(10, 32), cifar100=(100, 32), imagenet=(1000, None))
 
     parser = ArgumentParser("Slimmable")
     parser.add_argument('--data', type=str, required=True, help='location of the data corpus')
@@ -52,8 +53,8 @@ def parseArgs():
     args.width = [float(x) for x in args.width.split(',')]
     assert (0 < max(args.width) <= 1)
 
-    # set number of model output classes
-    args.nClasses = datasets[args.dataset]
+    # set number of model output classes & dataset input size
+    args.nClasses, args.input_size = datasets[args.dataset]
 
     # create folder
     args.time = strftime("%Y%m%d-%H%M%S")

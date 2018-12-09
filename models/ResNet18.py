@@ -4,6 +4,25 @@ from torch.nn.functional import linear
 from .BaseNet import BaseNet, Block, ConvSlimLayer
 
 
+class Input:
+    def __init__(self, channels, input_size):
+        self.channels = channels
+        self.input_size = input_size
+
+    # number of channels in input
+    def nCurrFilters(self):
+        return self.channels
+
+    def outputChannels(self):
+        return self.channels
+
+    def getAllWidths(self):
+        return [self.channels]
+
+    def outputSize(self):
+        return self.input_size
+
+
 class BasicBlock(Block):
     def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
         super(BasicBlock, self).__init__()
@@ -19,7 +38,7 @@ class BasicBlock(Block):
         self.relu2 = ReLU(inplace=True)
 
         # init downsample
-        self.downsample = ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size=1, stride=stride1, prevLayer=prevLayer) \
+        self.downsample = ConvSlimLayer(widthRatioList, in_planes, out_planes, 1, stride1, prevLayer=prevLayer) \
             if in_planes != out_planes else None
 
     def forward(self, x):
@@ -40,44 +59,47 @@ class BasicBlock(Block):
     def outputLayer(self):
         return self.conv2
 
+    def countFlops(self):
+        return sum([layer.countFlops() for layer in self.getLayers()])
+
 
 class ResNet18(BaseNet):
     def __init__(self, args):
-        super(ResNet18, self).__init__(args, initLayersParams=(args.width, args.kernel, args.nClasses))
+        super(ResNet18, self).__init__(args, initLayersParams=(args.width, args.kernel, args.nClasses, args.input_size))
 
-    # init layers (type, in_planes, out_planes)
-    def initLayersPlanes(self):
-        return [(ConvSlimLayer, 3, 16), (BasicBlock, 16, 16), (BasicBlock, 16, 16), (BasicBlock, 16, 16),
-                (BasicBlock, 16, 32), (BasicBlock, 32, 32), (BasicBlock, 32, 32),
-                (BasicBlock, 32, 64), (BasicBlock, 64, 64), (BasicBlock, 64, 64)]
+    # init layers (type, out_planes)
+    def initBlocksPlanes(self):
+        return [(ConvSlimLayer, 16), (BasicBlock, 16), (BasicBlock, 16), (BasicBlock, 16),
+                (BasicBlock, 32), (BasicBlock, 32), (BasicBlock, 32),
+                (BasicBlock, 64), (BasicBlock, 64), (BasicBlock, 64)]
 
-    def initLayers(self, params):
-        widthRatioList, kernel_size, nClasses = params
+    def initBlocks(self, params):
+        widthRatioList, kernel_size, nClasses, input_size = params
         widthRatioList = widthRatioList.copy()
 
-        layersPlanes = self.initLayersPlanes()
+        blocksPlanes = self.initBlocksPlanes()
         # TODO: get input size from dataset and calculate input_size per block
 
-        # create list of layers from layersPlanes
-        # supports bitwidth as list of ints, i.e. same bitwidths to all layers
-        layers = ModuleList()
-        prevLayer = None
-        for i, (layerType, in_planes, out_planes) in enumerate(layersPlanes):
+        # create list of blocks from blocksPlanes
+        blocks = ModuleList()
+        prevLayer = Input(3, input_size)
+        stride = 1
+        for i, (blockType, out_planes) in enumerate(blocksPlanes):
             # build layer
-            l = layerType(widthRatioList, in_planes, out_planes, kernel_size, stride=1, prevLayer=prevLayer)
-            # add layer to layers list
-            layers.append(l)
+            l = blockType(widthRatioList, prevLayer.outputChannels(), out_planes, kernel_size, stride, prevLayer)
+            # add layer to blocks list
+            blocks.append(l)
             # update previous layer
             prevLayer = l.outputLayer()
 
         self.avgpool = AvgPool2d(8)
         self.fc = Linear(64, nClasses).cuda()
 
-        return layers
+        return blocks
 
     def forward(self, x):
         out = x
-        for layer in self.layers:
+        for layer in self.blocks:
             out = layer(out)
 
         out = self.avgpool(out)

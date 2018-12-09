@@ -87,7 +87,6 @@ def compute_average_flops_cost(self):
     flops_sum = 0
 
     for module in self.modules():
-
         if isinstance(module, Conv2d):
             flops_sum += module.__flops__
 
@@ -183,6 +182,7 @@ def conv_flops_counter_hook(conv_module, input, output):
         bias_flops = out_channels * active_elements_count
 
     overall_flops = overall_conv_flops + bias_flops
+    print('overall_flops:[{}]'.format(overall_flops))
 
     conv_module.__flops__ += overall_flops
 
@@ -222,7 +222,6 @@ def add_flops_counter_variable_or_reset(module):
 
 def add_flops_counter_hook_function(module):
     if isinstance(module, Conv2d):
-
         if hasattr(module, '__flops_handle__'):
             return
 
@@ -232,7 +231,6 @@ def add_flops_counter_hook_function(module):
 
 def remove_flops_counter_hook_function(module):
     if isinstance(module, Conv2d):
-
         if hasattr(module, '__flops_handle__'):
             module.__flops_handle__.remove()
 
@@ -261,10 +259,13 @@ def count_flops(model, input_size, in_channels):
     batch = randn(batch_size, in_channels, input_size, input_size).cuda()
 
     net.start_flops_count()
-    _ = net(batch)
+    out = net(batch)
     net.stop_flops_count()
 
-    return net.compute_average_flops_cost() / 2  # Result in FLOPs
+    flops = net.compute_average_flops_cost() / 2
+    output_size = out.size(-1)
+
+    return flops, output_size  # Result in FLOPs
 
 # def count_flops(model, batch_size, device, dtype, input_size, in_channels, *params):
 #     net = model(*params, input_size=input_size)

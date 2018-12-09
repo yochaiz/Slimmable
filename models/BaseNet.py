@@ -7,6 +7,7 @@ from torch.nn import Module, ModuleList, Conv2d, BatchNorm2d
 from torch.nn.functional import conv2d
 
 from utils.HtmlLogger import HtmlLogger
+from utils.flops_benchmark import count_flops
 
 
 # abstract class for model block
@@ -19,10 +20,14 @@ class Block(Module):
     def outputLayer(self):
         raise NotImplementedError('subclasses must override outputLayer()!')
 
+    @abstractmethod
+    def countFlops(self):
+        raise NotImplementedError('subclasses must override countFlops()!')
+
 
 # abstract class for model layer
 class SlimLayer(Block):
-    def __init__(self, nFiltersList, prevLayer):
+    def __init__(self, buildParams, nFiltersList, prevLayer):
         super(SlimLayer, self).__init__()
 
         # save previous layer
@@ -35,6 +40,38 @@ class SlimLayer(Block):
 
         # init forward counters
         self._forwardCounters = self._initForwardCounters()
+
+        # build layer modules
+        self.buildModules(buildParams)
+
+        # count flops for each width
+        self.flopsDict, self.output_size = self.countWidthFlops(self.prevLayer[0].outputSize())
+
+    @abstractmethod
+    def buildModules(self, buildParams):
+        raise NotImplementedError('subclasses must override getAllWidths()!')
+
+    @abstractmethod
+    def getAllWidths(self):
+        raise NotImplementedError('subclasses must override getAllWidths()!')
+
+    @abstractmethod
+    # number of output channels in layer
+    def outputChannels(self):
+        raise NotImplementedError('subclasses must override outputChannels()!')
+
+    @abstractmethod
+    # current number of filters in layer
+    def nCurrFilters(self):
+        raise NotImplementedError('subclasses must override nCurrFilters()!')
+
+    @abstractmethod
+    # count flops for each width
+    def countWidthFlops(self, input_size):
+        raise NotImplementedError('subclasses must override countWidthFlops()!')
+
+    def countFlops(self):
+        return self.flopsDict[(self.prevLayer[0].nCurrFilters(), self.nCurrFilters())]
 
     def getCurrFilterIdx(self):
         return self.nFiltersCurrIdx
@@ -57,36 +94,26 @@ class SlimLayer(Block):
     def outputLayer(self):
         return self
 
-    @abstractmethod
-    def getAllWidths(self):
-        raise NotImplementedError('subclasses must override getAllWidths()!')
-
-    @abstractmethod
-    # number of total filters in layer
-    def nFilters(self):
-        raise NotImplementedError('subclasses must override nFilters()!')
-
-    @abstractmethod
-    # current number of filters in layer
-    def nCurrFilters(self):
-        raise NotImplementedError('subclasses must override nFilters()!')
+    def outputSize(self):
+        return self.output_size
 
 
 class ConvSlimLayer(SlimLayer):
     def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
-        super(ConvSlimLayer, self).__init__([int(x * out_planes) for x in widthRatioList], prevLayer)
+        super(ConvSlimLayer, self).__init__((in_planes, out_planes, kernel_size, stride), [int(x * out_planes) for x in widthRatioList], prevLayer)
 
+    def buildModules(self, params):
+        in_planes, out_planes, kernel_size, stride = params
         # init conv2d module
-        self.conv = Conv2d(in_planes, out_planes, kernel_size, stride=stride, padding=floor(kernel_size / 2), bias=False)
+        self.conv = Conv2d(in_planes, out_planes, kernel_size, stride=stride, padding=floor(kernel_size / 2), bias=False).cuda()
         # init independent batchnorm module for number of filters
-        self.bn = ModuleList([BatchNorm2d(n) for n in self.nFiltersList])
+        self.bn = ModuleList([BatchNorm2d(n) for n in self.nFiltersList]).cuda()
 
     def forward(self, x):
         # narrow conv weights (i.e. filters) according to current nFilters
         convWeights = self.conv.weight.narrow(0, 0, self.nFiltersList[self.nFiltersCurrIdx])
         # narrow conv weights (i.e. filters) according to previous layer nFilters
-        if self.prevLayer[0] is not None:
-            convWeights = convWeights.narrow(1, 0, self.prevLayer[0].nCurrFilters())
+        convWeights = convWeights.narrow(1, 0, self.prevLayer[0].nCurrFilters())
 
         # perform forward
         out = conv2d(x, convWeights, bias=self.conv.bias, stride=self.conv.stride, padding=self.conv.padding, dilation=self.conv.dilation,
@@ -108,15 +135,32 @@ class ConvSlimLayer(SlimLayer):
     def nCurrFilters(self):
         return self.nFiltersList[self.nFiltersCurrIdx]
 
-    # number of total filters in layer
-    def nFilters(self):
+    # number of total output filters in layer
+    def outputChannels(self):
         return self.conv.out_channels
+
+    # count flops for each width
+    def countWidthFlops(self, input_size):
+        # init flops dictionary, each key is (in_channels, out_channels)
+        # where in_channels is number of filters in previous layer
+        # out_channels in number of filters in current layer
+        flopsDict = {}
+
+        # iterate over current layer widths & previous layer widths
+        for nFilters in self.getAllWidths():
+            for nFiltersPrev in self.prevLayer[0].getAllWidths():
+                conv = Conv2d(nFiltersPrev, nFilters, self.conv.kernel_size, bias=self.conv.bias, stride=self.conv.stride,
+                              padding=self.conv.padding, dilation=self.conv.dilation, groups=self.conv.groups)
+                flops, output_size = count_flops(conv, input_size, nFiltersPrev)
+                flopsDict[(nFiltersPrev, nFilters)] = flops
+
+        return flopsDict, output_size
 
 
 class BaseNet(Module):
     def buildLayersList(self):
         layersList = []
-        for layer in self.layers:
+        for layer in self.blocks:
             layersList.extend(layer.getLayers())
 
         return layersList
@@ -126,7 +170,7 @@ class BaseNet(Module):
         # init save folder
         saveFolder = args.save
         # init layers
-        self.layers = self.initLayers(initLayersParams)
+        self.blocks = self.initBlocks(initLayersParams)
         # build mixture layers list
         self._layersList = self.buildLayersList()
 
@@ -135,12 +179,15 @@ class BaseNet(Module):
         self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self.layersList()])
 
     @abstractmethod
-    def initLayers(self, params):
+    def initBlocks(self, params):
         raise NotImplementedError('subclasses must override initLayers()!')
 
     @abstractmethod
     def forward(self, x):
         raise NotImplementedError('subclasses must override forward()!')
+
+    def countFlops(self):
+        return sum([block.countFlops() for block in self.blocks])
 
     # iterate over model layers
     def layersList(self):
@@ -161,7 +208,7 @@ class BaseNet(Module):
         for layerIdx, layer in enumerate(self.layersList()):
             widths = layer.getAllWidths()
 
-            dataRow = {layerIdxKey: layerIdx, nFiltersKey: layer.nFilters(), widthsKey: [widths], layerArchKey: layer}
+            dataRow = {layerIdxKey: layerIdx, nFiltersKey: layer.outputChannels(), widthsKey: [widths], layerArchKey: layer}
             logger.addDataRow(dataRow)
 
         # # log layers alphas distribution
