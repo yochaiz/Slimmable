@@ -27,16 +27,16 @@ class Block(Module):
 
 # abstract class for model layer
 class SlimLayer(Block):
-    def __init__(self, buildParams, nFiltersList, prevLayer):
+    def __init__(self, buildParams, widthList, prevLayer):
         super(SlimLayer, self).__init__()
 
         # save previous layer
         self.prevLayer = [prevLayer]
 
         # save list of number of filters
-        self.nFiltersList = nFiltersList
+        self.widthList = widthList
         # init current number of filters index
-        self.nFiltersCurrIdx = 0
+        self.currWidthIdx = 0
 
         # init forward counters
         self._forwardCounters = self._initForwardCounters()
@@ -62,8 +62,8 @@ class SlimLayer(Block):
 
     @abstractmethod
     # current number of filters in layer
-    def nCurrFilters(self):
-        raise NotImplementedError('subclasses must override nCurrFilters()!')
+    def currWidth(self):
+        raise NotImplementedError('subclasses must override currWidth()!')
 
     @abstractmethod
     # count flops for each width
@@ -71,19 +71,19 @@ class SlimLayer(Block):
         raise NotImplementedError('subclasses must override countWidthFlops()!')
 
     def countFlops(self):
-        return self.flopsDict[(self.prevLayer[0].nCurrFilters(), self.nCurrFilters())]
+        return self.flopsDict[(self.prevLayer[0].currWidth(), self.currWidth())]
 
-    def getCurrFilterIdx(self):
-        return self.nFiltersCurrIdx
+    def getCurrWidthIdx(self):
+        return self.currWidthIdx
 
     def getForwardCounters(self):
         return self._forwardCounters
 
     def getWidth(self, idx):
-        return self.nFiltersList[idx]
+        return self.widthList[idx]
 
     def nWidths(self):
-        return len(self.nFiltersList)
+        return len(self.widthList)
 
     def _initForwardCounters(self):
         return [0] * self.nWidths()
@@ -107,21 +107,21 @@ class ConvSlimLayer(SlimLayer):
         # init conv2d module
         self.conv = Conv2d(in_planes, out_planes, kernel_size, stride=stride, padding=floor(kernel_size / 2), bias=False).cuda()
         # init independent batchnorm module for number of filters
-        self.bn = ModuleList([BatchNorm2d(n) for n in self.nFiltersList]).cuda()
+        self.bn = ModuleList([BatchNorm2d(n) for n in self.widthList]).cuda()
 
     def forward(self, x):
         # narrow conv weights (i.e. filters) according to current nFilters
-        convWeights = self.conv.weight.narrow(0, 0, self.nFiltersList[self.nFiltersCurrIdx])
+        convWeights = self.conv.weight.narrow(0, 0, self.widthList[self.currWidthIdx])
         # narrow conv weights (i.e. filters) according to previous layer nFilters
-        convWeights = convWeights.narrow(1, 0, self.prevLayer[0].nCurrFilters())
+        convWeights = convWeights.narrow(1, 0, self.prevLayer[0].currWidth())
 
         # perform forward
         out = conv2d(x, convWeights, bias=self.conv.bias, stride=self.conv.stride, padding=self.conv.padding, dilation=self.conv.dilation,
                      groups=self.conv.groups)
-        out = self.bn[self.nFiltersCurrIdx](out)
+        out = self.bn[self.currWidthIdx](out)
 
         # update forward counters
-        self._forwardCounters[self.nFiltersCurrIdx] += 1
+        self._forwardCounters[self.currWidthIdx] += 1
 
         return out
 
@@ -129,11 +129,11 @@ class ConvSlimLayer(SlimLayer):
         return [self]
 
     def getAllWidths(self):
-        return self.nFiltersList
+        return self.widthList
 
     # current number of filters in layer
-    def nCurrFilters(self):
-        return self.nFiltersList[self.nFiltersCurrIdx]
+    def currWidth(self):
+        return self.widthList[self.currWidthIdx]
 
     # number of total output filters in layer
     def outputChannels(self):
@@ -147,12 +147,12 @@ class ConvSlimLayer(SlimLayer):
         flopsDict = {}
 
         # iterate over current layer widths & previous layer widths
-        for nFilters in self.getAllWidths():
-            for nFiltersPrev in self.prevLayer[0].getAllWidths():
-                conv = Conv2d(nFiltersPrev, nFilters, self.conv.kernel_size, bias=self.conv.bias, stride=self.conv.stride,
+        for width in self.getAllWidths():
+            for prevWidth in self.prevLayer[0].getAllWidths():
+                conv = Conv2d(prevWidth, width, self.conv.kernel_size, bias=self.conv.bias, stride=self.conv.stride,
                               padding=self.conv.padding, dilation=self.conv.dilation, groups=self.conv.groups)
-                flops, output_size = count_flops(conv, input_size, nFiltersPrev)
-                flopsDict[(nFiltersPrev, nFilters)] = flops
+                flops, output_size = count_flops(conv, input_size, prevWidth)
+                flopsDict[(prevWidth, width)] = flops
 
         return flopsDict, output_size
 
