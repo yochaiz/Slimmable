@@ -33,14 +33,16 @@ def parseArgs():
     parser.add_argument('--weight_decay', type=float, default=4e-5, help='weight decay')
     parser.add_argument('--gpu', type=str, default='0', help='gpu device id, e.g. 0,1,3')
     parser.add_argument('--workers', type=int, default=1, choices=range(1, 32), help='num of workers')
-
+    # pre-trained params
+    parser.add_argument('--pre_trained', type=str, default=None, help='pre-trained model to copy weights from')
+    # training params
     parser.add_argument('--optimal_epochs', type=int, default=30, help='stop training weights if there is no new optimum in last optimal_epochs')
     parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
     parser.add_argument('--train_regime', default='TrainRegime', choices=trainRegimesNames, help='Training regime')
     parser.add_argument('--alphas_data_parts', type=int, default=4, help='split alphas training data to parts. each loop uses single part')
-
+    # Conv2d params
     parser.add_argument('--kernel', type=int, default=3, help='conv kernel size, e.g. 1,3,5')
-
+    # width params
     parser.add_argument('--width', type=str, required=True, help='list of width values, e.g. 0.25,0.5,0.75,1.0')
 
     args = parser.parse_args()
