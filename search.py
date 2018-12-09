@@ -5,7 +5,7 @@ from os import getpid, environ
 from socket import gethostname
 from traceback import format_exc
 
-from torch.multiprocessing import set_start_method
+# from torch.multiprocessing import set_start_method
 import torch.backends.cudnn as cudnn
 from torch.cuda import is_available, set_device
 from torch.cuda import manual_seed as cuda_manual_seed
@@ -34,10 +34,10 @@ if __name__ == '__main__':
     cudnn.enabled = True
     cuda_manual_seed(args.seed)
 
-    try:
-        set_start_method('spawn', force=True)
-    except RuntimeError:
-        raise ValueError('spawn failed')
+    # try:
+    #     set_start_method('spawn', force=True)
+    # except RuntimeError:
+    #     raise ValueError('spawn failed')
 
     try:
         # log command line
