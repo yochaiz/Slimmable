@@ -105,6 +105,6 @@ class ResNet18(BaseNet):
         out = self.avgpool(out)
         out = out.view(out.size(0), -1)
         # narrow linear according to last conv2d layer
-        out = linear(out, self.fc.weight.narrow(1, 0, layer.outputLayer().nCurrFilters()), bias=self.fc.bias)
+        out = linear(out, self.fc.weight.narrow(1, 0, layer.outputLayer().currWidth()), bias=self.fc.bias)
 
         return out
