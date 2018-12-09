@@ -182,7 +182,6 @@ def conv_flops_counter_hook(conv_module, input, output):
         bias_flops = out_channels * active_elements_count
 
     overall_flops = overall_conv_flops + bias_flops
-    print('overall_flops:[{}]'.format(overall_flops))
 
     conv_module.__flops__ += overall_flops
 
