@@ -2,7 +2,10 @@ from abc import abstractmethod
 from math import floor
 from numpy import argsort
 from functools import reduce
+from collections import OrderedDict
+from os.path import exists
 
+from torch import load as loadModel
 from torch.nn import Module, ModuleList, Conv2d, BatchNorm2d
 from torch.nn.functional import conv2d
 
@@ -193,6 +196,40 @@ class BaseNet(Module):
     def layersList(self):
         for layer in self._layersList:
             yield layer
+
+    def loadPreTrained(self, path, logger):
+        loggerRows = []
+        if path is not None:
+            if exists(path):
+                # load checkpoint
+                checkpoint = loadModel(path, map_location=lambda storage, loc: storage.cuda())
+                # update weights
+                chckpntStateDict = checkpoint['state_dict']
+                # replace old key (.layers.) with new key (.blocks.)
+                chckpntUpdatedDict = OrderedDict()
+                oldKey = 'layers.'
+                newKey = 'blocks.'
+                for dictKey in chckpntStateDict.keys():
+                    newDictKey = dictKey
+                    if oldKey in dictKey:
+                        newDictKey = dictKey.replace(oldKey, newKey)
+
+                    chckpntUpdatedDict[newDictKey] = chckpntStateDict[dictKey]
+                # load model state dict keys
+                modelStateDictKeys = set(self.state_dict().keys())
+                # compare dictionaries
+                dictDiff = modelStateDictKeys.symmetric_difference(set(chckpntUpdatedDict.keys()))
+                # load weights
+                self.load_state_dict(chckpntUpdatedDict)
+                # add info rows about checkpoint
+                loggerRows.append(['Path', '{}'.format(path)])
+                loggerRows.append(['Validation accuracy', '{:.5f}'.format(checkpoint['best_prec1'])])
+                loggerRows.append(['StateDict diff', list(dictDiff)])
+            else:
+                loggerRows.append(['Path', 'Failed to load pre-trained from [{}], path does not exists'.format(path)])
+
+            # load pre-trained model if we tried to load pre-trained
+            logger.addInfoTable('Pre-trained model', loggerRows)
 
     def printToFile(self, saveFolder):
         logger = HtmlLogger(saveFolder, 'model')
