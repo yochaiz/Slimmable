@@ -27,7 +27,16 @@ class TrainingStats:
             self._top1[ratio] = AvgrageMeter()
 
     def _createTableWithRoundedValues(self, dict, valueFunc=lambda x: x):
-        return [[k, round(valueFunc(v), self.nRoundDigits)] for k, v in dict.items()]
+        table = []
+        sum = 0.0
+        for k, v in dict.items():
+            value = valueFunc(v)
+            table.append([k, round(value, self.nRoundDigits)])
+            sum += value
+        # add average
+        table.append(['Avg', round(sum / len(dict), self.nRoundDigits)])
+
+        return table
 
     def prec1(self):
         return self._createTableWithRoundedValues(self._prec1)
