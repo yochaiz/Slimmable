@@ -8,13 +8,12 @@ from torch.nn import CrossEntropyLoss
 from torch.optim.sgd import SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from utils.training import AvgrageMeter, accuracy
-
 import models
 from utils.data import load_data
 from utils.args import logParameters
 from utils.checkpoint import save_checkpoint
 from utils.HtmlLogger import HtmlLogger
+from utils.training import TrainingStats
 
 
 class TrainRegime:
@@ -35,9 +34,8 @@ class TrainRegime:
     forwardCountersKey = 'Forward counters'
 
     # init formats for keys
-    formats = {validLossKey: '{:.5f}', validAccKey: '{:.3f}', timeKey: '{:.3f}',
-               archLossKey: '{:.5f}', lrKey: '{:.5f}', flopsLossKey: '{:.5f}', crossEntropyKey: '{:.5f}',
-               trainLossKey: '{:.5f}', trainAccKey: '{:.3f}', pathFlopsRatioKey: '{:.3f}', validFlopsRatioKey: '{:.3f}'
+    formats = {timeKey: '{:.3f}', archLossKey: '{:.5f}', lrKey: '{:.5f}', flopsLossKey: '{:.5f}', crossEntropyKey: '{:.5f}',
+               pathFlopsRatioKey: '{:.3f}', validFlopsRatioKey: '{:.3f}'
                }
 
     initWeightsTrainTableTitle = 'Initial weights training'
@@ -46,9 +44,9 @@ class TrainRegime:
 
     colsMainLogger = [epochNumKey, archLossKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, widthKey, lrKey]
     colsMainInitWeightsTrain = [epochNumKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, lrKey]
-    colsTrainWeights = [batchNumKey, trainLossKey, trainAccKey, pathFlopsRatioKey, timeKey]
+    colsTrainWeights = [batchNumKey, trainLossKey, trainAccKey, timeKey]
     colsValidation = [batchNumKey, validLossKey, validAccKey, timeKey]
-    colsValidationStatistics = [forwardCountersKey, validFlopsRatioKey]
+    colsValidationStatistics = [forwardCountersKey]
 
     def __init__(self, args, logger):
         # build model for uniform distribution of bits
@@ -100,13 +98,11 @@ class TrainRegime:
 
     def trainWeights(self, optimizer, epoch, loggers):
         print('*** trainWeights() ***')
-        loss_container = AvgrageMeter()
-        top1 = AvgrageMeter()
-
         model = self.model
         modelParallel = self.modelParallel
         crit = self.cross_entropy
         train_queue = self.train_queue
+        trainStats = TrainingStats(model.baselineWidthKeys())
 
         trainLogger = loggers.get('train')
         if trainLogger:
@@ -119,31 +115,33 @@ class TrainRegime:
 
         for step, (input, target) in enumerate(train_queue):
             startTime = time()
-            n = input.size(0)
 
             input = tensor(input, requires_grad=False).cuda()
             target = tensor(target, requires_grad=False).cuda(async=True)
 
             # optimize model weights
             optimizer.zero_grad()
-            logits = modelParallel(input)
-            # calc loss
-            loss = crit(logits, target)
-            # back propagate
-            loss.backward()
+            # iterate & forward widths
+            for widthRatio, idxList in model.baselineWidth():
+                # set model layers current width index
+                model.setCurrWidthIdx(idxList)
+                # forward
+                logits = modelParallel(input)
+                # calc loss
+                loss = crit(logits, target)
+                # back propagate
+                loss.backward()
+                # update training stats
+                trainStats.update(widthRatio, logits, target, loss)
             # update weights
             optimizer.step()
-
-            prec1 = accuracy(logits, target)[0]
-            loss_container.update(loss.item(), n)
-            top1.update(prec1.item(), n)
 
             endTime = time()
 
             if trainLogger:
                 dataRow = {
-                    self.batchNumKey: '{}/{}'.format(step, nBatches), self.pathFlopsRatioKey: model.flopsRatio(),
-                    self.timeKey: (endTime - startTime), self.trainLossKey: loss, self.trainAccKey: prec1
+                    self.batchNumKey: '{}/{}'.format(step, nBatches), self.timeKey: (endTime - startTime),
+                    self.trainLossKey: trainStats.batchLoss(), self.trainAccKey: trainStats.prec1()
                 }
                 # apply formats
                 self._applyFormats(dataRow)
@@ -151,7 +149,7 @@ class TrainRegime:
                 trainLogger.addDataRow(dataRow)
 
         # log accuracy, loss, etc.
-        summaryData = {self.trainLossKey: loss_container.avg, self.trainAccKey: top1.avg, self.batchNumKey: 'Summary'}
+        summaryData = {self.trainLossKey: trainStats.epochLoss(), self.trainAccKey: trainStats.top1(), self.batchNumKey: 'Summary'}
         # apply formats
         self._applyFormats(summaryData)
 
@@ -166,13 +164,11 @@ class TrainRegime:
 
     def infer(self, nEpoch, loggers):
         print('*** infer() ***')
-        objs = AvgrageMeter()
-        top1 = AvgrageMeter()
-
         model = self.model
         modelParallel = self.modelParallel
         valid_queue = self.valid_queue
         crit = self.cross_entropy
+        trainStats = TrainingStats(model.baselineWidthKeys())
 
         trainLogger = loggers.get('train')
         if trainLogger:
@@ -193,20 +189,23 @@ class TrainRegime:
                 input = tensor(input).cuda()
                 target = tensor(target).cuda(async=True)
 
-                logits = modelParallel(input)
-                loss = crit(logits, target)
-
-                prec1 = accuracy(logits, target)[0]
-                n = input.size(0)
-                objs.update(loss.item(), n)
-                top1.update(prec1.item(), n)
+                # iterate & forward widths
+                for widthRatio, idxList in model.baselineWidth():
+                    # set model layers current width index
+                    model.setCurrWidthIdx(idxList)
+                    # forward
+                    logits = modelParallel(input)
+                    # calc loss
+                    loss = crit(logits, target)
+                    # update training stats
+                    trainStats.update(widthRatio, logits, target, loss)
 
                 endTime = time()
 
                 if trainLogger:
                     dataRow = {
-                        self.batchNumKey: '{}/{}'.format(step, nBatches), self.validLossKey: loss, self.validAccKey: prec1,
-                        self.timeKey: endTime - startTime
+                        self.batchNumKey: '{}/{}'.format(step, nBatches), self.validLossKey: trainStats.batchLoss(),
+                        self.validAccKey: trainStats.prec1(), self.timeKey: endTime - startTime
                     }
                     # apply formats
                     self._applyFormats(dataRow)
@@ -214,7 +213,7 @@ class TrainRegime:
                     trainLogger.addDataRow(dataRow)
 
         # create summary row
-        summaryRow = {self.batchNumKey: 'Summary', self.validLossKey: objs.avg, self.validAccKey: top1.avg, self.validFlopsRatioKey: flopsRatio}
+        summaryRow = {self.batchNumKey: 'Summary', self.validLossKey: trainStats.epochLoss(), self.validAccKey: trainStats.top1()}
         # apply formats
         self._applyFormats(summaryRow)
 
@@ -233,13 +232,13 @@ class TrainRegime:
             # create new data table for validation statistics
             trainLogger.createDataTable('Validation statistics', self.colsValidationStatistics)
             # add bitwidth & forward counters statistics
-            dataRow = {self.forwardCountersKey: forwardCountersData[-1], self.validFlopsRatioKey: flopsRatio}
+            dataRow = {self.forwardCountersKey: forwardCountersData[-1]}
             # apply formats
             self._applyFormats(dataRow)
             # add row to table
             trainLogger.addDataRow(dataRow)
 
-        return top1.avg, objs.avg, summaryRow
+        return trainStats.top1(), trainStats.epochLoss(), summaryRow
 
     def initialWeightsTraining(self, trainFolderName, filename=None):
         model = self.model
