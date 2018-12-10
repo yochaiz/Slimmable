@@ -13,16 +13,53 @@ class AvgrageMeter(object):
         self.avg = self.sum / self.cnt
 
 
-def accuracy(output, target, topk=(1,)):
-    maxk = max(topk)
-    batch_size = target.size(0)
+class TrainingStats:
+    nRoundDigits = 5
 
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
+    def __init__(self, widthRatio):
+        self._epochLoss = {}
+        self._batchLoss = {}
+        self._top1 = {}
+        self._prec1 = {}
 
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
+        for ratio in widthRatio:
+            self._epochLoss[ratio] = AvgrageMeter()
+            self._top1[ratio] = AvgrageMeter()
+
+    def _createTableWithRoundedValues(self, dict, valueFunc=lambda x: x):
+        return [[k, round(valueFunc(v), self.nRoundDigits)] for k, v in dict.items()]
+
+    def prec1(self):
+        return self._createTableWithRoundedValues(self._prec1)
+
+    def batchLoss(self):
+        return self._createTableWithRoundedValues(self._batchLoss)
+
+    def epochLoss(self):
+        return self._createTableWithRoundedValues(self._epochLoss, lambda v: v.avg)
+
+    def top1(self):
+        return self._createTableWithRoundedValues(self._top1, lambda v: v.avg)
+
+    def update(self, ratio, logits, target, loss):
+        n = logits.size(0)
+        prec1 = self.accuracy(logits, target)[0]
+        self._epochLoss[ratio].update(loss.item(), n)
+        self._top1[ratio].update(prec1.item(), n)
+        self._prec1[ratio] = prec1.item()
+        self._batchLoss[ratio] = loss.item()
+
+    @staticmethod
+    def accuracy(output, target, topk=(1,)):
+        maxk = max(topk)
+        batch_size = target.size(0)
+
+        _, pred = output.topk(maxk, 1, True, True)
+        pred = pred.t()
+        correct = pred.eq(target.view(1, -1).expand_as(pred))
+
+        res = []
+        for k in topk:
+            correct_k = correct[:k].view(-1).float().sum(0)
+            res.append(correct_k.mul_(100.0 / batch_size))
+        return res
