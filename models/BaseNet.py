@@ -218,6 +218,9 @@ class BaseNet(Module):
         for layer in self._layersList:
             yield layer
 
+    def baselineWidthKeys(self):
+        return self._baselineWidth.keys()
+
     def baselineWidth(self):
         for v in self._baselineWidth.items():
             yield v
