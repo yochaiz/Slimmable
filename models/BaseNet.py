@@ -287,16 +287,16 @@ class BaseNet(Module):
                 # compare dictionaries
                 dictDiff = modelStateDictKeys.symmetric_difference(set(chckpntStateDict.keys()))
 
-                # init flag whether we have to duplicate batchnorm weights from checkpoint state dict to model state dict
-                duplicateBNWeights = False
+                # init flag whether we load batchnorm weights from checkpoint state dict to model state dict
+                notLoadedBN = False
                 for key in dictDiff:
                     # if there is a missing key in model state dict, we assume this is because there are more BN duplications in model state dict
                     if key in modelStateDictKeys:
-                        duplicateBNWeights = True
+                        notLoadedBN = True
                         break
 
                 # keep current model BN weights
-                if duplicateBNWeights:
+                if notLoadedBN:
                     # init new dict, since we have to add new keys
                     newDict = OrderedDict()
                     # init tokens
@@ -325,7 +325,7 @@ class BaseNet(Module):
                 loggerRows.append(['Path', '{}'.format(path)])
                 loggerRows.append(['Validation accuracy', '{:.5f}'.format(checkpoint['best_prec1'])])
                 loggerRows.append(['StateDict diff', list(dictDiff)])
-                loggerRows.append(['duplicateBNWeights', duplicateBNWeights])
+                loggerRows.append(['Loaded Batchnorm values', not notLoadedBN])
             else:
                 loggerRows.append(['Path', 'Failed to load pre-trained from [{}], path does not exists'.format(path)])
 
