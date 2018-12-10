@@ -73,7 +73,8 @@ class SlimLayer(Block):
         return self._widthList
 
     def widthRatioList(self):
-        return self._widthRatioList
+        for widthRatio in self._widthRatioList:
+            yield widthRatio
 
     # current number of filters in layer
     def currWidth(self):
@@ -231,10 +232,8 @@ class BaseNet(Module):
         modelCurrWidthIdx = self.currWidthIdx()
         # iterate over model layers
         for layer in self.layersList():
-            # get layer width list
-            layerWidthRatioList = layer.widthRatioList()
             # iterate over width and calc flops for their homogeneous model
-            for widthRatio in layerWidthRatioList:
+            for widthRatio in layer.widthRatioList():
                 # calc only for widths that are not in baselineResults dictionary
                 if widthRatio not in baselineResults:
                     # set model to homogeneous width
