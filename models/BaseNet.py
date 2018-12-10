@@ -279,18 +279,53 @@ class BaseNet(Module):
             if exists(path):
                 # load checkpoint
                 checkpoint = loadModel(path, map_location=lambda storage, loc: storage.cuda())
-                # update weights
+                # set checkpoint state dict
                 chckpntStateDict = checkpoint['state_dict']
                 # load model state dict keys
-                modelStateDictKeys = set(self.state_dict().keys())
+                modelStateDict = self.state_dict()
+                modelStateDictKeys = set(modelStateDict.keys())
                 # compare dictionaries
                 dictDiff = modelStateDictKeys.symmetric_difference(set(chckpntStateDict.keys()))
+
+                # init flag whether we have to duplicate batchnorm weights from checkpoint state dict to model state dict
+                duplicateBNWeights = False
+                for key in dictDiff:
+                    # if there is a missing key in model state dict, we assume this is because there are more BN duplications in model state dict
+                    if key in modelStateDictKeys:
+                        duplicateBNWeights = True
+                        break
+
+                # keep current model BN weights
+                if duplicateBNWeights:
+                    # init new dict, since we have to add new keys
+                    newDict = OrderedDict()
+                    # init tokens
+                    token = '.bn.0.'
+                    template = '.bn.{}.'
+                    # iterate over checkpoint state dict keys
+                    for key in chckpntStateDict.keys():
+                        # add checkpoint state dict values to new dict
+                        newDict[key] = chckpntStateDict[key]
+                        # duplicate values with their corresponding new keys
+                        if token in key:
+                            idx = 1
+                            newKey = key.replace(token, template.format(idx))
+                            while newKey in dictDiff:
+                                newDict[newKey] = modelStateDict[newKey]
+                                dictDiff.remove(newKey)
+                                idx += 1
+                                newKey = key.replace(token, template.format(idx))
+
+                    # update the state dict we want to load to model
+                    chckpntStateDict = newDict
+
                 # load weights
                 self.load_state_dict(chckpntStateDict)
                 # add info rows about checkpoint
                 loggerRows.append(['Path', '{}'.format(path)])
                 loggerRows.append(['Validation accuracy', '{:.5f}'.format(checkpoint['best_prec1'])])
                 loggerRows.append(['StateDict diff', list(dictDiff)])
+                loggerRows.append(['duplicateBNWeights', duplicateBNWeights])
             else:
                 loggerRows.append(['Path', 'Failed to load pre-trained from [{}], path does not exists'.format(path)])
 
@@ -359,3 +394,27 @@ class BaseNet(Module):
 #         newDictKey = dictKey.replace(oldKey, newKey)
 #
 #     chckpntUpdatedDict[newDictKey] = chckpntStateDict[dictKey]
+
+# # duplicate BN weights
+# if duplicateBNWeights:
+#     # init new dict, since we have to add new keys
+#     newDict = OrderedDict()
+#     # init tokens
+#     token = '.bn.0.'
+#     template = '.bn.{}.'
+#     # iterate over checkpoint state dict keys
+#     for key in chckpntStateDict.keys():
+#         # add checkpoint state dict values to new dict
+#         newDict[key] = chckpntStateDict[key]
+#         # duplicate values with their corresponding new keys
+#         if token in key:
+#             idx = 1
+#             newKey = key.replace(token, template.format(idx))
+#             while newKey in dictDiff:
+#                 newDict[newKey] = chckpntStateDict[key]
+#                 dictDiff.remove(newKey)
+#                 idx += 1
+#                 newKey = key.replace(token, template.format(idx))
+#
+#     # update the state dict we want to load to model
+#     chckpntStateDict = newDict
