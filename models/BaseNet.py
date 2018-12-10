@@ -90,16 +90,16 @@ class SlimLayer(Block):
     def widthByIdx(self, idx):
         return self._widthList[idx]
 
-    def setCurrWidthByRatio(self, widthRatio):
-        # throws error if widthRatio isn't in widthRatioList
-        self._currWidthIdx = self._widthRatioList.index(widthRatio)
-
     def currWidthIdx(self):
         return self._currWidthIdx
 
     def setCurrWidthIdx(self, idx):
         assert (0 <= idx <= len(self._widthList))
         self._currWidthIdx = idx
+
+    # returns the index of given width ratio
+    def widthRatioIdx(self, widthRatio):
+        return self._widthRatioList.index(widthRatio)
 
     def nWidths(self):
         return len(self._widthList)
@@ -188,6 +188,8 @@ class BaseNet(Module):
         # build mixture layers list
         self._layersList = self.buildLayersList()
 
+        # init dictionary of layer width indices list per width ratio
+        self._baselineWidth = self.buildBaselineWidthIdx()
         # count baseline models widths flops
         args.baselineFlops = self.calcBaselineFlops()
         # save baseline flops, for calculating flops ratio
@@ -216,8 +218,31 @@ class BaseNet(Module):
         for layer in self._layersList:
             yield layer
 
+    def baselineWidth(self):
+        for v in self._baselineWidth.items():
+            yield v
+
     def currWidthIdx(self):
         return [layer.currWidthIdx() for layer in self.layersList()]
+
+    def setCurrWidthIdx(self, idxList):
+        for layer, idx in zip(self.layersList(), idxList):
+            layer.setCurrWidthIdx(idx)
+
+    # build a dictionary where each key is width ratio and each value is the list of layer indices in order to set the key width ratio as current
+    # width in each layer
+    def buildBaselineWidthIdx(self):
+        baselineWidth = {}
+        # iterate over model layers
+        for layer in self.layersList():
+            # iterate over width and calc flops for their homogeneous model
+            for widthRatio in layer.widthRatioList():
+                # check if width is not in baselineResults dictionary
+                if widthRatio not in baselineWidth:
+                    # build layer indices for current width ratio
+                    baselineWidth[widthRatio] = [l.widthRatioIdx(widthRatio) for l in self.layersList()]
+
+        return baselineWidth
 
     def calcBaselineFlops(self):
         return self.applyOnBaseline(self.countFlops)
@@ -230,18 +255,12 @@ class BaseNet(Module):
         baselineResults = {}
         # save current model width indices
         modelCurrWidthIdx = self.currWidthIdx()
-        # iterate over model layers
-        for layer in self.layersList():
-            # iterate over width and calc flops for their homogeneous model
-            for widthRatio in layer.widthRatioList():
-                # calc only for widths that are not in baselineResults dictionary
-                if widthRatio not in baselineResults:
-                    # set model to homogeneous width
-                    for layer2 in self.layersList():
-                        # set layer current width
-                        layer2.setCurrWidthByRatio(widthRatio)
-                    # update value in dictionary
-                    baselineResults[widthRatio] = func()
+        # iterate over width ratios
+        for widthRatio, idxList in self.baselineWidth():
+            # set model layers current width index
+            self.setCurrWidthIdx(idxList)
+            # update value in dictionary
+            baselineResults[widthRatio] = func()
 
         # # apply on current alphas distribution
         # if applyOnAlphasDistribution:
@@ -250,8 +269,7 @@ class BaseNet(Module):
         #     baselineResults['&#945;'] = func()
 
         # restore model layers current width
-        for layer, idx in zip(self.layersList(), modelCurrWidthIdx):
-            layer.setCurrWidthIdx(idx)
+        self.setCurrWidthIdx(modelCurrWidthIdx)
 
         return baselineResults
 
