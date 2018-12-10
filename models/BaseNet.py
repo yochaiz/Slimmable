@@ -30,16 +30,18 @@ class Block(Module):
 
 # abstract class for model layer
 class SlimLayer(Block):
-    def __init__(self, buildParams, widthList, prevLayer):
+    def __init__(self, buildParams, widthRatioList, widthList, prevLayer):
         super(SlimLayer, self).__init__()
 
         # save previous layer
         self.prevLayer = [prevLayer]
 
+        # save width ratio list
+        self._widthRatioList = widthRatioList
         # save list of number of filters
-        self.widthList = widthList
+        self._widthList = widthList
         # init current number of filters index
-        self.currWidthIdx = 0
+        self._currWidthIdx = 0
 
         # init forward counters
         self._forwardCounters = self._initForwardCounters()
@@ -55,18 +57,9 @@ class SlimLayer(Block):
         raise NotImplementedError('subclasses must override getAllWidths()!')
 
     @abstractmethod
-    def getAllWidths(self):
-        raise NotImplementedError('subclasses must override getAllWidths()!')
-
-    @abstractmethod
     # number of output channels in layer
     def outputChannels(self):
         raise NotImplementedError('subclasses must override outputChannels()!')
-
-    @abstractmethod
-    # current number of filters in layer
-    def currWidth(self):
-        raise NotImplementedError('subclasses must override currWidth()!')
 
     @abstractmethod
     # count flops for each width
@@ -76,17 +69,39 @@ class SlimLayer(Block):
     def countFlops(self):
         return self.flopsDict[(self.prevLayer[0].currWidth(), self.currWidth())]
 
-    def getCurrWidthIdx(self):
-        return self.currWidthIdx
+    def widthList(self):
+        return self._widthList
 
-    def getForwardCounters(self):
+    def widthRatioList(self):
+        return self._widthRatioList
+
+    # current number of filters in layer
+    def currWidth(self):
+        return self._widthList[self._currWidthIdx]
+
+    # current width ratio
+    def currWidthRatio(self):
+        return self._widthRatioList[self._currWidthIdx]
+
+    def forwardCounters(self):
         return self._forwardCounters
 
-    def getWidth(self, idx):
-        return self.widthList[idx]
+    def widthByIdx(self, idx):
+        return self._widthList[idx]
+
+    def setCurrWidthByRatio(self, widthRatio):
+        # throws error if widthRatio isn't in widthRatioList
+        self._currWidthIdx = self._widthRatioList.index(widthRatio)
+
+    def currWidthIdx(self):
+        return self._currWidthIdx
+
+    def setCurrWidthIdx(self, idx):
+        assert (0 <= idx <= len(self._widthList))
+        self._currWidthIdx = idx
 
     def nWidths(self):
-        return len(self.widthList)
+        return len(self._widthList)
 
     def _initForwardCounters(self):
         return [0] * self.nWidths()
@@ -97,46 +112,41 @@ class SlimLayer(Block):
     def outputLayer(self):
         return self
 
+    # layer output tensor size, not number of output channels
     def outputSize(self):
         return self.output_size
 
 
 class ConvSlimLayer(SlimLayer):
     def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
-        super(ConvSlimLayer, self).__init__((in_planes, out_planes, kernel_size, stride), [int(x * out_planes) for x in widthRatioList], prevLayer)
+        super(ConvSlimLayer, self).__init__((in_planes, out_planes, kernel_size, stride), widthRatioList,
+                                            [int(x * out_planes) for x in widthRatioList], prevLayer)
 
     def buildModules(self, params):
         in_planes, out_planes, kernel_size, stride = params
         # init conv2d module
         self.conv = Conv2d(in_planes, out_planes, kernel_size, stride=stride, padding=floor(kernel_size / 2), bias=False).cuda()
         # init independent batchnorm module for number of filters
-        self.bn = ModuleList([BatchNorm2d(n) for n in self.widthList]).cuda()
+        self.bn = ModuleList([BatchNorm2d(n) for n in self._widthList]).cuda()
 
     def forward(self, x):
         # narrow conv weights (i.e. filters) according to current nFilters
-        convWeights = self.conv.weight.narrow(0, 0, self.widthList[self.currWidthIdx])
+        convWeights = self.conv.weight.narrow(0, 0, self._widthList[self._currWidthIdx])
         # narrow conv weights (i.e. filters) according to previous layer nFilters
         convWeights = convWeights.narrow(1, 0, self.prevLayer[0].currWidth())
 
         # perform forward
         out = conv2d(x, convWeights, bias=self.conv.bias, stride=self.conv.stride, padding=self.conv.padding, dilation=self.conv.dilation,
                      groups=self.conv.groups)
-        out = self.bn[self.currWidthIdx](out)
+        out = self.bn[self._currWidthIdx](out)
 
         # update forward counters
-        self._forwardCounters[self.currWidthIdx] += 1
+        self._forwardCounters[self._currWidthIdx] += 1
 
         return out
 
     def getLayers(self):
         return [self]
-
-    def getAllWidths(self):
-        return self.widthList
-
-    # current number of filters in layer
-    def currWidth(self):
-        return self.widthList[self.currWidthIdx]
 
     # number of total output filters in layer
     def outputChannels(self):
@@ -150,8 +160,8 @@ class ConvSlimLayer(SlimLayer):
         flopsDict = {}
 
         # iterate over current layer widths & previous layer widths
-        for width in self.getAllWidths():
-            for prevWidth in self.prevLayer[0].getAllWidths():
+        for width in self.widthList():
+            for prevWidth in self.prevLayer[0].widthList():
                 conv = Conv2d(prevWidth, width, self.conv.kernel_size, bias=self.conv.bias, stride=self.conv.stride,
                               padding=self.conv.padding, dilation=self.conv.dilation, groups=self.conv.groups)
                 flops, output_size = count_flops(conv, input_size, prevWidth)
@@ -177,6 +187,11 @@ class BaseNet(Module):
         # build mixture layers list
         self._layersList = self.buildLayersList()
 
+        # count baseline models widths flops
+        args.baselineFlops = self.calcBaselineFlops()
+        # save baseline flops, for calculating flops ratio
+        self.baselineFlops = args.baselineFlops[args.baseline]
+
         self.printToFile(saveFolder)
         # calc number of width permutations in model
         self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self.layersList()])
@@ -192,10 +207,54 @@ class BaseNet(Module):
     def countFlops(self):
         return sum([block.countFlops() for block in self.blocks])
 
+    def flopsRatio(self):
+        return self.countFlops() / self.baselineFlops
+
     # iterate over model layers
     def layersList(self):
         for layer in self._layersList:
             yield layer
+
+    def currWidthIdx(self):
+        return [layer.currWidthIdx() for layer in self.layersList()]
+
+    def calcBaselineFlops(self):
+        return self.applyOnBaseline(self.countFlops)
+
+    # apply some function on baseline models
+    # baseline models are per layer width
+    # this function create a map from baseline width to func() result on baseline model
+    # def applyOnBaseline(self, func, applyOnAlphasDistribution=False):
+    def applyOnBaseline(self, func):
+        baselineResults = {}
+        # save current model width indices
+        modelCurrWidthIdx = self.currWidthIdx()
+        # iterate over model layers
+        for layer in self.layersList():
+            # get layer width list
+            layerWidthRatioList = layer.widthRatioList()
+            # iterate over width and calc flops for their homogeneous model
+            for widthRatio in layerWidthRatioList:
+                # calc only for widths that are not in baselineResults dictionary
+                if widthRatio not in baselineResults:
+                    # set model to homogeneous width
+                    for layer2 in self.layersList():
+                        # set layer current width
+                        layer2.setCurrWidthByRatio(widthRatio)
+                    # update value in dictionary
+                    baselineResults[widthRatio] = func()
+
+        # # apply on current alphas distribution
+        # if applyOnAlphasDistribution:
+        #     self.setFiltersByAlphas()
+        #     # &#945; is greek alpha symbol in HTML
+        #     baselineResults['&#945;'] = func()
+
+        # restore model layers current width
+        for layer, idx in zip(self.layersList(), modelCurrWidthIdx):
+            layer.setCurrWidthIdx(idx)
+
+        return baselineResults
 
     def loadPreTrained(self, path, logger):
         loggerRows = []
@@ -205,22 +264,12 @@ class BaseNet(Module):
                 checkpoint = loadModel(path, map_location=lambda storage, loc: storage.cuda())
                 # update weights
                 chckpntStateDict = checkpoint['state_dict']
-                # replace old key (.layers.) with new key (.blocks.)
-                chckpntUpdatedDict = OrderedDict()
-                oldKey = 'layers.'
-                newKey = 'blocks.'
-                for dictKey in chckpntStateDict.keys():
-                    newDictKey = dictKey
-                    if oldKey in dictKey:
-                        newDictKey = dictKey.replace(oldKey, newKey)
-
-                    chckpntUpdatedDict[newDictKey] = chckpntStateDict[dictKey]
                 # load model state dict keys
                 modelStateDictKeys = set(self.state_dict().keys())
                 # compare dictionaries
-                dictDiff = modelStateDictKeys.symmetric_difference(set(chckpntUpdatedDict.keys()))
+                dictDiff = modelStateDictKeys.symmetric_difference(set(chckpntStateDict.keys()))
                 # load weights
-                self.load_state_dict(chckpntUpdatedDict)
+                self.load_state_dict(chckpntStateDict)
                 # add info rows about checkpoint
                 loggerRows.append(['Path', '{}'.format(path)])
                 loggerRows.append(['Validation accuracy', '{:.5f}'.format(checkpoint['best_prec1'])])
@@ -243,7 +292,7 @@ class BaseNet(Module):
 
         logger.createDataTable('Model architecture', [layerIdxKey, nFiltersKey, widthsKey, layerArchKey])
         for layerIdx, layer in enumerate(self.layersList()):
-            widths = layer.getAllWidths()
+            widths = layer.widthList()
 
             dataRow = {layerIdxKey: layerIdx, nFiltersKey: layer.outputChannels(), widthsKey: [widths], layerArchKey: layer}
             logger.addDataRow(dataRow)
@@ -262,13 +311,13 @@ class BaseNet(Module):
             counterCols = ['Width', 'Counter']
 
             for layerIdx, layer in enumerate(self.layersList()):
-                layerForwardCounters = layer.getForwardCounters()
+                layerForwardCounters = layer.forwardCounters()
                 # sort layer forward counters indices in descending order, [::-1] changes to descending order
                 indices = argsort(layerForwardCounters)[::-1]
                 # build layer data row
                 layerRows = [counterCols]
                 for idx in indices:
-                    layerRows.append([layer.getWidth(idx), layerForwardCounters[idx]])
+                    layerRows.append([layer.widthByIdx(idx), layerForwardCounters[idx]])
                 # add summary row
                 layerRows.append(['Total', sum(layerForwardCounters)])
 
@@ -281,3 +330,15 @@ class BaseNet(Module):
 
         # reset counters
         self._resetForwardCounters()
+
+# def loadPreTrained(self, path, logger):
+# # replace old key (.layers.) with new key (.blocks.)
+# chckpntUpdatedDict = OrderedDict()
+# oldKey = 'layers.'
+# newKey = 'blocks.'
+# for dictKey in chckpntStateDict.keys():
+#     newDictKey = dictKey
+#     if oldKey in dictKey:
+#         newDictKey = dictKey.replace(oldKey, newKey)
+#
+#     chckpntUpdatedDict[newDictKey] = chckpntStateDict[dictKey]

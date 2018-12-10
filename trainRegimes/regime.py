@@ -46,9 +46,9 @@ class TrainRegime:
 
     colsMainLogger = [epochNumKey, archLossKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, widthKey, lrKey]
     colsMainInitWeightsTrain = [epochNumKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, lrKey]
-    colsTrainWeights = [batchNumKey, trainLossKey, trainAccKey, widthKey, pathFlopsRatioKey, timeKey]
+    colsTrainWeights = [batchNumKey, trainLossKey, trainAccKey, pathFlopsRatioKey, timeKey]
     colsValidation = [batchNumKey, validLossKey, validAccKey, timeKey]
-    colsValidationStatistics = [forwardCountersKey, widthKey, validFlopsRatioKey]
+    colsValidationStatistics = [forwardCountersKey, validFlopsRatioKey]
 
     def __init__(self, args, logger):
         # build model for uniform distribution of bits
@@ -142,7 +142,7 @@ class TrainRegime:
 
             if trainLogger:
                 dataRow = {
-                    self.batchNumKey: '{}/{}'.format(step, nBatches),
+                    self.batchNumKey: '{}/{}'.format(step, nBatches), self.pathFlopsRatioKey: model.flopsRatio(),
                     self.timeKey: (endTime - startTime), self.trainLossKey: loss, self.trainAccKey: prec1
                 }
                 # apply formats
@@ -183,6 +183,9 @@ class TrainRegime:
         modelParallel.eval()
         assert (model.training is False)
 
+        # calc flops ratio
+        flopsRatio = model.flopsRatio()
+
         with no_grad():
             for step, (input, target) in enumerate(valid_queue):
                 startTime = time()
@@ -211,7 +214,7 @@ class TrainRegime:
                     trainLogger.addDataRow(dataRow)
 
         # create summary row
-        summaryRow = {self.batchNumKey: 'Summary', self.validLossKey: objs.avg, self.validAccKey: top1.avg}
+        summaryRow = {self.batchNumKey: 'Summary', self.validLossKey: objs.avg, self.validAccKey: top1.avg, self.validFlopsRatioKey: flopsRatio}
         # apply formats
         self._applyFormats(summaryRow)
 
@@ -230,7 +233,7 @@ class TrainRegime:
             # create new data table for validation statistics
             trainLogger.createDataTable('Validation statistics', self.colsValidationStatistics)
             # add bitwidth & forward counters statistics
-            dataRow = {self.forwardCountersKey: forwardCountersData[-1]}
+            dataRow = {self.forwardCountersKey: forwardCountersData[-1], self.validFlopsRatioKey: flopsRatio}
             # apply formats
             self._applyFormats(dataRow)
             # add row to table

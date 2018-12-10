@@ -44,6 +44,7 @@ def parseArgs():
     parser.add_argument('--kernel', type=int, default=3, help='conv kernel size, e.g. 1,3,5')
     # width params
     parser.add_argument('--width', type=str, required=True, help='list of width values, e.g. 0.25,0.5,0.75,1.0')
+    parser.add_argument('--baseline', type=float, default=None, help='baseline width ratio we want to compare to')
 
     args = parser.parse_args()
 
@@ -54,6 +55,9 @@ def parseArgs():
     # convert width to list
     args.width = [float(x) for x in args.width.split(',')]
     assert (0 < max(args.width) <= 1)
+
+    # update baseline value
+    args.baseline = args.baseline or args.width[0]
 
     # set number of model output classes & dataset input size
     args.nClasses, args.input_size = datasets[args.dataset]

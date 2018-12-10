@@ -16,7 +16,7 @@ class Input:
     def outputChannels(self):
         return self.channels
 
-    def getAllWidths(self):
+    def widthList(self):
         return [self.channels]
 
     def outputSize(self):
