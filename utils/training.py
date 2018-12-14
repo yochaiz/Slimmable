@@ -42,13 +42,14 @@ class TrainingStats(TrainingData):
     def _createDictWithRoundedValues(self, dict, valueFunc=lambda x: x):
         newDict = {}
         sum = 0.0
+
         for k, v in dict.items():
             value = valueFunc(v)
             newDict[k] = round(value, self.nRoundDigits)
             sum += value
+
         # add average
-        dict[self.avgKey] = sum / len(dict)
-        newDict[self.avgKey] = round(dict[self.avgKey], self.nRoundDigits)
+        newDict[self.avgKey] = round(sum / len(dict), self.nRoundDigits)
 
         return newDict
 
@@ -61,16 +62,8 @@ class TrainingStats(TrainingData):
     def epochLoss(self):
         return self._createDictWithRoundedValues(self._epochLoss, lambda v: v.avg)
 
-    # returns only average value from dict, i.e. returns float
-    def epochLossAvg(self):
-        return self.dictAvg(self._epochLoss)
-
     def top1(self):
         return self._createDictWithRoundedValues(self._top1, lambda v: v.avg)
-
-    # returns only average value from dict, i.e. returns float
-    def top1Avg(self):
-        return self.dictAvg(self._top1)
 
     # update values for given ratio
     def update(self, ratio, logits, target, loss):
@@ -98,9 +91,10 @@ class TrainingStats(TrainingData):
 
 
 class TrainingOptimum(TrainingData):
-    def __init__(self, widthList, tableHeaders):
+    def __init__(self, widthList, tableHeaders, optCompareFunc):
         super(TrainingOptimum, self).__init__()
 
+        self.optCompareFunc = optCompareFunc
         self._tableHeaders = tableHeaders
 
         self._opt = {}
@@ -111,8 +105,8 @@ class TrainingOptimum(TrainingData):
     # create table for display in HtmlLogger
     def _toTable(self, currEpoch):
         table = [[h] for h in self._tableHeaders]
-        for width, (acc, epoch) in self._opt.items():
-            values = [width, acc, epoch, currEpoch - epoch]
+        for width, (value, epoch) in self._opt.items():
+            values = [width, value, epoch, currEpoch - epoch]
             for innerTable, v in zip(table, values):
                 innerTable.append(v)
 
@@ -121,14 +115,18 @@ class TrainingOptimum(TrainingData):
     # update optimum values according to current epoch dict
     def update(self, dict, epoch):
         # update optimal values for each width
-        for width, acc in dict.items():
-            optAcc, _ = self._opt[width]
-            if acc > optAcc:
-                self._opt[width] = (acc, epoch)
+        for width, value in dict.items():
+            optValue, _ = self._opt[width]
+            if self.optCompareFunc(value, optValue):
+                self._opt[width] = (value, epoch)
 
         # return table
         return self._toTable(epoch)
 
-    # returns if given epoch is average best & average optimum
+    # returns if given epoch is average best
     def is_best(self, epoch):
-        return epoch == self._opt[self.avgKey][-1], self._opt[self.avgKey][0]
+        return epoch == self._opt[self.avgKey][-1]
+
+    # # returns dictionary of (width,accuracy) to save in checkpoint
+    # def accuracy(self):
+    #     return {width: value for width, (value, epoch) in self._opt.items()}
