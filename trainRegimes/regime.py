@@ -13,7 +13,7 @@ from utils.data import load_data
 from utils.args import logParameters
 from utils.checkpoint import save_checkpoint
 from utils.HtmlLogger import HtmlLogger
-from utils.training import TrainingStats
+from utils.training import TrainingStats, TrainingOptimum
 
 
 class TrainRegime:
@@ -34,9 +34,19 @@ class TrainRegime:
     forwardCountersKey = 'Forward counters'
 
     # init formats for keys
-    formats = {timeKey: '{:.3f}', archLossKey: '{:.5f}', lrKey: '{:.5f}', flopsLossKey: '{:.5f}', crossEntropyKey: '{:.5f}',
-               pathFlopsRatioKey: '{:.3f}', validFlopsRatioKey: '{:.3f}'
-               }
+    formats = {
+        timeKey: lambda x: '{:.3f}'.format(x),
+        lrKey: lambda x: '{:.5f}'.format(x),
+        archLossKey: lambda x: '{:.5f}'.format(x),
+        crossEntropyKey: lambda x: '{:.5f}'.format(x),
+        flopsLossKey: lambda x: '{:.5f}'.format(x),
+        trainLossKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
+        trainAccKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
+        validLossKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
+        validAccKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
+        pathFlopsRatioKey: lambda x: '{:.3f}'.format(x),
+        validFlopsRatioKey: lambda x: '{:.3f}'.format(x)
+    }
 
     initWeightsTrainTableTitle = 'Initial weights training'
     k = 2
@@ -90,11 +100,11 @@ class TrainRegime:
     def train(self):
         raise NotImplementedError('subclasses must override train()!')
 
-    # apply defined formats on dict values by keys
+    # apply defined format functions on dict values by keys
     def _applyFormats(self, dict):
         for k in dict.keys():
             if k in self.formats:
-                dict[k] = self.formats[k].format(dict[k])
+                dict[k] = self.formats[k](dict[k])
 
     def trainWeights(self, optimizer, epoch, loggers):
         print('*** trainWeights() ***')
@@ -179,9 +189,6 @@ class TrainRegime:
         modelParallel.eval()
         assert (model.training is False)
 
-        # calc flops ratio
-        flopsRatio = model.flopsRatio()
-
         with no_grad():
             for step, (input, target) in enumerate(valid_queue):
                 startTime = time()
@@ -213,7 +220,8 @@ class TrainRegime:
                     trainLogger.addDataRow(dataRow)
 
         # create summary row
-        summaryRow = {self.batchNumKey: 'Summary', self.validLossKey: trainStats.epochLoss(), self.validAccKey: trainStats.top1()}
+        top1 = trainStats.top1()
+        summaryRow = {self.batchNumKey: 'Summary', self.validLossKey: trainStats.epochLoss(), self.validAccKey: top1}
         # apply formats
         self._applyFormats(summaryRow)
 
@@ -238,7 +246,7 @@ class TrainRegime:
             # add row to table
             trainLogger.addDataRow(dataRow)
 
-        return trainStats.top1(), trainStats.epochLoss(), summaryRow
+        return top1, trainStats.epochLossAvg(), summaryRow
 
     def initialWeightsTraining(self, trainFolderName, filename=None):
         model = self.model
@@ -261,8 +269,10 @@ class TrainRegime:
         # # calc alpha trainset loss on baselines
         # self.calcAlphaTrainsetLossOnBaselines(folderPath, self.archLossKey, logger)
 
-        # init validation best precision value
-        best_prec1 = 0.0
+        #
+        optimumTableHeaders = [[self.widthKey], [self.validAccKey], [self.epochNumKey], ['Epochs as optimum']]
+        trainOptimum = TrainingOptimum(model.baselineWidthKeys(), optimumTableHeaders)
+        # init widths validation average best precision value
         best_valid_loss = 0.0
 
         # count how many epochs current optimum hasn't changed
@@ -275,7 +285,7 @@ class TrainRegime:
         while nEpochsOptimum <= args.optimal_epochs:
             epoch += 1
             trainLogger = HtmlLogger(folderPath, str(epoch))
-            trainLogger.addInfoTable('Learning rates', [['optimizer_lr', self.formats[self.lrKey].format(optimizer.param_groups[0]['lr'])]])
+            trainLogger.addInfoTable('Learning rates', [['optimizer_lr', self.formats[self.lrKey](optimizer.param_groups[0]['lr'])]])
 
             # set loggers dictionary
             loggersDict = dict(train=trainLogger)
@@ -286,10 +296,10 @@ class TrainRegime:
             # add epoch number
             trainData[self.epochNumKey] = epoch
             # add learning rate
-            trainData[self.lrKey] = self.formats[self.lrKey].format(optimizer.param_groups[0]['lr'])
+            trainData[self.lrKey] = self.formats[self.lrKey](optimizer.param_groups[0]['lr'])
 
             # validation
-            valid_acc, valid_loss, validData = self.infer(epoch, loggersDict)
+            top1, valid_loss, validData = self.infer(epoch, loggersDict)
             # merge trainData with validData
             for k, v in validData.items():
                 trainData[k] = v
@@ -297,20 +307,22 @@ class TrainRegime:
             # update scheduler
             scheduler.step(valid_loss)
 
+            # update optimum values according to current epoch values and get optimum table for logger
+            optimumTable = trainOptimum.update(top1, epoch)
+            # add update time to optimum table
+            optimumTable.append(['Update time', logger.getTimeStr()])
+            # update nEpochsOptimum table
+            logger.addInfoTable('Optimum', optimumTable)
+
             # update best precision only after switching stage is complete
-            is_best = valid_acc > best_prec1
+            is_best, best_prec1 = trainOptimum.is_best(epoch)
             if is_best:
-                best_prec1 = valid_acc
                 best_valid_loss = valid_loss
                 # found new optimum, reset nEpochsOptimum
                 nEpochsOptimum = 0
             else:
                 # optimum hasn't changed
                 nEpochsOptimum += 1
-
-            # update nEpochsOptimum table
-            logger.addInfoTable('Optimum', [[self.validAccKey, self.formats[self.validAccKey].format(best_prec1)], ['Epoch#', epoch - nEpochsOptimum],
-                                            ['Epochs as optimum', nEpochsOptimum], ['Update time', logger.getTimeStr()]])
 
             # save model checkpoint
             save_checkpoint(self.trainFolderPath, model, optimizer, best_prec1, is_best, filename)
