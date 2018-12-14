@@ -63,8 +63,12 @@ class HtmlLogger:
         rows = []
         row = []
         counter = 0
+        # count how many keys types exist in dict
+        keysTypes = set([type(x) for x in dict.keys()])
+        # set keys sorting function according to number of keys types
+        keySortFunc = (lambda x: x) if len(keysTypes) == 1 else (lambda x: 10 if isinstance(x, str) else x)
         # sort elements by keys name
-        for k in sorted(dict.keys()):
+        for k in sorted(dict.keys(), key=keySortFunc):
             v = dict[k]
             row.append(k)
             row.append(v)
