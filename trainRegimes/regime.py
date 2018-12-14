@@ -53,10 +53,9 @@ class TrainRegime:
     alphasTableTitle = 'Alphas (top [{}])'.format(k)
 
     colsMainLogger = [epochNumKey, archLossKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, widthKey, lrKey]
-    colsMainInitWeightsTrain = [epochNumKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, lrKey]
+    colsMainInitWeightsTrain = [epochNumKey, trainLossKey, trainAccKey, validLossKey, validAccKey, lrKey]
     colsTrainWeights = [batchNumKey, trainLossKey, trainAccKey, timeKey]
     colsValidation = [batchNumKey, validLossKey, validAccKey, timeKey]
-    colsValidationStatistics = [forwardCountersKey]
 
     def __init__(self, args, logger):
         # build model for uniform distribution of bits
@@ -167,7 +166,7 @@ class TrainRegime:
             logger.addSummaryDataRow(summaryData)
 
         # log forward counters. if loggerFuncs==[] then it is just resets counters
-        func = [lambda rows: trainLogger.addInfoTable(title=self.forwardCountersKey, rows=rows)] if trainLogger else []
+        func = [lambda rows: trainLogger.addInfoTable(title='{} - Training'.format(self.forwardCountersKey), rows=rows)] if trainLogger else []
         model.logForwardCounters(loggerFuncs=func)
 
         return summaryData
@@ -220,8 +219,9 @@ class TrainRegime:
                     trainLogger.addDataRow(dataRow)
 
         # create summary row
-        top1 = trainStats.top1()
-        summaryRow = {self.batchNumKey: 'Summary', self.validLossKey: trainStats.epochLoss(), self.validAccKey: top1}
+        validAcc = trainStats.top1()
+        validLoss = trainStats.epochLoss()
+        summaryRow = {self.batchNumKey: 'Summary', self.validLossKey: validLoss, self.validAccKey: validAcc}
         # apply formats
         self._applyFormats(summaryRow)
 
@@ -229,24 +229,10 @@ class TrainRegime:
             logger.addSummaryDataRow(summaryRow)
 
         # log forward counters. if loggerFuncs==[] then it is just resets counters
-        func = []
-        forwardCountersData = [[]]
-        if trainLogger:
-            func = [lambda rows: forwardCountersData.append(trainLogger.createInfoTable('Show', rows))]
-
+        func = [lambda rows: trainLogger.addInfoTable(title='{} - Validation'.format(self.forwardCountersKey), rows=rows)] if trainLogger else []
         model.logForwardCounters(loggerFuncs=func)
 
-        if trainLogger:
-            # create new data table for validation statistics
-            trainLogger.createDataTable('Validation statistics', self.colsValidationStatistics)
-            # add bitwidth & forward counters statistics
-            dataRow = {self.forwardCountersKey: forwardCountersData[-1]}
-            # apply formats
-            self._applyFormats(dataRow)
-            # add row to table
-            trainLogger.addDataRow(dataRow)
-
-        return top1, trainStats.epochLossAvg(), summaryRow
+        return validAcc, validLoss, summaryRow
 
     def initialWeightsTraining(self, trainFolderName, filename=None):
         model = self.model
@@ -269,15 +255,15 @@ class TrainRegime:
         # # calc alpha trainset loss on baselines
         # self.calcAlphaTrainsetLossOnBaselines(folderPath, self.archLossKey, logger)
 
-        #
-        optimumTableHeaders = [[self.widthKey], [self.validAccKey], [self.epochNumKey], ['Epochs as optimum']]
-        trainOptimum = TrainingOptimum(model.baselineWidthKeys(), optimumTableHeaders)
-        # init widths validation average best precision value
-        best_valid_loss = 0.0
+        # init optimum info table headers
+        optimumTableHeaders = [self.widthKey, self.validAccKey, self.epochNumKey, 'Epochs as optimum']
+        # init TrainingOptimum instance
+        trainOptimum = TrainingOptimum(model.baselineWidthKeys(), optimumTableHeaders, lambda value, optValue: value > optValue)
+        # init optimal epoch data, we will display it in summary row
+        optimalEpochData = None
 
         # count how many epochs current optimum hasn't changed
         nEpochsOptimum = 0
-        logger.addInfoTable('Optimum', [['Epochs as optimum', nEpochsOptimum], ['Update time', logger.getTimeStr()]])
 
         # init scheduler
         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=2, min_lr=args.learning_rate_min)
@@ -299,25 +285,26 @@ class TrainRegime:
             trainData[self.lrKey] = self.formats[self.lrKey](optimizer.param_groups[0]['lr'])
 
             # validation
-            top1, valid_loss, validData = self.infer(epoch, loggersDict)
+            validAcc, validLoss, validData = self.infer(epoch, loggersDict)
             # merge trainData with validData
             for k, v in validData.items():
                 trainData[k] = v
 
             # update scheduler
-            scheduler.step(valid_loss)
+            scheduler.step(trainOptimum.dictAvg(validLoss))
 
             # update optimum values according to current epoch values and get optimum table for logger
-            optimumTable = trainOptimum.update(top1, epoch)
+            optimumTable = trainOptimum.update(validAcc, epoch)
             # add update time to optimum table
             optimumTable.append(['Update time', logger.getTimeStr()])
             # update nEpochsOptimum table
             logger.addInfoTable('Optimum', optimumTable)
 
             # update best precision only after switching stage is complete
-            is_best, best_prec1 = trainOptimum.is_best(epoch)
+            is_best = trainOptimum.is_best(epoch)
             if is_best:
-                best_valid_loss = valid_loss
+                # update optimal epoch data
+                optimalEpochData = (validAcc, validLoss)
                 # found new optimum, reset nEpochsOptimum
                 nEpochsOptimum = 0
             else:
@@ -325,13 +312,14 @@ class TrainRegime:
                 nEpochsOptimum += 1
 
             # save model checkpoint
-            save_checkpoint(self.trainFolderPath, model, optimizer, best_prec1, is_best, filename)
+            save_checkpoint(self.trainFolderPath, model, optimizer, validAcc, is_best, filename)
 
             # add data to main logger table
             logger.addDataRow(trainData)
 
         # add optimal accuracy
-        summaryRow = {self.epochNumKey: 'Optimal', self.validAccKey: best_prec1, self.validLossKey: best_valid_loss}
+        optAcc, optLoss = optimalEpochData
+        summaryRow = {self.epochNumKey: 'Optimal', self.validAccKey: optAcc, self.validLossKey: optLoss}
         self._applyFormats(summaryRow)
         logger.addSummaryDataRow(summaryRow)
 
@@ -339,5 +327,5 @@ class TrainRegime:
         # save_checkpoint(self.trainFolderPath, model, args, epoch, best_prec1, is_best=False, filename='pre_trained')
 
         # save optimal validation values
-        setattr(args, self.validAccKey, best_prec1)
-        setattr(args, self.validLossKey, best_valid_loss)
+        setattr(args, self.validAccKey, optAcc)
+        setattr(args, self.validLossKey, optLoss)
