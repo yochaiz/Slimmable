@@ -36,7 +36,7 @@ class TrainRegime:
     # init formats for keys
     formats = {
         timeKey: lambda x: '{:.3f}'.format(x),
-        lrKey: lambda x: '{:.5f}'.format(x),
+        lrKey: lambda x: '{:.8f}'.format(x),
         archLossKey: lambda x: '{:.5f}'.format(x),
         crossEntropyKey: lambda x: '{:.5f}'.format(x),
         flopsLossKey: lambda x: '{:.5f}'.format(x),
