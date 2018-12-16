@@ -1,7 +1,6 @@
 from shutil import copyfile
 
 from torch import save as saveModel
-from torch import load as loadModel
 
 checkpointFileType = 'pth.tar'
 stateFilenameDefault = 'model'
