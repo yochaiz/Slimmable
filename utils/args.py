@@ -2,11 +2,15 @@ from json import dump
 from argparse import ArgumentParser
 from inspect import isclass
 from time import strftime
+from os import getpid, environ
+from sys import argv
+from socket import gethostname
 
 import models
 import trainRegimes
 from utils.HtmlLogger import HtmlLogger
 from utils.zip import create_exp_dir
+from utils.checkpoint import generate_partitions
 
 
 def saveArgsToJSON(args):
@@ -45,6 +49,8 @@ def parseArgs():
     # width params
     parser.add_argument('--width', type=str, required=True, help='list of width values, e.g. 0.25,0.5,0.75,1.0')
     parser.add_argument('--baseline', type=float, default=None, help='baseline width ratio we want to compare to')
+    # call function to generate width partitions checkpoints
+    parser.add_argument('--generate_partitions', type=str, default=None)
 
     args = parser.parse_args()
 
@@ -62,14 +68,30 @@ def parseArgs():
     # set number of model output classes & dataset input size
     args.nClasses, args.input_size = datasets[args.dataset]
 
+    # set train folder name
+    args.trainFolder = 'train'
+
+    # generate width partitions checkpoints
+    if args.generate_partitions is not None:
+        # build width ratio list
+        widthRatioList = [float(x) for x in args.generate_partitions.split(',')]
+        # reset args.generate_partitions, because we want it None in generated checkpoints
+        args.generate_partitions = None
+        # get model class for number of block & number of layers per block
+        modelClass = models.__dict__[args.model]
+        # generate permutations
+        generate_partitions(args, widthRatioList, modelClass.nPartitionBlocks())
+        exit(0)
+
     # create folder
     args.time = strftime("%Y%m%d-%H%M%S")
     args.lmbda = 0.0  # TODO: replace with real lambda
     args.folderName = '[{}],[{}],[{}],{},[{}]'.format(args.model, args.dataset, args.lmbda, args.width, args.time)
     args.save = '../results/{}'.format(args.folderName)
     create_exp_dir(args.save)
-    # set train folder name
-    args.trainFolder = 'train'
+
+    # init partition
+    args.partition = None
 
     # save args to JSON
     saveArgsToJSON(args)
@@ -80,6 +102,10 @@ def parseArgs():
 def logParameters(logger, args, model):
     if not logger:
         return
+
+    # log command line
+    logger.addInfoTable(title='Command line', rows=[[' '.join(argv)], ['PID:[{}]'.format(getpid())], ['Hostname', gethostname()],
+                                                    ['CUDA_VISIBLE_DEVICES', environ.get('CUDA_VISIBLE_DEVICES')]])
 
     # calc number of permutations
     permutationStr = model.nPerms
