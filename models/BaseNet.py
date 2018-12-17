@@ -192,10 +192,9 @@ class BaseNet(Module):
         if args.partition:
             self._baselineWidth[self._partitionKey] = [len(self._baselineWidth)] * len(self._layersList)
         # count baseline models widths flops
-        baselineFlopsDict = self.calcBaselineFlops()
-        args.baselineFlops = HtmlLogger.dictToRows(baselineFlopsDict, nElementPerRow=1, dictSortFunc=lambda kv: kv[-1])
+        args.baselineFlops = self.calcBaselineFlops()
         # save baseline flops, for calculating flops ratio
-        self.baselineFlops = baselineFlopsDict.get(args.baseline)
+        self.baselineFlops = args.baselineFlops.get(args.baseline)
 
         self.printToFile(saveFolder)
         # calc number of width permutations in model
