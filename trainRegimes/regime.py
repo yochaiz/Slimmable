@@ -58,7 +58,7 @@ class TrainRegime:
     colsValidation = [batchNumKey, validLossKey, validAccKey, timeKey]
 
     def __init__(self, args, logger):
-        # build model for uniform distribution of bits
+        # get model constructor
         modelClass = models.__dict__[args.model]
         # init model
         model = modelClass(args)
@@ -81,19 +81,10 @@ class TrainRegime:
         self.modelClass = modelClass
         self.logger = logger
 
-        # init email time
-        self.lastMailTime = time()
-        self.secondsBetweenMails = 1 * 3600
-
         self.trainFolderPath = '{}/{}'.format(args.save, args.trainFolder)
 
         # init cross entropy loss
         self.cross_entropy = CrossEntropyLoss().cuda()
-
-        self.initialWeightsTraining(trainFolderName='init_weights_train')
-
-        # init logger data table
-        logger.createDataTable('Summary', self.colsMainLogger)
 
     @abstractmethod
     def train(self):
