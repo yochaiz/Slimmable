@@ -2,7 +2,6 @@ from abc import abstractmethod
 from math import floor
 from numpy import argsort
 from functools import reduce
-from collections import OrderedDict
 from os.path import exists
 
 from torch import load as loadModel
@@ -71,10 +70,6 @@ class SlimLayer(Block):
 
     def widthList(self):
         return self._widthList
-
-    def widthRatioList(self):
-        for widthRatio in self._widthRatioList:
-            yield widthRatio
 
     # current number of filters in layer
     def currWidth(self):
@@ -172,6 +167,8 @@ class ConvSlimLayer(SlimLayer):
 
 
 class BaseNet(Module):
+    _partitionKey = 'Partition'
+
     def buildLayersList(self):
         layersList = []
         for layer in self.blocks:
@@ -189,11 +186,16 @@ class BaseNet(Module):
         self._layersList = self.buildLayersList()
 
         # init dictionary of layer width indices list per width ratio
-        self._baselineWidth = self.buildBaselineWidthIdx()
+        self._baselineWidth = self.buildHomogeneousWidthIdx(args.width)
+        # add partition to baseline width dictionary
+        # partition batchnorm is the last one in each layer batchnorms list
+        if args.partition:
+            self._baselineWidth[self._partitionKey] = [len(self._baselineWidth)] * len(self._layersList)
         # count baseline models widths flops
-        args.baselineFlops = self.calcBaselineFlops()
+        baselineFlopsDict = self.calcBaselineFlops()
+        args.baselineFlops = HtmlLogger.dictToRows(baselineFlopsDict, nElementPerRow=1, dictSortFunc=lambda kv: kv[-1])
         # save baseline flops, for calculating flops ratio
-        self.baselineFlops = args.baselineFlops[args.baseline]
+        self.baselineFlops = baselineFlopsDict.get(args.baseline)
 
         self.printToFile(saveFolder)
         # calc number of width permutations in model
@@ -202,6 +204,13 @@ class BaseNet(Module):
     @abstractmethod
     def initBlocks(self, params):
         raise NotImplementedError('subclasses must override initLayers()!')
+
+    @staticmethod
+    @abstractmethod
+    # number of model blocks for partition, in order to generate different width for each block
+    # returns tuple (number of blocks as int, list of number of layer in each block)
+    def nPartitionBlocks():
+        raise NotImplementedError('subclasses must override nPartitionBlocks()!')
 
     @abstractmethod
     def forward(self, x):
@@ -234,18 +243,16 @@ class BaseNet(Module):
 
     # build a dictionary where each key is width ratio and each value is the list of layer indices in order to set the key width ratio as current
     # width in each layer
-    def buildBaselineWidthIdx(self):
-        baselineWidth = {}
-        # iterate over model layers
-        for layer in self.layersList():
-            # iterate over width and calc flops for their homogeneous model
-            for widthRatio in layer.widthRatioList():
-                # check if width is not in baselineResults dictionary
-                if widthRatio not in baselineWidth:
-                    # build layer indices for current width ratio
-                    baselineWidth[widthRatio] = [l.widthRatioIdx(widthRatio) for l in self.layersList()]
+    def buildHomogeneousWidthIdx(self, widthRatioList):
+        homogeneousWidth = {}
 
-        return baselineWidth
+        for widthRatio in widthRatioList:
+            # check if width is not in baselineResults dictionary
+            if widthRatio not in homogeneousWidth:
+                # build layer indices for current width ratio
+                homogeneousWidth[widthRatio] = [l.widthRatioIdx(widthRatio) for l in self.layersList()]
+
+        return homogeneousWidth
 
     def calcBaselineFlops(self):
         return self.applyOnBaseline(self.countFlops)
@@ -290,47 +297,41 @@ class BaseNet(Module):
                 # compare dictionaries
                 dictDiff = modelStateDictKeys.symmetric_difference(set(chckpntStateDict.keys()))
 
-                # init flag whether we load batchnorm weights from checkpoint state dict to model state dict
-                notLoadedBN = False
-                for key in dictDiff:
-                    # if there is a missing key in model state dict, we assume this is because there are more BN duplications in model state dict
-                    if key in modelStateDictKeys:
-                        notLoadedBN = True
-                        break
+                # init batchnorm token
+                token = '.bn.'
+                # init how many batchnorms we have loaded from pre-trained
+                bnLoadedCounter = 0
+                # init how many batchnorms are in total
+                bnTotalCounter = sum(1 for key in modelStateDictKeys if token in key)
 
-                # keep current model BN weights
-                if notLoadedBN:
-                    # init new dict, since we have to add new keys
-                    newDict = OrderedDict()
-                    # init tokens
-                    token = '.bn.0.'
-                    template = '.bn.{}.'
-                    # iterate over checkpoint state dict keys
-                    for key in chckpntStateDict.keys():
+                # init new dict, based on current dict
+                newDict = modelStateDict
+                # iterate over checkpoint state dict keys
+                for key in chckpntStateDict.keys():
+                    # duplicate values with their corresponding new keys
+                    if token in key:
+                        # filters out num_batches_tracked in cases it is not needed
+                        if key in modelStateDict:
+                            if modelStateDict[key].size() == chckpntStateDict[key].size():
+                                newDict[key] = chckpntStateDict[key]
+                                bnLoadedCounter += 1
+                            else:
+                                # add model state dict values to new dict
+                                newDict[key] = modelStateDict[key]
+                    else:
                         # add checkpoint state dict values to new dict
                         newDict[key] = chckpntStateDict[key]
-                        # duplicate values with their corresponding new keys
-                        if token in key:
-                            idx = 1
-                            newKey = key.replace(token, template.format(idx))
-                            while newKey in dictDiff:
-                                newDict[newKey] = modelStateDict[newKey]
-                                dictDiff.remove(newKey)
-                                idx += 1
-                                newKey = key.replace(token, template.format(idx))
-
-                    # update the state dict we want to load to model
-                    chckpntStateDict = newDict
 
                 # load weights
-                self.load_state_dict(chckpntStateDict)
+                self.load_state_dict(newDict)
                 # add info rows about checkpoint
                 loggerRows.append(['Path', '{}'.format(path)])
-                loggerRows.append(['Validation accuracy', '{:.5f}'.format(checkpoint['best_prec1'])])
+                validationAccRows = [['Ratio', 'Accuracy']] + HtmlLogger.dictToRows(checkpoint['best_prec1'], nElementPerRow=1)
+                loggerRows.append(['Validation accuracy', validationAccRows])
                 loggerRows.append(['StateDict diff', list(dictDiff)])
-                loggerRows.append(['Loaded Batchnorm values', not notLoadedBN])
+                loggerRows.append(['Loaded Batchnorm #', '{}/{}'.format(bnLoadedCounter, bnTotalCounter)])
             else:
-                loggerRows.append(['Path', 'Failed to load pre-trained from [{}], path does not exists'.format(path)])
+                raise ValueError('Failed to load pre-trained from [{}], path does not exists'.format(path))
 
             # load pre-trained model if we tried to load pre-trained
             logger.addInfoTable('Pre-trained model', loggerRows)
