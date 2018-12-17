@@ -59,22 +59,24 @@ class HtmlLogger:
 
     # converts dictionary to rows with nElementPerRow (k,v) elements at most in each row
     @staticmethod
-    def dictToRows(dict, nElementPerRow, dictSortFunc=None):
+    def dictToRows(_dict, nElementPerRow, dictSortFunc=None):
         rows = []
         row = []
         counter = 0
         # init default dictionary sort function, based on keys
         if dictSortFunc is None:
             # count how many keys types exist in dict
-            keysTypes = set([type(x) for x in dict.keys()])
+            keysTypes = set([type(x) for x in _dict.keys()])
             # set keys sorting function according to number of keys types
             keySortFunc = (lambda x: x) if len(keysTypes) == 1 else (lambda x: 10 if isinstance(x, str) else x)
             # set dict sorting function
             dictSortFunc = lambda kv: keySortFunc(kv[0])
         # sort elements by keys name
-        for k, v in sorted(dict.items(), key=dictSortFunc):
+        for k, v in sorted(_dict.items(), key=dictSortFunc):
             row.append(k)
-            row.append(v)
+            # recursively transform dictionaries to rows
+            value = v if not isinstance(v, dict) else HtmlLogger.dictToRows(v, nElementPerRow, dictSortFunc)
+            row.append(value)
             counter += 1
 
             if counter == nElementPerRow:
