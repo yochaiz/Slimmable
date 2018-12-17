@@ -1,8 +1,6 @@
 from datetime import datetime
 from numpy import random as nprandom
-from sys import exit, argv
-from os import getpid, environ
-from socket import gethostname
+from sys import exit
 from traceback import format_exc
 
 # from torch.multiprocessing import set_start_method
@@ -40,9 +38,6 @@ if __name__ == '__main__':
     #     raise ValueError('spawn failed')
 
     try:
-        # log command line
-        logger.addInfoTable(title='Command line', rows=[[' '.join(argv)], ['PID:[{}]'.format(getpid())], ['Hostname', gethostname()],
-                                                        ['CUDA_VISIBLE_DEVICES', environ.get('CUDA_VISIBLE_DEVICES')]])
         # build regime for alphas optimization
         alphasRegimeClass = trainRegimes.__dict__[args.train_regime]
         alphasRegime = alphasRegimeClass(args, logger)
