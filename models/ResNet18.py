@@ -65,7 +65,7 @@ class BasicBlock(Block):
 
 class ResNet18(BaseNet):
     def __init__(self, args):
-        super(ResNet18, self).__init__(args, initLayersParams=(args.width, args.kernel, args.nClasses, args.input_size))
+        super(ResNet18, self).__init__(args, initLayersParams=(args.width, args.kernel, args.nClasses, args.input_size, args.partition))
 
     # init layers (type, out_planes)
     def initBlocksPlanes(self):
@@ -73,9 +73,12 @@ class ResNet18(BaseNet):
                 (BasicBlock, 32), (BasicBlock, 32), (BasicBlock, 32),
                 (BasicBlock, 64), (BasicBlock, 64), (BasicBlock, 64)]
 
+    @staticmethod
+    def nPartitionBlocks():
+        return 3, [4, 3, 3]
+
     def initBlocks(self, params):
-        widthRatioList, kernel_size, nClasses, input_size = params
-        widthRatioList = widthRatioList.copy()
+        widthRatioList, kernel_size, nClasses, input_size, partition = params
 
         blocksPlanes = self.initBlocksPlanes()
 
@@ -84,8 +87,12 @@ class ResNet18(BaseNet):
         prevLayer = Input(3, input_size)
         stride = 1
         for i, (blockType, out_planes) in enumerate(blocksPlanes):
+            layerWidthRatioList = widthRatioList.copy()
+            # add partition ratio if exists
+            if partition:
+                layerWidthRatioList += [partition[i]]
             # build layer
-            l = blockType(widthRatioList, prevLayer.outputChannels(), out_planes, kernel_size, stride, prevLayer)
+            l = blockType(layerWidthRatioList, prevLayer.outputChannels(), out_planes, kernel_size, stride, prevLayer)
             # add layer to blocks list
             blocks.append(l)
             # update previous layer
