@@ -121,9 +121,7 @@ def logParameters(logger, args, model):
             'Widths per layer': [layer.nWidths() for layer in model.layersList()],
             'Permutations': permutationStr
         }, nElementPerRow=2))
-    # # log baseline model
-    # logBaselineModel(args, logger)
     # log args
-    logger.addInfoTable('args', HtmlLogger.dictToRows(vars(args), nElementPerRow=3))
+    logger.addInfoTable('args', HtmlLogger.dictToRows(vars(args), nElementPerRow=3, dictSortFunc=[None, lambda kv: kv[-1]]))
     # print args
     print(args)
