@@ -54,9 +54,10 @@ def generate_partitions(args, blocksPermutationList, modelBlocks):
         perms = newPerms
 
     # generate checkpoints
-    for partition, partitionByBlock in perms:
+    for partition, blocksPartition in perms:
         # update partition
         args.partition = partition
+        args.blocksPartition = blocksPartition
         # save checkpoint
-        saveModel(args, '[{}]-[{}]-{}.{}'.format(args.model, args.dataset, partitionByBlock, checkpointFileType))
-        # print(partitionByBlock)
+        saveModel(args, '[{}]-[{}]-{}.{}'.format(args.model, args.dataset, blocksPartition, checkpointFileType))
+        # print(blocksPartition)
