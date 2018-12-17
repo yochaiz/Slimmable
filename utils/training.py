@@ -21,7 +21,7 @@ class TrainingData:
     @staticmethod
     # returns only average value from dict
     def dictAvg(dict):
-        return dict[TrainingData.avgKey]
+        return dict[TrainingData.avgKey] if len(dict) > 1 else dict[next(iter(dict))]
 
 
 class TrainingStats(TrainingData):
@@ -49,7 +49,8 @@ class TrainingStats(TrainingData):
             sum += value
 
         # add average
-        newDict[self.avgKey] = round(sum / len(dict), self.nRoundDigits)
+        if len(dict) > 1:
+            newDict[self.avgKey] = round(sum / len(dict), self.nRoundDigits)
 
         return newDict
 
@@ -98,8 +99,13 @@ class TrainingOptimum(TrainingData):
         self._tableHeaders = tableHeaders
 
         self._opt = {}
+        # copy width list
+        widthList = widthList.copy()
+        # add average key if there multiple width
+        if len(widthList) > 1:
+            widthList.append(self.avgKey)
         # init with invalid values
-        for width in widthList + [self.avgKey]:
+        for width in widthList:
             self._opt[width] = (-1.0, None)
 
     # create table for display in HtmlLogger
@@ -125,7 +131,10 @@ class TrainingOptimum(TrainingData):
 
     # returns if given epoch is average best
     def is_best(self, epoch):
-        return epoch == self._opt[self.avgKey][-1]
+        # average key is not always in dictionary
+        key = self.avgKey if len(self._opt) > 1 else next(iter(self._opt))
+        # return value
+        return epoch == self._opt[key][-1]
 
     # # returns dictionary of (width,accuracy) to save in checkpoint
     # def accuracy(self):
