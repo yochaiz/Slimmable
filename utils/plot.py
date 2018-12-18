@@ -8,11 +8,13 @@ from models.BaseNet import BaseNet
 from trainRegimes.regime import TrainRegime
 from utils.statistics import Statistics
 from utils.checkpoint import checkpointFileType
+from utils.training import TrainingData
 
 _baselineFlopsKey = 'baselineFlops'
 _blocksPartitionKey = 'blocksPartition'
 _flopsKey = Statistics.flopsKey()
 _partitionKey = BaseNet.partitionKey()
+_avgKey = TrainingData.avgKey()
 
 
 def generateCSV(folderPath):
@@ -51,7 +53,7 @@ def generateCSV(folderPath):
             results[repeatNum - 1] = validAcc
 
     # iterate (sorted) over partitions results
-    for partition in reversed(sorted(partitionKeys)):
+    for partition in reversed(sorted(partitionKeys, key=lambda x: [10] * len(x) if isinstance(x[0], str) else x)):
         partitionStr = str(partition)
         partitionData = data[partitionStr]
 
@@ -62,7 +64,7 @@ def generateCSV(folderPath):
             resultsStr += ',{:.3f}'.format(r.get(BaseNet.partitionKey())) if r else ','
         print('"{}",{}{}'.format(partition, flops, resultsStr))
 
-    print('Partition,Bops,1,2,3,4,5')
+    print('Partition,Flops,1,2,3,4,5')
 
 
 def updateCheckpointAttribute(folderPath, attribute, flopsDict):
@@ -75,56 +77,62 @@ def updateCheckpointAttribute(folderPath, attribute, flopsDict):
             save(checkpoint, fPath)
 
 
-def buildCheckpoint(folderPath, checkpointFilename):
-    checkpointSrcPath = '{}/{}'.format(folderPath, checkpointFilename)
-    checkpointSrcPrefix = checkpointFilename[:-len(checkpointFileType) - 1]
-    # init checkpoint index
-    checkpointIdx = 1
-    # check checkpoint source file exists
-    if exists(checkpointSrcPath):
-        # iterate over folders in folderPath
-        for file in listdir(folderPath):
-            fPath = '{}/{}'.format(folderPath, file)
-            if isdir(fPath):
-                folderCheckpointPath = '{}/train/model_opt.pth.tar'.format(fPath)
-                if exists(folderCheckpointPath):
-                    # load folder checkpoint
-                    checkpoint = load(folderCheckpointPath)
-                    # get values from checkpoint
-                    acc = checkpoint.get('best_prec1')
-                    if isinstance(acc, dict):
-                        acc = acc.get(next(iter(acc)))
-                    acc = {BaseNet.partitionKey(): acc}
-                    # acc = getattr(checkpoint, TrainRegime.validAccKey, None)
-                    # loss = getattr(checkpoint, TrainRegime.validLossKey, None)
+def buildCheckpoint(folderPath, checkpointSrcPrefix, nBlocks):
+    # init flops per width ratio dictionary
+    flopsDict = {0.25: 2633728.0, 0.5: 10313728.0, 0.75: 23040000.0, 1.0: 40812544.0}
+    # add average flops to dict
+    flopsDict[_avgKey] = [v for k, v in flopsDict.items()]
+    flopsDict[_avgKey] = sum(flopsDict[_avgKey]) / len(flopsDict[_avgKey])
+    # init checkpoint index per key
+    checkpointIdx = {k: 1 for k in flopsDict.keys()}
+    # init checkpoint source path per key
+    checkpointSrcPath = {width: '{}/{}-{}.{}'.format(folderPath, checkpointSrcPrefix, [width] * nBlocks, checkpointFileType)
+                         for width in flopsDict.keys()}
+    # iterate over folders in folderPath
+    for file in listdir(folderPath):
+        fPath = '{}/{}'.format(folderPath, file)
+        if isdir(fPath):
+            folderCheckpointPath = '{}/train/model_opt.pth.tar'.format(fPath)
+            if exists(folderCheckpointPath):
+                # load folder checkpoint
+                checkpoint = load(folderCheckpointPath)
+                # get accuracy dictionary from checkpoint
+                accDict = checkpoint.get('best_prec1')
+                # iterate over widths accuracy
+                for width, acc in accDict.items():
                     # make copy of source checkpoint
-                    checkpointDstName = '{}-{}.{}'.format(checkpointSrcPrefix, checkpointIdx, checkpointFileType)
+                    checkpointDstName = '{}-{}-{}.{}'.format(checkpointSrcPrefix, [width] * nBlocks, checkpointIdx[width], checkpointFileType)
                     checkpointDstPath = '{}/{}'.format(folderPath, checkpointDstName)
-                    copy2(checkpointSrcPath, checkpointDstPath)
+                    copy2(checkpointSrcPath[width], checkpointDstPath)
                     # load new checkpoint
                     dstCheckpoint = load(checkpointDstPath)
                     # set attributes in destination checkpoint
-                    setattr(dstCheckpoint, TrainRegime.validAccKey, acc)
+                    attributes = [(TrainRegime.validAccKey, {BaseNet.partitionKey(): acc}), (_blocksPartitionKey, [width] * nBlocks),
+                                  (_baselineFlopsKey, {BaseNet.partitionKey(): flopsDict[width]})]
+                    for attrKey, attrValue in attributes:
+                        setattr(dstCheckpoint, attrKey, attrValue)
                     # save new checkpoint
                     save(dstCheckpoint, checkpointDstPath)
-                    print('Updated values {} in checkpoint {}'.format([acc], checkpointDstName))
+                    print('Updated values {} in checkpoint {}'.format(attributes, checkpointDstName))
                     # update checkpoint index
-                    checkpointIdx += 1
+                    checkpointIdx[width] += 1
+
+    # remove source checkpoints
+    for width in flopsDict.keys():
+        remove('{}/{}-{}.{}'.format(folderPath, checkpointSrcPrefix, [width] * nBlocks, checkpointFileType))
 
 
-def buildWidthRatioMissingCheckpoints(widthRatio, flops):
-    flopsDict = {_partitionKey: flops}
-    checkpointFilename = '[resnet18]-[cifar10]-{}.pth.tar'.format([widthRatio] * 3)
+def buildWidthRatioMissingCheckpoints(widthRatio, nBlocks):
+    checkpointSrcPrefix = '[resnet18]-[cifar10]'
 
     for dataset in ['cifar10', 'cifar100']:
         for pre_trained in ['with_pre_trained', 'without_pre_trained']:
-            folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/width:[{}]/{}/'.format(dataset, widthRatio, pre_trained)
+            folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/width:{}/{}'.format(dataset, widthRatio, pre_trained)
 
-            buildCheckpoint(folderPath, checkpointFilename)
-            remove('{}/{}'.format(folderPath, checkpointFilename))
-            updateCheckpointAttribute(folderPath, _baselineFlopsKey, flopsDict)
-            updateCheckpointAttribute(folderPath, _blocksPartitionKey, [widthRatio] * 3)
+            buildCheckpoint(folderPath, checkpointSrcPrefix, nBlocks)
             generateCSV(folderPath)
+            print(folderPath)
+            print('=================================================')
 
 
 # folderPath should be a path to folder which has folders inside
@@ -165,10 +173,10 @@ def plotFolders(folderPath):
     Statistics.plotFlops(plotData, _flopsKey, None, folderPath)
 
 
-widthRatio = 1.0
+widthRatio = [0.25, 0.5, 0.75, 1.0]
 dataset = 'cifar100'
-folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/width:[{}]'.format(dataset, widthRatio)
+folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/width:{}/without_pre_trained'.format(dataset, widthRatio)
 
-# buildWidthRatioMissingCheckpoints(widthRatio, flops=40812544.0)
+# buildWidthRatioMissingCheckpoints(widthRatio, nBlocks=3)
 # plotFolders(folderPath)
 # generateCSV(folderPath)
