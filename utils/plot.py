@@ -127,4 +127,48 @@ def buildWidthRatioMissingCheckpoints(widthRatio, flops):
             generateCSV(folderPath)
 
 
-# buildWidthRatioMissingCheckpoints(0.25, flops=2633728.0)
+# folderPath should be a path to folder which has folders inside
+# each inner folder will be the title for the checkpoints in it
+def plotFolders(folderPath):
+    # init flops data with inner folders as keys, [] as values
+    flopsData = {}
+    # init plot data
+    plotData = {_flopsKey: flopsData}
+    # iterate over folders
+    for folder in listdir(folderPath):
+        fPath = '{}/{}'.format(folderPath, folder)
+        if isdir(fPath):
+            # init empty list under folder key
+            flopsData[folder] = []
+            # iterate over checkpoints
+            for file in listdir(fPath):
+                filePath = '{}/{}'.format(fPath, file)
+                if isfile(filePath):
+                    checkpoint = load(filePath)
+                    # get attributes from checkpoint
+                    try:
+                        baselineFlops = getattr(checkpoint, _baselineFlopsKey)
+                        flops = baselineFlops.get(BaseNet.partitionKey())
+                        validAcc = getattr(checkpoint, TrainRegime.validAccKey)
+                        validAcc = validAcc.get(BaseNet.partitionKey())
+                        repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
+                        partition = getattr(checkpoint, _blocksPartitionKey)
+                    except Exception as e:
+                        print('Missing values in {}'.format(file))
+                        # remove(filePath)
+                        continue
+
+                    # add attributes to plot data
+                    flopsData[folder].append((repeatNum, flops, validAcc))
+
+    # plot
+    Statistics.plotFlops(plotData, _flopsKey, None, folderPath)
+
+
+widthRatio = 1.0
+dataset = 'cifar100'
+folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/width:[{}]'.format(dataset, widthRatio)
+
+# buildWidthRatioMissingCheckpoints(widthRatio, flops=40812544.0)
+# plotFolders(folderPath)
+# generateCSV(folderPath)
