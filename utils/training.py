@@ -16,12 +16,16 @@ class AvgrageMeter(object):
 # abstract base class
 class TrainingData:
     nRoundDigits = 5
-    avgKey = 'Avg'
+    _avgKey = 'Avg'
+
+    @staticmethod
+    def avgKey():
+        return TrainingData._avgKey
 
     @staticmethod
     # returns only average value from dict
     def dictAvg(dict):
-        return dict[TrainingData.avgKey] if len(dict) > 1 else dict[next(iter(dict))]
+        return dict[TrainingData._avgKey] if len(dict) > 1 else dict[next(iter(dict))]
 
 
 class TrainingStats(TrainingData):
@@ -50,7 +54,7 @@ class TrainingStats(TrainingData):
 
         # add average
         if len(dict) > 1:
-            newDict[self.avgKey] = round(sum / len(dict), self.nRoundDigits)
+            newDict[self._avgKey] = round(sum / len(dict), self.nRoundDigits)
 
         return newDict
 
@@ -103,7 +107,7 @@ class TrainingOptimum(TrainingData):
         widthList = widthList.copy()
         # add average key if there multiple width
         if len(widthList) > 1:
-            widthList.append(self.avgKey)
+            widthList.append(self._avgKey)
         # init with invalid values
         for width in widthList:
             self._opt[width] = (-1.0, None)
@@ -132,7 +136,7 @@ class TrainingOptimum(TrainingData):
     # returns if given epoch is average best
     def is_best(self, epoch):
         # average key is not always in dictionary
-        key = self.avgKey if len(self._opt) > 1 else next(iter(self._opt))
+        key = self._avgKey if len(self._opt) > 1 else next(iter(self._opt))
         # return value
         return epoch == self._opt[key][-1]
 
