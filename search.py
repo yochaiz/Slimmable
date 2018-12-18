@@ -11,7 +11,7 @@ from torch import manual_seed as torch_manual_seed
 
 import trainRegimes
 from utils.HtmlLogger import HtmlLogger
-from utils.email import sendEmail
+from utils.emails import sendEmail
 from utils.args import parseArgs
 
 if __name__ == '__main__':
