@@ -140,8 +140,6 @@ def buildWidthRatioMissingCheckpoints(widthRatio, nBlocks):
 def plotFolders(folderPath):
     # init flops data with inner folders as keys, [] as values
     flopsData = {}
-    # init plot data
-    plotData = {_flopsKey: flopsData}
     # iterate over folders
     for folder in listdir(folderPath):
         fPath = '{}/{}'.format(folderPath, folder)
@@ -170,13 +168,14 @@ def plotFolders(folderPath):
                     flopsData[folder].append((repeatNum, flops, validAcc))
 
     # plot
-    Statistics.plotFlops(plotData, _flopsKey, None, folderPath)
+    Statistics.plotFlops(flopsData, 'acc_vs_flops_summary', folderPath)
 
 
 widthRatio = [0.25, 0.5, 0.75, 1.0]
 dataset = 'cifar100'
-folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/width:{}/without_pre_trained'.format(dataset, widthRatio)
+# folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/width:{}/'.format(dataset, widthRatio)
+folderPath = '/home/vista/Desktop/Architecture_Search/results/{}'.format(dataset)
 
 # buildWidthRatioMissingCheckpoints(widthRatio, nBlocks=3)
-# plotFolders(folderPath)
+plotFolders(folderPath)
 # generateCSV(folderPath)
