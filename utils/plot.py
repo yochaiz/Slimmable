@@ -140,10 +140,17 @@ def buildWidthRatioMissingCheckpoints(widthRatio, nBlocks):
 def plotFolders(folderPath):
     # init flops data with inner folders as keys, [] as values
     flopsData = {}
+    # init labels to connect dictionary
+    labelsToConnect = dict(with_pre_trained=[], without_pre_trained=[])
     # iterate over folders
     for folder in listdir(folderPath):
         fPath = '{}/{}'.format(folderPath, folder)
         if isdir(fPath):
+            # add to labelsToConnect dict
+            for key in labelsToConnect:
+                if key in folder:
+                    labelsToConnect[key].append(folder)
+                    break
             # init empty list under folder key
             flopsData[folder] = []
             # iterate over checkpoints
@@ -158,7 +165,7 @@ def plotFolders(folderPath):
                         validAcc = getattr(checkpoint, TrainRegime.validAccKey)
                         validAcc = validAcc.get(BaseNet.partitionKey())
                         repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
-                        partition = getattr(checkpoint, _blocksPartitionKey)
+                        # partition = getattr(checkpoint, _blocksPartitionKey)
                     except Exception as e:
                         print('Missing values in {}'.format(file))
                         # remove(filePath)
@@ -168,13 +175,12 @@ def plotFolders(folderPath):
                     flopsData[folder].append((repeatNum, flops, validAcc))
 
     # plot
-    Statistics.plotFlops(flopsData, 'acc_vs_flops_summary', folderPath)
-
+    Statistics.plotFlops(flopsData, list(labelsToConnect.values()), 'acc_vs_flops_summary', folderPath)
 
 widthRatio = [0.25, 0.5, 0.75, 1.0]
-dataset = 'cifar100'
+dataset = 'cifar10'
 # folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/width:{}/'.format(dataset, widthRatio)
-folderPath = '/home/vista/Desktop/Architecture_Search/results/{}'.format(dataset)
+folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/individual'.format(dataset)
 
 # buildWidthRatioMissingCheckpoints(widthRatio, nBlocks=3)
 plotFolders(folderPath)
