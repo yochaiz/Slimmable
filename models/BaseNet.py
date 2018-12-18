@@ -215,6 +215,10 @@ class BaseNet(Module):
     def forward(self, x):
         raise NotImplementedError('subclasses must override forward()!')
 
+    @staticmethod
+    def partitionKey():
+        return BaseNet._partitionKey
+
     def countFlops(self):
         return sum([block.countFlops() for block in self.blocks])
 
