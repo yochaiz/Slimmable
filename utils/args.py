@@ -93,9 +93,6 @@ def parseArgs():
     # init partition
     args.partition = None
 
-    # save args to JSON
-    saveArgsToJSON(args)
-
     return args
 
 
@@ -125,3 +122,5 @@ def logParameters(logger, args, model):
     logger.addInfoTable('args', HtmlLogger.dictToRows(vars(args), nElementPerRow=3, dictSortFunc=[None, lambda kv: kv[-1]]))
     # print args
     print(args)
+    # save to json
+    saveArgsToJSON(args)
