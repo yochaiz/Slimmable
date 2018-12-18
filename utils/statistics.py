@@ -59,7 +59,6 @@ class Statistics:
         self.plotsData = {}
         # init flopsData, which is a map where keys are labels (pts type) and values are list of tuples (bitwidth, flops, accuracy)
         self.flopsData = {}
-        self.baselineLabel = 'Baseline'
 
     @staticmethod
     def flopsKey():
@@ -87,40 +86,40 @@ class Statistics:
         # save plots data
         saveFile(self.plotsData, self.plotsDataFilePath)
         # update plot
-        self.plotFlops(self.plotsData, self._flopsKey, self.baselineLabel, self.saveFolder)
+        self.plotFlops(self.plotsData[self._flopsKey], self.saveFolder)
 
-    # flopsData_ is a map where keys are bitwidth and values are flops.
-    # we need to find the appropriate checkpoint for accuracy values.
-    def addBaselineFlopsData(self, args, flopsData_):
-        label = self.baselineLabel
-        # init label list if label doesn't exist
-        if label not in self.flopsData.keys():
-            self.flopsData[label] = []
+    # # flopsData_ is a map where keys are bitwidth and values are flops.
+    # # we need to find the appropriate checkpoint for accuracy values.
+    # def addBaselineFlopsData(self, args, flopsData_):
+    #     label = self.baselineLabel
+    #     # init label list if label doesn't exist
+    #     if label not in self.flopsData.keys():
+    #         self.flopsData[label] = []
+    #
+    #     # add data to list
+    #     for bitwidth, flops in flopsData_.items():
+    #         # load checkpoint
+    #         checkpoint, _ = cnn.utils.loadCheckpoint(args.dataset, args.model, bitwidth)
+    #         if checkpoint is not None:
+    #             accuracy = checkpoint.get('best_prec1')
+    #             if accuracy is not None:
+    #                 self.flopsData[label].append((bitwidth, flops, accuracy))
+    #
+    #     # save & plot flops
+    #     self.__saveAndPlotFlops()
 
-        # add data to list
-        for bitwidth, flops in flopsData_.items():
-            # load checkpoint
-            checkpoint, _ = cnn.utils.loadCheckpoint(args.dataset, args.model, bitwidth)
-            if checkpoint is not None:
-                accuracy = checkpoint.get('best_prec1')
-                if accuracy is not None:
-                    self.flopsData[label].append((bitwidth, flops, accuracy))
-
-        # save & plot flops
-        self.__saveAndPlotFlops()
-
-    # flopsData_ is a dictionary where keys are labels and values are list of tuples of (bitwidth, flops, accuracy)
-    def addFlopsData(self, flopsData_):
-        for label in flopsData_.keys():
-            # init label list if label doesn't exist
-            if label not in self.flopsData.keys():
-                self.flopsData[label] = []
-
-            # append values to self.flopsData
-            self.flopsData[label].extend(flopsData_[label])
-
-        # save & plot flops
-        self.__saveAndPlotFlops()
+    # # flopsData_ is a dictionary where keys are labels and values are list of tuples of (bitwidth, flops, accuracy)
+    # def addFlopsData(self, flopsData_):
+    #     for label in flopsData_.keys():
+    #         # init label list if label doesn't exist
+    #         if label not in self.flopsData.keys():
+    #             self.flopsData[label] = []
+    #
+    #         # append values to self.flopsData
+    #         self.flopsData[label].extend(flopsData_[label])
+    #
+    #     # save & plot flops
+    #     self.__saveAndPlotFlops()
 
     @staticmethod
     def saveFigPDF(figs, fileName, saveFolder):
@@ -164,7 +163,7 @@ class Statistics:
         ax.set_ylim(top=yMax, bottom=yMin)
         ax.set_title(title)
         # put legend in bottom right corner, transparent (framealpha), small font
-        ax.legend(loc='lower right', ncol=10, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 6})
+        ax.legend(loc='lower right', ncol=2, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 6})
 
     @staticmethod
     def __setFigProperties(fig, figSize=(15, 10)):
@@ -293,14 +292,13 @@ class Statistics:
         saveFile(self.plotsData, self.plotsDataFilePath)
 
     @staticmethod
-    def plotFlops(plotsData, flopsKey, baselineLabel, saveFolder):
-        flopsData = plotsData[flopsKey]
+    def plotFlops(flopsData, fileName, saveFolder):
         # create plots
         plots = [FlopsStandardPlot(flopsData.keys()), FlopsAveragePlot(flopsData.keys()),
-                 FlopsMaxAccuracyPlot(flopsData.keys(), baselineLabel), MinFlopsPlot(flopsData.keys(), baselineLabel)]
+                 FlopsMaxAccuracyPlot(flopsData.keys()), MinFlopsPlot(flopsData.keys())]
 
         # iterate 1st over non-integer keys
-        for label in sorted(flopsData.keys(), key=lambda x: x if isinstance(x, int) else 0):
+        for label in sorted(flopsData.keys()):
             labelFlopsData = flopsData[label]
             for dataPoint in labelFlopsData:
                 for plot in plots:
@@ -314,7 +312,7 @@ class Statistics:
             plot.setPlotProperties()
 
         # save as HTML
-        Statistics.saveFigPDF([plot.fig for plot in plots], flopsKey, saveFolder)
+        Statistics.saveFigPDF([plot.fig for plot in plots], fileName, saveFolder)
 
 
 class FlopsPlot:
@@ -353,7 +351,7 @@ class FlopsPlot:
 
         self.ax.locator_params(nbins=20, axis='y')
         from matplotlib.ticker import MultipleLocator
-        spacing = 0.05
+        spacing = 0.5
         minorLocator = MultipleLocator(spacing)
         self.ax.yaxis.set_minor_locator(minorLocator)
         # Set grid to use minor tick locations.
@@ -409,7 +407,7 @@ class FlopsAveragePlot(FlopsPlot):
         super(FlopsAveragePlot, self).__init__(title, nKeys)
 
     def addDataPoint(self, dataPoint, label):
-        bitwidth, flops, accuracy = dataPoint
+        title, flops, accuracy = dataPoint
 
         if len(self.xValues) == 0:
             self.xValues.append(flops)
@@ -428,7 +426,7 @@ class FlopsAveragePlot(FlopsPlot):
         self.yMin = min(self.yMin, yMean)
 
         # annotate label
-        self.ax.annotate('{}'.format(label[label.find('-') + 1:]), (self.xValues[0], yMean), size=6)
+        self.ax.annotate(label, (self.xValues[0], yMean), size=6)
 
         if isinstance(label, str) and ((' 16]' in label) or ('16,' in label)):
             if self.previousPoint is not None:
@@ -464,10 +462,8 @@ class FlopsStandardPlot(FlopsPlot):
 
 
 class FlopsPlotWithCondition(FlopsPlot):
-    def __init__(self, title, nKeys, baselineLabel):
+    def __init__(self, title, nKeys):
         super(FlopsPlotWithCondition, self).__init__(title, nKeys)
-
-        self.baselineLabel = baselineLabel
 
         # save previous point, in order to connect last 2 points with a dashed line
         self.previousPoint = None
@@ -479,10 +475,7 @@ class FlopsPlotWithCondition(FlopsPlot):
     def addDataPoint(self, dataPoint, label):
         bitwidth, flops, accuracy = dataPoint
 
-        if label == self.baselineLabel:
-            self.addStandardDataPoint(dataPoint)
-
-        elif self.condition(dataPoint):
+        if self.condition(dataPoint):
             self.xValues = [flops]
             self.yValues = [accuracy]
 
@@ -491,30 +484,29 @@ class FlopsPlotWithCondition(FlopsPlot):
             self.yMin = min(self.yMin, accuracy)
 
     def plotSpecific(self, label):
-        if label != self.baselineLabel:
-            # connect last 2 points
-            if isinstance(label, tuple):
-                if self.previousPoint is not None:
-                    xPrev, yPrev = self.previousPoint
-                    self.ax.plot([xPrev, self.xValues[-1]], [yPrev, self.yValues[-1]], '--', c=self.colors[self.nextColorIdx])
-                # save last point as previous point
-                self.previousPoint = (self.xValues[-1], self.yValues[-1])
+        # connect last 2 points
+        if isinstance(label, tuple):
+            if self.previousPoint is not None:
+                xPrev, yPrev = self.previousPoint
+                self.ax.plot([xPrev, self.xValues[-1]], [yPrev, self.yValues[-1]], '--', c=self.colors[self.nextColorIdx])
+            # save last point as previous point
+            self.previousPoint = (self.xValues[-1], self.yValues[-1])
 
-            accuracy = self.yValues[0] if len(self.yValues) > 0 else None
-            flops = self.xValues[0] if len(self.xValues) > 0 else None
+        accuracy = self.yValues[0] if len(self.yValues) > 0 else None
+        flops = self.xValues[0] if len(self.xValues) > 0 else None
 
-            if (accuracy is not None) and (flops is not None):
-                txt = self.accuracyFormat.format(accuracy)
-                # if label is a string, add label to annotate
-                if isinstance(label, str):
-                    txt = '{},{}'.format(label, txt)
+        if (accuracy is not None) and (flops is not None):
+            txt = self.accuracyFormat.format(accuracy)
+            # if label is a string, add label to annotate
+            if isinstance(label, str):
+                txt = '{},{}'.format(label, txt)
 
-                self.ax.annotate(txt, (flops, accuracy), size=6)
+            self.ax.annotate(txt, (flops, accuracy), size=6)
 
 
 class FlopsMaxAccuracyPlot(FlopsPlotWithCondition):
-    def __init__(self, nKeys, baselineLabel):
-        super(FlopsMaxAccuracyPlot, self).__init__('Max accuracy vs. Flops', nKeys, baselineLabel)
+    def __init__(self, nKeys):
+        super(FlopsMaxAccuracyPlot, self).__init__('Max accuracy vs. Flops', nKeys)
 
     def condition(self, dataPoint):
         _, _, accuracy = dataPoint
@@ -522,8 +514,8 @@ class FlopsMaxAccuracyPlot(FlopsPlotWithCondition):
 
 
 class MinFlopsPlot(FlopsPlotWithCondition):
-    def __init__(self, nKeys, baselineLabel):
-        super(MinFlopsPlot, self).__init__('Accuracy vs. Min Flops', nKeys, baselineLabel)
+    def __init__(self, nKeys):
+        super(MinFlopsPlot, self).__init__('Accuracy vs. Min Flops', nKeys)
 
     def condition(self, dataPoint):
         _, flops, _ = dataPoint
