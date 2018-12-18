@@ -292,9 +292,9 @@ class Statistics:
         saveFile(self.plotsData, self.plotsDataFilePath)
 
     @staticmethod
-    def plotFlops(flopsData, fileName, saveFolder):
+    def plotFlops(flopsData, labelsToConnect, fileName, saveFolder):
         # create plots
-        plots = [FlopsStandardPlot(flopsData.keys()), FlopsAveragePlot(flopsData.keys()),
+        plots = [FlopsStandardPlot(flopsData.keys()), FlopsAveragePlot(flopsData.keys(), labelsToConnect),
                  FlopsMaxAccuracyPlot(flopsData.keys()), MinFlopsPlot(flopsData.keys())]
 
         # iterate 1st over non-integer keys
@@ -339,9 +339,6 @@ class FlopsPlot:
         # init values
         self.xValues = []
         self.yValues = []
-
-        # save previous point, in order to connect last 2 points with a dashed line
-        self.previousPoint = None
 
     def setPlotProperties(self):
         paddingPercentage = 0.02
@@ -399,12 +396,18 @@ class FlopsPlot:
 
 
 class FlopsAveragePlot(FlopsPlot):
-    def __init__(self, nKeys):
+    # labelsToConnect is list of lists
+    # each list contains labels we want to connect with dashed line
+    def __init__(self, nKeys, labelsToConnect):
         # init confidence interval of 1 std
         self.confidence = 0.6827
 
         title = 'Average accuracy vs. Flops | Confidence:[{}]'.format(self.confidence)
         super(FlopsAveragePlot, self).__init__(title, nKeys)
+
+        self.labelsToConnect = labelsToConnect
+        # save previous point per labels list, in order to connect last 2 points with a dashed line
+        self.previousPoint = [None] * len(labelsToConnect)
 
     def addDataPoint(self, dataPoint, label):
         title, flops, accuracy = dataPoint
@@ -428,12 +431,13 @@ class FlopsAveragePlot(FlopsPlot):
         # annotate label
         self.ax.annotate(label, (self.xValues[0], yMean), size=6)
 
-        if isinstance(label, str) and ((' 16]' in label) or ('16,' in label)):
-            if self.previousPoint is not None:
-                xPrev, yPrev = self.previousPoint
-                self.ax.plot([xPrev, self.xValues[-1]], [yPrev, yMean], '--', c=self.colors[self.nextColorIdx])
-            # save last point as previous point
-            self.previousPoint = (self.xValues[-1], yMean)
+        for idx, labelsList in enumerate(self.labelsToConnect):
+            if label in labelsList:
+                if self.previousPoint[idx] is not None:
+                    xPrev, yPrev = self.previousPoint[idx]
+                    self.ax.plot([xPrev, self.xValues[-1]], [yPrev, yMean], '--', c=self.colors[self.nextColorIdx])
+                # save last point as previous point
+                self.previousPoint[idx] = (self.xValues[-1], yMean)
 
         # add error bar if there is more than single value
         if len(self.yValues) > 1:
