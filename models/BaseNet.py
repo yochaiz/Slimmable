@@ -168,6 +168,7 @@ class ConvSlimLayer(SlimLayer):
 
 class BaseNet(Module):
     _partitionKey = 'Partition'
+    _baselineFlopsKey = 'baselineFlops'
 
     def buildLayersList(self):
         layersList = []
@@ -192,9 +193,9 @@ class BaseNet(Module):
         if args.partition:
             self._baselineWidth[self._partitionKey] = [len(self._baselineWidth)] * len(self._layersList)
         # count baseline models widths flops
-        args.baselineFlops = self.calcBaselineFlops()
+        setattr(args, self._baselineFlopsKey, self.calcBaselineFlops())
         # save baseline flops, for calculating flops ratio
-        self.baselineFlops = args.baselineFlops.get(args.baseline)
+        self.baselineFlops = getattr(args, self._baselineFlopsKey).get(args.baseline)
 
         self.printToFile(saveFolder)
         # calc number of width permutations in model
@@ -218,6 +219,10 @@ class BaseNet(Module):
     @staticmethod
     def partitionKey():
         return BaseNet._partitionKey
+
+    @staticmethod
+    def baselineFlopsKey():
+        return BaseNet._baselineFlopsKey
 
     def countFlops(self):
         return sum([block.countFlops() for block in self.blocks])
