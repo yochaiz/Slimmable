@@ -16,6 +16,18 @@ _partitionKey = BaseNet.partitionKey()
 _avgKey = TrainingData.avgKey()
 
 
+def extractAttributesFromCheckpoint(file, filePath):
+    checkpoint = load(filePath)
+    # get attributes from checkpoint
+    baselineFlops = getattr(checkpoint, BaseNet.baselineFlopsKey())
+    flops = baselineFlops.get(BaseNet.partitionKey())
+    validAcc = getattr(checkpoint, TrainRegime.validAccKey)
+    validAcc = validAcc.get(BaseNet.partitionKey())
+    repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
+
+    return checkpoint, flops, validAcc, repeatNum
+
+
 def generateCSV(folderPath):
     # results dictionary, the keys are the partitions, the values are dictionary of (flops, list of results)
     data = {}
@@ -29,16 +41,12 @@ def generateCSV(folderPath):
     for file in sorted(listdir(folderPath)):
         fPath = '{}/{}'.format(folderPath, file)
         if isfile(fPath):
-            checkpoint = load(fPath)
             # get attributes from checkpoint
             try:
-                baselineFlops = getattr(checkpoint, BaseNet.baselineFlopsKey())
-                flops = baselineFlops.get(BaseNet.partitionKey())
-                validAcc = getattr(checkpoint, TrainRegime.validAccKey)
-                repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
+                checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(file, fPath)
                 partition = getattr(checkpoint, blocksPartitionKey)
             except Exception as e:
-                print(file)
+                print('Missing values in {}'.format(file))
                 # remove(fPath)
                 continue
 
@@ -60,7 +68,7 @@ def generateCSV(folderPath):
         resultsList = partitionData[_resultsKey]
         resultsStr = ''
         for r in resultsList:
-            resultsStr += ',{:.3f}'.format(r.get(BaseNet.partitionKey())) if r else ','
+            resultsStr += ',{:.3f}'.format(r) if r else ','
         print('"{}",{}{}'.format(partition, flops, resultsStr))
 
     print('Partition,Flops,1,2,3,4,5')
@@ -149,22 +157,6 @@ def buildWidthRatioMissingCheckpoints(widthRatio, nBlocks):
             print('=================================================')
 
 
-def extractAttributesFromCheckpoint(file, filePath):
-    checkpoint = load(filePath)
-    # get attributes from checkpoint
-    try:
-        baselineFlops = getattr(checkpoint, BaseNet.baselineFlopsKey())
-        flops = baselineFlops.get(BaseNet.partitionKey())
-        validAcc = getattr(checkpoint, TrainRegime.validAccKey)
-        validAcc = validAcc.get(BaseNet.partitionKey())
-        repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
-    except Exception as e:
-        print('Missing values in {}'.format(file))
-        # remove(filePath)
-
-    return checkpoint, flops, validAcc, repeatNum
-
-
 # folderPath should be a path to folder which has folders inside
 # each inner folder will be the title for the checkpoints in it
 def plotFolders(folderPath):
@@ -175,28 +167,34 @@ def plotFolders(folderPath):
     # iterate over folders
     for folder in listdir(folderPath):
         fPath = '{}/{}'.format(folderPath, folder)
-        if isdir(fPath):
-            # add to labelsToConnect dict
-            for key in labelsToConnect:
-                if key in folder:
-                    labelsToConnect[key].append(folder)
-                    break
-            # init empty list under folder key
-            flopsData[folder] = []
-            # iterate over checkpoints
-            for file in listdir(fPath):
-                filePath = '{}/{}'.format(fPath, file)
-                if isfile(filePath):
-                    checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(file, filePath)
-                    # add attributes to plot data
-                    flopsData[folder].append((repeatNum, flops, validAcc))
-        elif isfile(fPath):
-            checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(folder, fPath)
-            partition = str(getattr(checkpoint, blocksPartitionKey))
-            # create partition key in flopsData dict if does not exist
-            if partition not in flopsData:
-                flopsData[partition] = []
-            flopsData[partition].append((repeatNum, flops, validAcc))
+        try:
+            if isdir(fPath):
+                # add to labelsToConnect dict
+                for key in labelsToConnect:
+                    if key in folder:
+                        labelsToConnect[key].append(folder)
+                        break
+                # init empty list under folder key
+                flopsData[folder] = []
+                # iterate over checkpoints
+                for file in listdir(fPath):
+                    filePath = '{}/{}'.format(fPath, file)
+                    if isfile(filePath):
+                        checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(file, filePath)
+                        # add attributes to plot data
+                        flopsData[folder].append((repeatNum, flops, validAcc))
+            elif isfile(fPath):
+                checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(folder, fPath)
+                partition = str(getattr(checkpoint, blocksPartitionKey))
+                # create partition key in flopsData dict if does not exist
+                if partition not in flopsData:
+                    flopsData[partition] = []
+                flopsData[partition].append((repeatNum, flops, validAcc))
+
+        except Exception as e:
+            print('Missing values in {}'.format(file))
+            # remove(fPath)
+            continue
 
     # plot
     Statistics.plotFlops(flopsData, list(labelsToConnect.values()), 'acc_vs_flops_summary', folderPath)
