@@ -40,7 +40,7 @@ def parseArgs():
     # pre-trained params
     parser.add_argument('--pre_trained', type=str, default=None, help='pre-trained model to copy weights from')
     # training params
-    parser.add_argument('--optimal_epochs', type=int, default=30, help='stop training weights if there is no new optimum in last optimal_epochs')
+    parser.add_argument('--optimal_epochs', type=int, default=150, help='stop training weights if there is no new optimum in last optimal_epochs')
     parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
     parser.add_argument('--train_regime', default='TrainRegime', choices=trainRegimesNames, help='Training regime')
     parser.add_argument('--alphas_data_parts', type=int, default=4, help='split alphas training data to parts. each loop uses single part')
