@@ -1,6 +1,7 @@
 from os import listdir, remove
 from os.path import isfile, isdir, exists
 from shutil import copy2
+from ast import literal_eval
 
 from torch import load, save
 
@@ -65,13 +66,28 @@ def generateCSV(folderPath):
     print('Partition,Flops,1,2,3,4,5')
 
 
-def updateCheckpointAttribute(folderPath, attribute, flopsDict):
+def updateCheckpointAttribute(folderPath, attribute, value):
     for file in sorted(listdir(folderPath)):
         fPath = '{}/{}'.format(folderPath, file)
         if isfile(fPath):
             print(fPath)
             checkpoint = load(fPath)
-            setattr(checkpoint, attribute, flopsDict)
+            setattr(checkpoint, attribute, value)
+            save(checkpoint, fPath)
+
+
+def updateCheckpointBlocksPartition(folderPath):
+    startTag = ']-['
+    endTag = ']-'
+    for file in sorted(listdir(folderPath)):
+        fPath = '{}/{}'.format(folderPath, file)
+        if isfile(fPath):
+            print(fPath)
+            checkpoint = load(fPath)
+            # extract blocks partition from file name
+            blocksPartition = file[file.rfind(startTag) + len(startTag) - 1: file.rfind(endTag) + 1]
+            blocksPartition = literal_eval(blocksPartition)
+            setattr(checkpoint, blocksPartitionKey, blocksPartition)
             save(checkpoint, fPath)
 
 
@@ -133,6 +149,22 @@ def buildWidthRatioMissingCheckpoints(widthRatio, nBlocks):
             print('=================================================')
 
 
+def extractAttributesFromCheckpoint(file, filePath):
+    checkpoint = load(filePath)
+    # get attributes from checkpoint
+    try:
+        baselineFlops = getattr(checkpoint, BaseNet.baselineFlopsKey())
+        flops = baselineFlops.get(BaseNet.partitionKey())
+        validAcc = getattr(checkpoint, TrainRegime.validAccKey)
+        validAcc = validAcc.get(BaseNet.partitionKey())
+        repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
+    except Exception as e:
+        print('Missing values in {}'.format(file))
+        # remove(filePath)
+
+    return checkpoint, flops, validAcc, repeatNum
+
+
 # folderPath should be a path to folder which has folders inside
 # each inner folder will be the title for the checkpoints in it
 def plotFolders(folderPath):
@@ -155,22 +187,16 @@ def plotFolders(folderPath):
             for file in listdir(fPath):
                 filePath = '{}/{}'.format(fPath, file)
                 if isfile(filePath):
-                    checkpoint = load(filePath)
-                    # get attributes from checkpoint
-                    try:
-                        baselineFlops = getattr(checkpoint, BaseNet.baselineFlopsKey())
-                        flops = baselineFlops.get(BaseNet.partitionKey())
-                        validAcc = getattr(checkpoint, TrainRegime.validAccKey)
-                        validAcc = validAcc.get(BaseNet.partitionKey())
-                        repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
-                        # partition = getattr(checkpoint, blocksPartitionKey)
-                    except Exception as e:
-                        print('Missing values in {}'.format(file))
-                        # remove(filePath)
-                        continue
-
+                    checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(file, filePath)
                     # add attributes to plot data
                     flopsData[folder].append((repeatNum, flops, validAcc))
+        elif isfile(fPath):
+            checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(folder, fPath)
+            partition = str(getattr(checkpoint, blocksPartitionKey))
+            # create partition key in flopsData dict if does not exist
+            if partition not in flopsData:
+                flopsData[partition] = []
+            flopsData[partition].append((repeatNum, flops, validAcc))
 
     # plot
     Statistics.plotFlops(flopsData, list(labelsToConnect.values()), 'acc_vs_flops_summary', folderPath)
@@ -182,5 +208,6 @@ dataset = 'cifar10'
 folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/individual_training'.format(dataset)
 
 # buildWidthRatioMissingCheckpoints(widthRatio, nBlocks=3)
+# updateCheckpointBlocksPartition(folderPath)
 plotFolders(folderPath)
 # generateCSV(folderPath)
