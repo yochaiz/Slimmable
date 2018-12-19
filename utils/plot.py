@@ -7,11 +7,10 @@ from torch import load, save
 from models.BaseNet import BaseNet
 from trainRegimes.regime import TrainRegime
 from utils.statistics import Statistics
-from utils.checkpoint import checkpointFileType
+from utils.checkpoint import checkpointFileType, blocksPartitionKey
 from utils.training import TrainingData
 
 _baselineFlopsKey = 'baselineFlops'
-_blocksPartitionKey = 'blocksPartition'
 _flopsKey = Statistics.flopsKey()
 _partitionKey = BaseNet.partitionKey()
 _avgKey = TrainingData.avgKey()
@@ -37,7 +36,7 @@ def generateCSV(folderPath):
                 flops = baselineFlops.get(BaseNet.partitionKey())
                 validAcc = getattr(checkpoint, TrainRegime.validAccKey)
                 repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
-                partition = getattr(checkpoint, _blocksPartitionKey)
+                partition = getattr(checkpoint, blocksPartitionKey)
             except Exception as e:
                 print(file)
                 # remove(fPath)
@@ -107,7 +106,7 @@ def buildCheckpoint(folderPath, checkpointSrcPrefix, nBlocks):
                     # load new checkpoint
                     dstCheckpoint = load(checkpointDstPath)
                     # set attributes in destination checkpoint
-                    attributes = [(TrainRegime.validAccKey, {BaseNet.partitionKey(): acc}), (_blocksPartitionKey, [width] * nBlocks),
+                    attributes = [(TrainRegime.validAccKey, {BaseNet.partitionKey(): acc}), (blocksPartitionKey, [width] * nBlocks),
                                   (_baselineFlopsKey, {BaseNet.partitionKey(): flopsDict[width]})]
                     for attrKey, attrValue in attributes:
                         setattr(dstCheckpoint, attrKey, attrValue)
@@ -165,7 +164,7 @@ def plotFolders(folderPath):
                         validAcc = getattr(checkpoint, TrainRegime.validAccKey)
                         validAcc = validAcc.get(BaseNet.partitionKey())
                         repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
-                        # partition = getattr(checkpoint, _blocksPartitionKey)
+                        # partition = getattr(checkpoint, blocksPartitionKey)
                     except Exception as e:
                         print('Missing values in {}'.format(file))
                         # remove(filePath)
@@ -180,7 +179,7 @@ def plotFolders(folderPath):
 widthRatio = [0.25, 0.5, 0.75, 1.0]
 dataset = 'cifar10'
 # folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/width:{}/'.format(dataset, widthRatio)
-folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/individual'.format(dataset)
+folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/individual_training'.format(dataset)
 
 # buildWidthRatioMissingCheckpoints(widthRatio, nBlocks=3)
 plotFolders(folderPath)
