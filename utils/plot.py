@@ -10,7 +10,6 @@ from utils.statistics import Statistics
 from utils.checkpoint import checkpointFileType, blocksPartitionKey
 from utils.training import TrainingData
 
-_baselineFlopsKey = 'baselineFlops'
 _flopsKey = Statistics.flopsKey()
 _partitionKey = BaseNet.partitionKey()
 _avgKey = TrainingData.avgKey()
@@ -32,7 +31,7 @@ def generateCSV(folderPath):
             checkpoint = load(fPath)
             # get attributes from checkpoint
             try:
-                baselineFlops = getattr(checkpoint, _baselineFlopsKey)
+                baselineFlops = getattr(checkpoint, BaseNet.baselineFlopsKey())
                 flops = baselineFlops.get(BaseNet.partitionKey())
                 validAcc = getattr(checkpoint, TrainRegime.validAccKey)
                 repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
@@ -107,7 +106,7 @@ def buildCheckpoint(folderPath, checkpointSrcPrefix, nBlocks):
                     dstCheckpoint = load(checkpointDstPath)
                     # set attributes in destination checkpoint
                     attributes = [(TrainRegime.validAccKey, {BaseNet.partitionKey(): acc}), (blocksPartitionKey, [width] * nBlocks),
-                                  (_baselineFlopsKey, {BaseNet.partitionKey(): flopsDict[width]})]
+                                  (BaseNet.baselineFlopsKey(), {BaseNet.partitionKey(): flopsDict[width]})]
                     for attrKey, attrValue in attributes:
                         setattr(dstCheckpoint, attrKey, attrValue)
                     # save new checkpoint
@@ -159,7 +158,7 @@ def plotFolders(folderPath):
                     checkpoint = load(filePath)
                     # get attributes from checkpoint
                     try:
-                        baselineFlops = getattr(checkpoint, _baselineFlopsKey)
+                        baselineFlops = getattr(checkpoint, BaseNet.baselineFlopsKey())
                         flops = baselineFlops.get(BaseNet.partitionKey())
                         validAcc = getattr(checkpoint, TrainRegime.validAccKey)
                         validAcc = validAcc.get(BaseNet.partitionKey())
@@ -175,6 +174,7 @@ def plotFolders(folderPath):
 
     # plot
     Statistics.plotFlops(flopsData, list(labelsToConnect.values()), 'acc_vs_flops_summary', folderPath)
+
 
 widthRatio = [0.25, 0.5, 0.75, 1.0]
 dataset = 'cifar10'
