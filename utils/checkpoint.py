@@ -6,6 +6,7 @@ checkpointFileType = 'pth.tar'
 stateFilenameDefault = 'model'
 stateCheckpointPattern = '{}/{}_checkpoint.' + checkpointFileType
 stateOptModelPattern = '{}/{}_opt.' + checkpointFileType
+blocksPartitionKey = 'blocksPartition'
 
 
 def save_state(state, is_best, path, filename):
@@ -57,7 +58,7 @@ def generate_partitions(args, blocksPermutationList, modelBlocks):
     for partition, blocksPartition in perms:
         # update partition
         args.partition = partition
-        args.blocksPartition = blocksPartition
+        setattr(args, blocksPartitionKey, blocksPartition)
         # save checkpoint
         saveModel(args, '[{}]-[{}]-{}.{}'.format(args.model, args.dataset, blocksPartition, checkpointFileType))
         # print(blocksPartition)
