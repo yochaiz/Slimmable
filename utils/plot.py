@@ -164,32 +164,51 @@ def plotFolders(folderPath):
     flopsData = {}
     # init labels to connect dictionary
     labelsToConnect = dict(with_pre_trained=[], without_pre_trained=[])
+    # Map each partition to index, for easier mapping in plot
+    partitionIdxMap = {}
+    # init labels map, mapping plot labels to the value we want to display
+    labelsMap = {}
     # iterate over folders
-    for folder in listdir(folderPath):
+    for folder in sorted(listdir(folderPath)):
         fPath = '{}/{}'.format(folderPath, folder)
         try:
             if isdir(fPath):
+                # set label
+                label = folder
+                # set label map
+                labelsMap[label] = folder
                 # add to labelsToConnect dict
                 for key in labelsToConnect:
                     if key in folder:
                         labelsToConnect[key].append(folder)
                         break
                 # init empty list under folder key
-                flopsData[folder] = []
+                flopsData[label] = []
                 # iterate over checkpoints
                 for file in listdir(fPath):
                     filePath = '{}/{}'.format(fPath, file)
                     if isfile(filePath):
                         checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(file, filePath)
                         # add attributes to plot data
-                        flopsData[folder].append((repeatNum, flops, validAcc))
+                        flopsData[label].append((repeatNum, flops, validAcc))
             elif isfile(fPath):
                 checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(folder, fPath)
                 partition = str(getattr(checkpoint, blocksPartitionKey))
                 # create partition key in flopsData dict if does not exist
-                if partition not in flopsData:
-                    flopsData[partition] = []
-                flopsData[partition].append((repeatNum, flops, validAcc))
+                if partition not in partitionIdxMap:
+                    idx = len(partitionIdxMap)
+                    partitionIdxMap[partition] = idx
+                    partitionKey = '{}-[{}]'.format(partition, idx)
+                    flopsData[partitionKey] = []
+                else:
+                    idx = partitionIdxMap[partition]
+                    partitionKey = '{}-[{}]'.format(partition, idx)
+                # set title
+                title = '[{}]'.format(idx)
+                # add data to flops dict
+                flopsData[partitionKey].append((title, flops, validAcc))
+                # set label map
+                labelsMap[partitionKey] = title
 
         except Exception as e:
             print('Missing values in {}'.format(file))
@@ -197,7 +216,7 @@ def plotFolders(folderPath):
             continue
 
     # plot
-    Statistics.plotFlops(flopsData, list(labelsToConnect.values()), 'acc_vs_flops_summary', folderPath)
+    Statistics.plotFlops(flopsData, list(labelsToConnect.values()), labelsMap, 'acc_vs_flops_summary', folderPath)
 
 
 widthRatio = [0.25, 0.5, 0.75, 1.0]
