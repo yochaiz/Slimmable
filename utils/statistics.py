@@ -163,7 +163,7 @@ class Statistics:
         ax.set_ylim(top=yMax, bottom=yMin)
         ax.set_title(title)
         # put legend in bottom right corner, transparent (framealpha), small font
-        ax.legend(loc='lower right', ncol=2, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 6})
+        ax.legend(loc='lower right', ncol=5, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 6})
 
     @staticmethod
     def __setFigProperties(fig, figSize=(15, 10)):
@@ -292,10 +292,10 @@ class Statistics:
         saveFile(self.plotsData, self.plotsDataFilePath)
 
     @staticmethod
-    def plotFlops(flopsData, labelsToConnect, fileName, saveFolder):
+    def plotFlops(flopsData, labelsToConnect, labelsMap, fileName, saveFolder):
         # create plots
-        plots = [FlopsStandardPlot(flopsData.keys()), FlopsAveragePlot(flopsData.keys(), labelsToConnect),
-                 FlopsMaxAccuracyPlot(flopsData.keys()), MinFlopsPlot(flopsData.keys())]
+        plots = [FlopsStandardPlot(flopsData.keys()), FlopsAveragePlot(flopsData.keys(), labelsToConnect, labelsMap),
+                 FlopsMaxAccuracyPlot(flopsData.keys(), labelsMap), MinFlopsPlot(flopsData.keys(), labelsMap)]
 
         # iterate 1st over non-integer keys
         for label in sorted(flopsData.keys()):
@@ -398,7 +398,7 @@ class FlopsPlot:
 class FlopsAveragePlot(FlopsPlot):
     # labelsToConnect is list of lists
     # each list contains labels we want to connect with dashed line
-    def __init__(self, nKeys, labelsToConnect):
+    def __init__(self, nKeys, labelsToConnect, labelsMap):
         # init confidence interval of 1 std
         self.confidence = 0.6827
 
@@ -408,6 +408,8 @@ class FlopsAveragePlot(FlopsPlot):
         self.labelsToConnect = labelsToConnect
         # save previous point per labels list, in order to connect last 2 points with a dashed line
         self.previousPoint = [None] * len(labelsToConnect)
+
+        self.labelsMap = labelsMap
 
     def addDataPoint(self, dataPoint, label):
         title, flops, accuracy = dataPoint
@@ -423,16 +425,16 @@ class FlopsAveragePlot(FlopsPlot):
         # average accuracy
         yMean = mean(self.yValues)
         self.ax.plot(self.xValues, [yMean], 'o', label=label, c=self.colors[self.nextColorIdx])
+        # annotate label
+        self.ax.annotate(self.labelsMap[label], (self.xValues[0], yMean), size=6)
 
         # update yMax, yMin
         self.yMax = max(self.yMax, yMean)
         self.yMin = min(self.yMin, yMean)
 
-        # annotate label
-        self.ax.annotate(label, (self.xValues[0], yMean), size=6)
-
         for idx, labelsList in enumerate(self.labelsToConnect):
             if label in labelsList:
+                # connect points
                 if self.previousPoint[idx] is not None:
                     xPrev, yPrev = self.previousPoint[idx]
                     self.ax.plot([xPrev, self.xValues[-1]], [yPrev, yMean], '--', c=self.colors[self.nextColorIdx])
@@ -466,11 +468,10 @@ class FlopsStandardPlot(FlopsPlot):
 
 
 class FlopsPlotWithCondition(FlopsPlot):
-    def __init__(self, title, nKeys):
+    def __init__(self, title, nKeys, labelsMap):
         super(FlopsPlotWithCondition, self).__init__(title, nKeys)
 
-        # save previous point, in order to connect last 2 points with a dashed line
-        self.previousPoint = None
+        self.labelsMap = labelsMap
 
     @abstractmethod
     def condition(self, dataPoint):
@@ -488,29 +489,16 @@ class FlopsPlotWithCondition(FlopsPlot):
             self.yMin = min(self.yMin, accuracy)
 
     def plotSpecific(self, label):
-        # connect last 2 points
-        if isinstance(label, tuple):
-            if self.previousPoint is not None:
-                xPrev, yPrev = self.previousPoint
-                self.ax.plot([xPrev, self.xValues[-1]], [yPrev, self.yValues[-1]], '--', c=self.colors[self.nextColorIdx])
-            # save last point as previous point
-            self.previousPoint = (self.xValues[-1], self.yValues[-1])
-
         accuracy = self.yValues[0] if len(self.yValues) > 0 else None
         flops = self.xValues[0] if len(self.xValues) > 0 else None
 
-        if (accuracy is not None) and (flops is not None):
-            txt = self.accuracyFormat.format(accuracy)
-            # if label is a string, add label to annotate
-            if isinstance(label, str):
-                txt = '{},{}'.format(label, txt)
-
-            self.ax.annotate(txt, (flops, accuracy), size=6)
+        # annotate label
+        self.ax.annotate(self.labelsMap[label], (flops, accuracy), size=6)
 
 
 class FlopsMaxAccuracyPlot(FlopsPlotWithCondition):
-    def __init__(self, nKeys):
-        super(FlopsMaxAccuracyPlot, self).__init__('Max accuracy vs. Flops', nKeys)
+    def __init__(self, nKeys, labelsMap):
+        super(FlopsMaxAccuracyPlot, self).__init__('Max accuracy vs. Flops', nKeys, labelsMap)
 
     def condition(self, dataPoint):
         _, _, accuracy = dataPoint
@@ -518,8 +506,8 @@ class FlopsMaxAccuracyPlot(FlopsPlotWithCondition):
 
 
 class MinFlopsPlot(FlopsPlotWithCondition):
-    def __init__(self, nKeys):
-        super(MinFlopsPlot, self).__init__('Accuracy vs. Min Flops', nKeys)
+    def __init__(self, nKeys, labelsMap):
+        super(MinFlopsPlot, self).__init__('Accuracy vs. Min Flops', nKeys, labelsMap)
 
     def condition(self, dataPoint):
         _, flops, _ = dataPoint
