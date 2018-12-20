@@ -27,6 +27,8 @@ class Statistics:
     _crossEntropyLossAvgKey = 'cross_entropy_loss_avg'
     _flopsLossAvgKey = 'flops_loss_avg'
     _flopsKey = 'flops'
+    _weightsLossKey = 'weights_loss'
+    _weightsAccKey = 'weights_acc'
 
     # set plot points style
     ptsStyle = '-'
@@ -46,12 +48,16 @@ class Statistics:
         # init containers
         self.containers = {
             self._entropyKey: [[] for _ in range(nLayers)],
-            self._lossVarianceKey: [[]], self._alphaDistributionKey: [[[] for _ in range(layer.numOfOps())] for layer in layersList],
-            self._lossAvgKey: [[]], self._crossEntropyLossAvgKey: [[]], self._flopsLossAvgKey: [[]]
+            # self._lossVarianceKey: [[]], self._alphaDistributionKey: [[[] for _ in range(layer.numOfOps())] for layer in layersList],
+            self._lossAvgKey: [[]], self._crossEntropyLossAvgKey: [[]], self._flopsLossAvgKey: [[]],
+            self._weightsLossKey: [[]], self._weightsAccKey: [[]]
+
         }
         # map each list we plot for all layers on single plot to filename
         self.plotAllLayersKeys = [self._entropyKey, self._lossAvgKey, self._crossEntropyLossAvgKey, self._flopsLossAvgKey, self._lossVarianceKey]
         self.plotLayersSeparateKeys = [self._alphaDistributionKey]
+        # init number of batches
+        self.nBatches = 0
         # init colors map
         self.colormap = plt.cm.hot
         # init plots data dictionary
@@ -64,21 +70,33 @@ class Statistics:
     def flopsKey():
         return Statistics._flopsKey
 
-    def addBatchData(self, model, nEpoch, nBatch):
-        # add batch label
-        self.batchLabels.append('[{}]_[{}]'.format(nEpoch, nBatch))
-        # add data per layer
-        for i, layer in enumerate(model.layersList):
-            # calc layer alphas distribution
-            probs = F.softmax(layer.alphas, dim=-1).detach()
-            # save distribution
-            for j, p in enumerate(probs):
-                self.containers[self._alphaDistributionKey][i][j].append(p.item())
-            # calc entropy
-            self.containers[self._entropyKey][i].append(entropy(probs))
+    # data is a list of dictionaries
+    def addBatchData(self,loss,acc):
+        # update number of batches
+        self.nBatches += 1
+        # add data
+        data = [(loss, self._weightsLossKey),(acc,self._weightsAccKey)]
+        for dataElement, dataKey in data:
+            for title, value in dataElement:
 
-        # plot data
-        self.plotData()
+
+
+
+    # def addBatchData(self, model):
+    #     # update number of batches
+    #     self.nBatches += 1
+    #     # add data per layer
+    #     for i, layer in enumerate(model.layersList):
+    #         # calc layer alphas distribution
+    #         probs = F.softmax(layer.alphas, dim=-1).detach()
+    #         # save distribution
+    #         for j, p in enumerate(probs):
+    #             self.containers[self._alphaDistributionKey][i][j].append(p.item())
+    #         # calc entropy
+    #         self.containers[self._entropyKey][i].append(entropy(probs))
+    #
+    #     # plot data
+    #     self.plotData()
 
     def __saveAndPlotFlops(self):
         # save data to plotData
@@ -157,7 +175,6 @@ class Statistics:
     @staticmethod
     def __setAxesProperties(ax, xLabel, yLabel, yMax, title, yMin=0.0):
         # ax.set_xticks(xValues)
-        # ax.set_xticklabels(self.batchLabels)
         ax.set_xlabel(xLabel)
         ax.set_ylabel(yLabel)
         ax.set_ylim(top=yMax, bottom=yMin)
@@ -255,7 +272,7 @@ class Statistics:
 
     def plotData(self):
         # set x axis values
-        xValues = list(range(len(self.batchLabels)))
+        xValues = list(range(self.nBatches))
         # generate different plots
         for fileName in self.plotAllLayersKeys:
             data = self.containers[fileName]
