@@ -17,7 +17,21 @@ def saveArgsToJSON(args):
     # save args to JSON
     args.jsonPath = '{}/args.txt'.format(args.save)
     with open(args.jsonPath, 'w') as f:
-        dump(vars(args), f, indent=4, sort_keys=True)
+        # transform args to dictionary
+        argsDict = vars(args)
+        # init sort_keys to True
+        sort_keys = True
+        for v in argsDict.values():
+            if isinstance(v, dict):
+                # count how many keys types exist in dict
+                keysTypes = set([type(x) for x in v.keys()])
+                # if dict has multiple key types, sort_keys will crash
+                if len(keysTypes) > 1:
+                    sort_keys = False
+                    break
+
+        # dump args to file
+        dump(argsDict, f, indent=4, sort_keys=sort_keys)
 
 
 def parseArgs():
