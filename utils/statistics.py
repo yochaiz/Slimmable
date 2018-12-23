@@ -37,8 +37,7 @@ class Statistics:
     nColsMax = 7
     nRowsDefault = 3
 
-    def __init__(self, layersList, saveFolder):
-        nLayers = len(layersList)
+    def __init__(self, saveFolder):
         # create plot folder
         plotFolderPath = '{}/plots'.format(saveFolder)
         if not path.exists(plotFolderPath):
@@ -47,15 +46,16 @@ class Statistics:
         self.saveFolder = plotFolderPath
         # init containers
         self.containers = {
-            self._entropyKey: [[] for _ in range(nLayers)],
+            # self._entropyKey: [[] for _ in range(nLayers)],
             # self._lossVarianceKey: [[]], self._alphaDistributionKey: [[[] for _ in range(layer.numOfOps())] for layer in layersList],
             self._lossAvgKey: [[]], self._crossEntropyLossAvgKey: [[]], self._flopsLossAvgKey: [[]],
-            self._weightsLossKey: [[]], self._weightsAccKey: [[]]
+            self._weightsLossKey: {}, self._weightsAccKey: {}
 
         }
         # map each list we plot for all layers on single plot to filename
         self.plotAllLayersKeys = [self._entropyKey, self._lossAvgKey, self._crossEntropyLossAvgKey, self._flopsLossAvgKey, self._lossVarianceKey]
         self.plotLayersSeparateKeys = [self._alphaDistributionKey]
+        self.containersToPlot = [self._weightsLossKey, self._weightsAccKey]
         # init number of batches
         self.nBatches = 0
         # init colors map
@@ -71,16 +71,21 @@ class Statistics:
         return Statistics._flopsKey
 
     # data is a list of dictionaries
-    def addBatchData(self,loss,acc):
+    def addBatchData(self, loss, acc):
         # update number of batches
         self.nBatches += 1
         # add data
-        data = [(loss, self._weightsLossKey),(acc,self._weightsAccKey)]
+        data = [(loss, self._weightsLossKey), (acc, self._weightsAccKey)]
         for dataElement, dataKey in data:
-            for title, value in dataElement:
+            container = self.containers[dataKey]
+            for title, value in dataElement.items():
+                # init new list to new title
+                if title not in container:
+                    container[title] = []
+                # add value to title list
+                container[title].append(value)
 
-
-
+        self.plotData()
 
     # def addBatchData(self, model):
     #     # update number of batches
@@ -207,21 +212,26 @@ class Statistics:
         # reset plot data in plotsData dictionary
         self.plotsData[title] = dict(x=xValues, data=[])
 
-        for i, layerData in enumerate(data):
-            # add data to plotsData
-            self.plotsData[title]['data'].append(dict(y=layerData, style=self.ptsStyle, label=labelFunc(i), color=colors[i]))
+        # for i, layerData in enumerate(data):
+        for i, (key, keyDataList) in enumerate(data.items()):
+            # set arguments
+            label = key
+            color = colors[i]
             # plot by shortest length between xValues, layerData
-            plotLength = min(len(xValues), len(layerData))
+            plotLength = min(len(xValues), len(keyDataList))
             xValues = xValues[:plotLength]
-            layerData = layerData[:plotLength]
+            keyDataList = keyDataList[:plotLength]
 
-            ax.plot(xValues, layerData, self.ptsStyle, label=labelFunc(i), c=colors[i])
+            # add data to plotsData
+            self.plotsData[title]['data'].append(dict(y=keyDataList, style=self.ptsStyle, label=label, color=color))
+            # plot
+            ax.plot(xValues, keyDataList, self.ptsStyle, label=label, c=color)
             if axOther:
-                axOther.plot(xValues, layerData, self.ptsStyle, label=labelFunc(i), c=colors[i])
+                axOther.plot(xValues, keyDataList, self.ptsStyle, label=label, c=color)
 
             isPlotEmpty = False
-            dataMax = max(dataMax, max(layerData))
-            dataSum.append(sum(layerData) / len(layerData))
+            dataMax = max(dataMax, max(keyDataList))
+            dataSum.append(sum(keyDataList) / len(keyDataList))
 
         if not isPlotEmpty:
             # add annotations if exists
@@ -274,12 +284,15 @@ class Statistics:
         # set x axis values
         xValues = list(range(self.nBatches))
         # generate different plots
-        for fileName in self.plotAllLayersKeys:
+        # for fileName in self.plotAllLayersKeys:
+        for fileName in self.containersToPlot:
             data = self.containers[fileName]
             fig = self.__plotContainer(data, xValues, xLabel='Batch #', yLabel=fileName, title='{} over epochs'.format(fileName),
                                        labelFunc=lambda x: x)
 
             self.saveFigPDF([fig], fileName, self.saveFolder)
+
+        return
 
         for fileName in self.plotLayersSeparateKeys:
             data = self.containers[fileName]
@@ -312,7 +325,7 @@ class Statistics:
     def plotFlops(flopsData, labelsToConnect, labelsMap, fileName, saveFolder):
         # create plots
         plots = [FlopsStandardPlot(flopsData.keys()), FlopsAveragePlot(flopsData.keys(), labelsToConnect, labelsMap),
-                 FlopsMaxAccuracyPlot(flopsData.keys(), labelsMap), MinFlopsPlot(flopsData.keys(), labelsMap)]
+                 FlopsMaxAccuracyPlot(flopsData.keys(), labelsToConnect, labelsMap), MinFlopsPlot(flopsData.keys(), labelsToConnect, labelsMap)]
 
         # iterate 1st over non-integer keys
         for label in sorted(flopsData.keys()):
@@ -412,7 +425,29 @@ class FlopsPlot:
         raise NotImplementedError('subclasses must override plotSpecific()!')
 
 
-class FlopsAveragePlot(FlopsPlot):
+class FlopsPlotWithConnection(FlopsPlot):
+    def __init__(self, title, nKeys, labelsToConnect, labelsMap):
+        super(FlopsPlotWithConnection, self).__init__(title, nKeys)
+
+        # save labels map
+        self.labelsMap = labelsMap
+        # save labels to connect list
+        self.labelsToConnect = labelsToConnect
+        # save previous point per labels list, in order to connect last 2 points with a dashed line
+        self.previousPoint = [None] * len(labelsToConnect)
+
+    def connectLabel(self, label, x, y):
+        for idx, labelsList in enumerate(self.labelsToConnect):
+            if label in labelsList:
+                # connect points
+                if self.previousPoint[idx] is not None:
+                    xPrev, yPrev = self.previousPoint[idx]
+                    self.ax.plot([xPrev, x], [yPrev, y], '--', c=self.colors[self.nextColorIdx])
+                # save last point as previous point
+                self.previousPoint[idx] = (x, y)
+
+
+class FlopsAveragePlot(FlopsPlotWithConnection):
     # labelsToConnect is list of lists
     # each list contains labels we want to connect with dashed line
     def __init__(self, nKeys, labelsToConnect, labelsMap):
@@ -420,13 +455,7 @@ class FlopsAveragePlot(FlopsPlot):
         self.confidence = 0.6827
 
         title = 'Average accuracy vs. Flops | Confidence:[{}]'.format(self.confidence)
-        super(FlopsAveragePlot, self).__init__(title, nKeys)
-
-        self.labelsToConnect = labelsToConnect
-        # save previous point per labels list, in order to connect last 2 points with a dashed line
-        self.previousPoint = [None] * len(labelsToConnect)
-
-        self.labelsMap = labelsMap
+        super(FlopsAveragePlot, self).__init__(title, nKeys, labelsToConnect, labelsMap)
 
     def addDataPoint(self, dataPoint, label):
         title, flops, accuracy = dataPoint
@@ -449,14 +478,8 @@ class FlopsAveragePlot(FlopsPlot):
         self.yMax = max(self.yMax, yMean)
         self.yMin = min(self.yMin, yMean)
 
-        for idx, labelsList in enumerate(self.labelsToConnect):
-            if label in labelsList:
-                # connect points
-                if self.previousPoint[idx] is not None:
-                    xPrev, yPrev = self.previousPoint[idx]
-                    self.ax.plot([xPrev, self.xValues[-1]], [yPrev, yMean], '--', c=self.colors[self.nextColorIdx])
-                # save last point as previous point
-                self.previousPoint[idx] = (self.xValues[-1], yMean)
+        # connect label
+        self.connectLabel(label, self.xValues[-1], yMean)
 
         # add error bar if there is more than single value
         if len(self.yValues) > 1:
@@ -484,11 +507,9 @@ class FlopsStandardPlot(FlopsPlot):
         pass
 
 
-class FlopsPlotWithCondition(FlopsPlot):
-    def __init__(self, title, nKeys, labelsMap):
-        super(FlopsPlotWithCondition, self).__init__(title, nKeys)
-
-        self.labelsMap = labelsMap
+class FlopsPlotWithCondition(FlopsPlotWithConnection):
+    def __init__(self, title, nKeys, labelsToConnect, labelsMap):
+        super(FlopsPlotWithCondition, self).__init__(title, nKeys, labelsToConnect, labelsMap)
 
     @abstractmethod
     def condition(self, dataPoint):
@@ -506,16 +527,19 @@ class FlopsPlotWithCondition(FlopsPlot):
             self.yMin = min(self.yMin, accuracy)
 
     def plotSpecific(self, label):
-        accuracy = self.yValues[0] if len(self.yValues) > 0 else None
-        flops = self.xValues[0] if len(self.xValues) > 0 else None
+        if (len(self.xValues) > 0) and (len(self.yValues) > 0):
+            accuracy = self.yValues[0] if len(self.yValues) > 0 else None
+            flops = self.xValues[0] if len(self.xValues) > 0 else None
 
-        # annotate label
-        self.ax.annotate(self.labelsMap[label], (flops, accuracy), size=6)
+            # annotate label
+            self.ax.annotate(self.labelsMap[label], (flops, accuracy), size=6)
+            # connect label
+            self.connectLabel(label, self.xValues[0], self.yValues[0])
 
 
 class FlopsMaxAccuracyPlot(FlopsPlotWithCondition):
-    def __init__(self, nKeys, labelsMap):
-        super(FlopsMaxAccuracyPlot, self).__init__('Max accuracy vs. Flops', nKeys, labelsMap)
+    def __init__(self, nKeys, labelsToConnect, labelsMap):
+        super(FlopsMaxAccuracyPlot, self).__init__('Max accuracy vs. Flops', nKeys, labelsToConnect, labelsMap)
 
     def condition(self, dataPoint):
         _, _, accuracy = dataPoint
@@ -523,8 +547,8 @@ class FlopsMaxAccuracyPlot(FlopsPlotWithCondition):
 
 
 class MinFlopsPlot(FlopsPlotWithCondition):
-    def __init__(self, nKeys, labelsMap):
-        super(MinFlopsPlot, self).__init__('Accuracy vs. Min Flops', nKeys, labelsMap)
+    def __init__(self, nKeys, labelsToConnect, labelsMap):
+        super(MinFlopsPlot, self).__init__('Accuracy vs. Min Flops', nKeys, labelsToConnect, labelsMap)
 
     def condition(self, dataPoint):
         _, flops, _ = dataPoint
