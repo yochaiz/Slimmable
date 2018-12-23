@@ -14,6 +14,7 @@ from utils.args import logParameters
 from utils.checkpoint import save_checkpoint
 from utils.HtmlLogger import HtmlLogger
 from utils.training import TrainingStats, TrainingOptimum
+from utils.statistics import Statistics
 
 
 class TrainRegime:
@@ -72,6 +73,9 @@ class TrainRegime:
         self.train_queue, self.search_queue, self.valid_queue = load_data(args)
         # load pre-trained model
         model.loadPreTrained(args.pre_trained, logger)
+
+        # init statistics instance
+        self.statistics = Statistics(args.save)
 
         # log parameters
         logParameters(logger, args, model)
@@ -148,8 +152,12 @@ class TrainRegime:
                 # add row to data table
                 trainLogger.addDataRow(dataRow)
 
+        epochLossDict = trainStats.epochLoss()
+        epochAccDict = trainStats.top1()
+        # add epoch data to statistics plots
+        self.statistics.addBatchData(epochLossDict, epochAccDict)
         # log accuracy, loss, etc.
-        summaryData = {self.trainLossKey: trainStats.epochLoss(), self.trainAccKey: trainStats.top1(), self.batchNumKey: 'Summary'}
+        summaryData = {self.trainLossKey: epochLossDict, self.trainAccKey: epochAccDict, self.batchNumKey: 'Summary'}
         # apply formats
         self._applyFormats(summaryData)
 
