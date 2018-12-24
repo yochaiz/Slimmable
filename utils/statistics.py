@@ -17,6 +17,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from matplotlib.backends.backend_pdf import PdfPages
+from mpl_toolkits.mplot3d import Axes3D, proj3d
 
 
 class Statistics:
@@ -322,17 +323,22 @@ class Statistics:
         saveFile(self.plotsData, self.plotsDataFilePath)
 
     @staticmethod
-    def plotFlops(flopsData, labelsToConnect, labelsMap, fileName, saveFolder):
+    def plotFlops(flopsData, funcs, labelsToConnect, labelsMap, fileName, saveFolder):
+        flopsFunc, accFunc, partitionFunc = funcs
         # create plots
-        plots = [FlopsStandardPlot(flopsData.keys()), FlopsAveragePlot(flopsData.keys(), labelsToConnect, labelsMap),
-                 FlopsMaxAccuracyPlot(flopsData.keys(), labelsToConnect, labelsMap), MinFlopsPlot(flopsData.keys(), labelsToConnect, labelsMap)]
+        plots = [FlopsStandardPlot(flopsData.keys(), xFunc=flopsFunc, yFunc=accFunc),
+                 FlopsAveragePlot(flopsData.keys(), flopsFunc, accFunc, labelsToConnect, labelsMap),
+                 FlopsAveragePlot3D(partitionFunc, accFunc, labelsToConnect, labelsMap),
+                 FlopsMaxAccuracyPlot(flopsData.keys(), flopsFunc, accFunc, labelsToConnect, labelsMap),
+                 MinFlopsPlot(flopsData.keys(), flopsFunc, accFunc, labelsToConnect, labelsMap)
+                 ]
 
         # iterate 1st over non-integer keys
         for label in sorted(flopsData.keys()):
             labelFlopsData = flopsData[label]
-            for dataPoint in labelFlopsData:
+            for checkpoint in labelFlopsData:
                 for plot in plots:
-                    plot.addDataPoint(dataPoint, label)
+                    plot.addDataPoint(checkpoint, label)
 
             for plot in plots:
                 plot.plot(label)
@@ -347,8 +353,9 @@ class Statistics:
 
 class FlopsPlot:
     accuracyFormat = '{:.2f}'
+    _titleKey = 'title'
 
-    def __init__(self, title, nKeys):
+    def __init__(self, title, nKeys, xFunc, yFunc):
         self.title = title
         # create standard flops plot
         fig, ax = plt.subplots(nrows=1, ncols=1)
@@ -370,6 +377,14 @@ class FlopsPlot:
         self.xValues = []
         self.yValues = []
 
+        # save functions to get x & y values from checkpoint
+        self.xFunc = xFunc
+        self.yFunc = yFunc
+
+        # set axes labels
+        self.xLabel = 'Flops'
+        self.yLabel = 'Accuracy'
+
     def setPlotProperties(self):
         paddingPercentage = 0.02
         paddingSize = (self.yMax - self.yMin) * paddingPercentage
@@ -384,14 +399,23 @@ class FlopsPlot:
         # Set grid to use minor tick locations.
         self.ax.grid(which='minor')
 
-        Statistics.setPlotProperties(self.fig, self.ax, xLabel='Flops', yLabel='Accuracy', title=self.title, yMin=yMin, yMax=yMax)
+        Statistics.setPlotProperties(self.fig, self.ax, xLabel=self.xLabel, yLabel=self.yLabel, title=self.title, yMin=yMin, yMax=yMax)
+
+    @staticmethod
+    def getTitleKey():
+        return FlopsPlot._titleKey
+
+    def getTitle(self, checkpoint):
+        return getattr(checkpoint, self._titleKey, None)
 
     @abstractmethod
-    def addDataPoint(self, dataPoint, label):
+    def addDataPoint(self, checkpoint, label):
         raise NotImplementedError('subclasses must override addDataPoint()!')
 
-    def addStandardDataPoint(self, dataPoint):
-        title, flops, accuracy = dataPoint
+    def addStandardDataPoint(self, checkpoint):
+        flops = self.xFunc(checkpoint)
+        accuracy = self.yFunc(checkpoint)
+        title = self.getTitle(checkpoint)
 
         self.xValues.append(flops)
         self.yValues.append(accuracy)
@@ -426,8 +450,8 @@ class FlopsPlot:
 
 
 class FlopsPlotWithConnection(FlopsPlot):
-    def __init__(self, title, nKeys, labelsToConnect, labelsMap):
-        super(FlopsPlotWithConnection, self).__init__(title, nKeys)
+    def __init__(self, title, nKeys, xFunc, yFunc, labelsToConnect, labelsMap):
+        super(FlopsPlotWithConnection, self).__init__(title, nKeys, xFunc, yFunc)
 
         # save labels map
         self.labelsMap = labelsMap
@@ -450,15 +474,17 @@ class FlopsPlotWithConnection(FlopsPlot):
 class FlopsAveragePlot(FlopsPlotWithConnection):
     # labelsToConnect is list of lists
     # each list contains labels we want to connect with dashed line
-    def __init__(self, nKeys, labelsToConnect, labelsMap):
+    def __init__(self, nKeys, xFunc, yFunc, labelsToConnect, labelsMap):
         # init confidence interval of 1 std
         self.confidence = 0.6827
 
         title = 'Average accuracy vs. Flops | Confidence:[{}]'.format(self.confidence)
-        super(FlopsAveragePlot, self).__init__(title, nKeys, labelsToConnect, labelsMap)
+        super(FlopsAveragePlot, self).__init__(title, nKeys, xFunc, yFunc, labelsToConnect, labelsMap)
 
-    def addDataPoint(self, dataPoint, label):
-        title, flops, accuracy = dataPoint
+    def addDataPoint(self, checkpoint, label):
+        flops = self.xFunc(checkpoint)
+        accuracy = self.yFunc(checkpoint)
+        # title = self.getTitle(checkpoint)
 
         if len(self.xValues) == 0:
             self.xValues.append(flops)
@@ -496,29 +522,82 @@ class FlopsAveragePlot(FlopsPlotWithConnection):
         self.resetPlot()
 
 
-class FlopsStandardPlot(FlopsPlot):
-    def __init__(self, nKeys):
-        super(FlopsStandardPlot, self).__init__('Accuracy vs. Flops', nKeys)
+class FlopsAveragePlot3D(FlopsAveragePlot):
+    # labelsToConnect is list of lists
+    # each list contains labels we want to connect with dashed line
+    def __init__(self, xFunc, yFunc, labelsToConnect, labelsMap):
+        # init accuracy color range
+        self.minColorValue = 82.0
+        self.maxColorValue = 89.0
+        nKeys = 81
+        self.colorsValueList = linspace(self.minColorValue, self.maxColorValue, nKeys)
 
-    def addDataPoint(self, dataPoint, label):
-        self.addStandardDataPoint(dataPoint)
+        super(FlopsAveragePlot3D, self).__init__(self.colorsValueList, xFunc, yFunc, labelsToConnect, labelsMap)
+
+        self.ax = self.fig.add_subplot(1, 1, 1, projection='3d')
+
+        colormap = plt.cm.hot
+        self.colors = [colormap(i) for i in linspace(0.9, 0.1, nKeys)]
+
+    def setPlotProperties(self):
+        Statistics.setPlotProperties(self.fig, self.ax, xLabel='', yLabel='', title=self.title, yMin=0.0, yMax=1.0)
+        self.ax.get_legend().remove()
+
+    def valueToColor(self, value):
+        lowerIdx = 0
+        upperIdx = len(self.colorsValueList)
+        while lowerIdx < upperIdx:
+            currIdx = lowerIdx + (upperIdx - lowerIdx) // 2
+            colorVal = self.colorsValueList[currIdx]
+            if value == colorVal:
+                break
+            elif value > colorVal:
+                if lowerIdx == currIdx:  # these two are the actual lines
+                    break  # you're looking for
+                lowerIdx = currIdx
+            elif value < colorVal:
+                upperIdx = currIdx
+
+        return self.colors[currIdx]
+
+    # plot label values
+    def plot(self, label):
+        x1, x2, x3 = self.xValues[0]
+        # average accuracy
+        yMean = mean(self.yValues)
+        # plot 3D, the color is best on accuracy, i.e. yMean
+        self.ax.plot([x1], [x2], [x3], 'o', label=label, c=self.valueToColor(yMean))
+        # annotate label
+        # self.ax.annotate(self.labelsMap[label], (self.xValues[0], yMean), size=6)
+        self.ax.text(x1, x2, x3, self.labelsMap[label], size=6, zorder=1)
+
+        self.resetPlot()
+
+
+class FlopsStandardPlot(FlopsPlot):
+    def __init__(self, nKeys, xFunc, yFunc):
+        super(FlopsStandardPlot, self).__init__('Accuracy vs. Flops', nKeys, xFunc, yFunc)
+
+    def addDataPoint(self, checkpoint, label):
+        self.addStandardDataPoint(checkpoint)
 
     def plotSpecific(self, label):
         pass
 
 
 class FlopsPlotWithCondition(FlopsPlotWithConnection):
-    def __init__(self, title, nKeys, labelsToConnect, labelsMap):
-        super(FlopsPlotWithCondition, self).__init__(title, nKeys, labelsToConnect, labelsMap)
+    def __init__(self, title, nKeys, xFunc, yFunc, labelsToConnect, labelsMap):
+        super(FlopsPlotWithCondition, self).__init__(title, nKeys, xFunc, yFunc, labelsToConnect, labelsMap)
 
     @abstractmethod
-    def condition(self, dataPoint):
+    def condition(self, checkpoint):
         raise NotImplementedError('subclasses must override condition()!')
 
-    def addDataPoint(self, dataPoint, label):
-        bitwidth, flops, accuracy = dataPoint
+    def addDataPoint(self, checkpoint, label):
+        flops = self.xFunc(checkpoint)
+        accuracy = self.yFunc(checkpoint)
 
-        if self.condition(dataPoint):
+        if self.condition(checkpoint):
             self.xValues = [flops]
             self.yValues = [accuracy]
 
@@ -538,20 +617,20 @@ class FlopsPlotWithCondition(FlopsPlotWithConnection):
 
 
 class FlopsMaxAccuracyPlot(FlopsPlotWithCondition):
-    def __init__(self, nKeys, labelsToConnect, labelsMap):
-        super(FlopsMaxAccuracyPlot, self).__init__('Max accuracy vs. Flops', nKeys, labelsToConnect, labelsMap)
+    def __init__(self, nKeys, xFunc, yFunc, labelsToConnect, labelsMap):
+        super(FlopsMaxAccuracyPlot, self).__init__('Max accuracy vs. Flops', nKeys, xFunc, yFunc, labelsToConnect, labelsMap)
 
-    def condition(self, dataPoint):
-        _, _, accuracy = dataPoint
+    def condition(self, checkpoint):
+        accuracy = self.yFunc(checkpoint)
         return len(self.yValues) == 0 or accuracy > self.yValues[0]
 
 
 class MinFlopsPlot(FlopsPlotWithCondition):
-    def __init__(self, nKeys, labelsToConnect, labelsMap):
-        super(MinFlopsPlot, self).__init__('Accuracy vs. Min Flops', nKeys, labelsToConnect, labelsMap)
+    def __init__(self, nKeys, xFunc, yFunc, labelsToConnect, labelsMap):
+        super(MinFlopsPlot, self).__init__('Accuracy vs. Min Flops', nKeys, xFunc, yFunc, labelsToConnect, labelsMap)
 
-    def condition(self, dataPoint):
-        _, flops, _ = dataPoint
+    def condition(self, checkpoint):
+        flops = self.xFunc(checkpoint)
         return len(self.xValues) == 0 or flops < self.xValues[0]
 
 # def plotBops(self, layersList):
