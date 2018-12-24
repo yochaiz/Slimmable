@@ -39,15 +39,25 @@ class BasicBlock(Block):
 
         # init downsample
         self.downsample = ConvSlimLayer(widthRatioList, in_planes, out_planes, 1, stride1, prevLayer=prevLayer) \
-            if in_planes != out_planes else None
+            if prevLayer.widthList()[-1] != self.conv1.widthList()[-1] else None
+        # if in_planes != out_planes else None
+
+        # init function to calculate residual
+        self.residual = self.standardResidual if self.downsample is None else self.downsampleResidual
+
+    # calc residual without downsample
+    def standardResidual(self, x):
+        return x
+
+    # calc residual with downsample
+    def downsampleResidual(self, x):
+        return self.downsample(x)
 
     def forward(self, x):
-        residual = self.downsample(x) if self.downsample else x
-
         out = self.conv1(x)
         out = self.relu1(out)
         out = self.conv2(out)
-        out += residual
+        out += self.residual(x)
         out = self.relu2(out)
 
         return out
