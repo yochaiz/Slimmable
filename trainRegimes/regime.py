@@ -154,8 +154,8 @@ class TrainRegime:
 
         epochLossDict = trainStats.epochLoss()
         epochAccDict = trainStats.top1()
-        # add epoch data to statistics plots
-        self.statistics.addBatchData(epochLossDict, epochAccDict)
+        # # add epoch data to statistics plots
+        # self.statistics.addBatchData(epochLossDict, epochAccDict)
         # log accuracy, loss, etc.
         summaryData = {self.trainLossKey: epochLossDict, self.trainAccKey: epochAccDict, self.batchNumKey: 'Summary'}
         # apply formats
