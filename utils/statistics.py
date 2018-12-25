@@ -186,7 +186,7 @@ class Statistics:
         ax.set_ylim(top=yMax, bottom=yMin)
         ax.set_title(title)
         # put legend in bottom right corner, transparent (framealpha), small font
-        ax.legend(loc='lower right', ncol=5, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 6})
+        ax.legend(loc='lower right', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 6})
 
     @staticmethod
     def __setFigProperties(fig, figSize=(15, 10)):
@@ -334,7 +334,7 @@ class Statistics:
                  ]
 
         # iterate 1st over non-integer keys
-        for label in sorted(flopsData.keys()):
+        for label in flopsData.keys():
             labelFlopsData = flopsData[label]
             for checkpoint in labelFlopsData:
                 for plot in plots:
