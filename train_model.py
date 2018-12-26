@@ -10,7 +10,9 @@ from torch.cuda import manual_seed as cuda_manual_seed
 from torch.cuda import is_available, set_device
 import torch.backends.cudnn as cudnn
 
+from trainRegimes.regime import TrainRegime
 from trainRegimes.OptimalRegime import OptimalRegime
+
 from utils.HtmlLogger import HtmlLogger
 from utils.zip import create_exp_dir
 from utils.checkpoint import checkpointFileType
@@ -19,6 +21,10 @@ from utils.checkpoint import checkpointFileType
 def train(scriptArgs):
     # load args from file
     args = loadCheckpoint(scriptArgs.json, map_location=lambda storage, loc: storage.cuda())
+
+    # terminate if validAcc exists
+    if hasattr(args, TrainRegime.validAccKey):
+        exit(0)
 
     # update args parameters
     args.seed = datetime.now().microsecond
