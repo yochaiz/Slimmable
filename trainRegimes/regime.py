@@ -74,8 +74,8 @@ class TrainRegime:
         # load pre-trained model
         model.loadPreTrained(args.pre_trained, logger)
 
-        # init statistics instance
-        self.statistics = Statistics(args.save)
+        # # init statistics instance
+        # self.statistics = Statistics(args.save)
 
         # log parameters
         logParameters(logger, args, model)
