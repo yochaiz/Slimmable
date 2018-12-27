@@ -268,9 +268,15 @@ class TrainRegime:
         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=2, min_lr=args.learning_rate_min)
 
         while nEpochsOptimum <= args.optimal_epochs:
+            # update train logger condition
+            trainLoggerFlag = (epoch % args.logInterval) == 0
+            # update epoch number
             epoch += 1
-            trainLogger = HtmlLogger(folderPath, str(epoch))
-            trainLogger.addInfoTable('Learning rates', [['optimizer_lr', self.formats[self.lrKey](optimizer.param_groups[0]['lr'])]])
+            # init train logger
+            trainLogger = None
+            if trainLoggerFlag:
+                trainLogger = HtmlLogger(folderPath, str(epoch))
+                trainLogger.addInfoTable('Learning rates', [['optimizer_lr', self.formats[self.lrKey](optimizer.param_groups[0]['lr'])]])
 
             # set loggers dictionary
             loggersDict = dict(train=trainLogger)
