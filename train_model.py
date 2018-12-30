@@ -26,6 +26,9 @@ def train(scriptArgs):
     if hasattr(args, TrainRegime.validAccKey):
         exit(0)
 
+    if not hasattr(args, 'logInterval'):
+        args.logInterval = 50
+
     # update args parameters
     args.seed = datetime.now().microsecond
     # update cudnn parameters
