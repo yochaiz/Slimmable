@@ -7,6 +7,7 @@ from urllib.parse import quote
 from numpy import linspace, mean
 from abc import abstractmethod
 import scipy.stats as st
+from bisect import bisect_left, insort_left
 
 import torch.nn.functional as F
 from torch import save as saveFile
@@ -186,7 +187,7 @@ class Statistics:
         ax.set_ylim(top=yMax, bottom=yMin)
         ax.set_title(title)
         # put legend in bottom right corner, transparent (framealpha), small font
-        ax.legend(loc='lower right', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 6})
+        ax.legend(loc='lower right', ncol=5, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 6})
 
     @staticmethod
     def __setFigProperties(fig, figSize=(15, 10)):
@@ -449,29 +450,39 @@ class FlopsPlot:
         raise NotImplementedError('subclasses must override plotSpecific()!')
 
 
-class FlopsPlotWithConnection(FlopsPlot):
+class FlopsPlotWithLine(FlopsPlot):
     def __init__(self, title, nKeys, xFunc, yFunc, labelsToConnect, labelsMap):
-        super(FlopsPlotWithConnection, self).__init__(title, nKeys, xFunc, yFunc)
+        super(FlopsPlotWithLine, self).__init__(title, nKeys, xFunc, yFunc)
 
+        # init connect line attributes
+        self.lineStyle = '--'
+        self.lineColor = 'green'
+        self.lineErrorBarColor = 'lightgreen'
         # save labels map
         self.labelsMap = labelsMap
         # save labels to connect list
         self.labelsToConnect = labelsToConnect
-        # save previous point per labels list, in order to connect last 2 points with a dashed line
-        self.previousPoint = [None] * len(labelsToConnect)
+        # save the line points data, in case we want to evaluate other points against the line,
+        # i.e. we want to know what is the line y value in any x value
+        self.linePoints = [[]] * len(labelsToConnect)
 
     def connectLabel(self, label, x, y):
+        # save labelsList indices where label exists
+        labelIndices = []
         for idx, labelsList in enumerate(self.labelsToConnect):
             if label in labelsList:
+                labelIndices.append(idx)
                 # connect points
-                if self.previousPoint[idx] is not None:
-                    xPrev, yPrev = self.previousPoint[idx]
-                    self.ax.plot([xPrev, x], [yPrev, y], '--', c=self.colors[self.nextColorIdx])
-                # save last point as previous point
-                self.previousPoint[idx] = (x, y)
+                if len(self.linePoints[idx]) > 0:
+                    xPrev, yPrev = self.linePoints[idx][-1]
+                    self.ax.plot([xPrev, x], [yPrev, y], self.lineStyle, c=self.lineColor)
+                # add point data to self.linePoints while keeping it sorted
+                insort_left(self.linePoints[idx], (x, y))
+
+        return labelIndices
 
 
-class FlopsAveragePlot(FlopsPlotWithConnection):
+class FlopsAveragePlot(FlopsPlotWithLine):
     # labelsToConnect is list of lists
     # each list contains labels we want to connect with dashed line
     def __init__(self, nKeys, xFunc, yFunc, labelsToConnect, labelsMap):
@@ -481,6 +492,23 @@ class FlopsAveragePlot(FlopsPlotWithConnection):
         title = 'Average accuracy vs. Flops | Confidence:[{}]'.format(self.confidence)
         super(FlopsAveragePlot, self).__init__(title, nKeys, xFunc, yFunc, labelsToConnect, labelsMap)
 
+        # save previous line point error bar, in order to connect also error bars with line
+        self.prevErrorBar = [None] * len(labelsToConnect)
+
+    def _connectErrorBar(self, labelIndices, x, y, confidenceHalfInterval):
+        # iterate over lines where label is part of
+        for idx in labelIndices:
+            prevError = self.prevErrorBar[idx]
+            # connect bars
+            if prevError is not None:
+                xPrev, yPrev, confidenceHalfIntervalPrev = prevError
+                # connect bar bottom
+                self.ax.plot([xPrev, x], [yPrev - confidenceHalfIntervalPrev, y - confidenceHalfInterval], self.lineStyle, c=self.lineErrorBarColor)
+                # connect bar top
+                self.ax.plot([xPrev, x], [yPrev + confidenceHalfIntervalPrev, y + confidenceHalfInterval], self.lineStyle, c=self.lineErrorBarColor)
+            # save last point as previous point
+            self.prevErrorBar[idx] = (x, y, confidenceHalfInterval)
+
     def addDataPoint(self, checkpoint, label):
         flops = self.xFunc(checkpoint)
         accuracy = self.yFunc(checkpoint)
@@ -488,9 +516,42 @@ class FlopsAveragePlot(FlopsPlotWithConnection):
 
         if len(self.xValues) == 0:
             self.xValues.append(flops)
-        assert (self.xValues[0] == flops)
+        elif (not isinstance(self.xValues[0], list)) and (flops < self.xValues[0]):
+            self.xValues = [flops]
+        # assert (self.xValues[0] == flops)
 
         self.yValues.append(accuracy)
+
+    # add error bar to point average
+    def plotErrorBar(self, yMean, checkConditionsFlag):
+        confidenceHalfInterval = 0
+        if len(self.yValues) > 1:
+            # calc standard error of the mean
+            sem = st.sem(self.yValues)
+            # calc confidence interval
+            intervalMin, intervalMax = st.t.interval(self.confidence, len(self.yValues) - 1, loc=yMean, scale=sem)
+            confidenceHalfInterval = (intervalMax - intervalMin) / 2
+
+            if checkConditionsFlag:
+                xMean = self.xValues[0]
+                for pointsList in self.linePoints:
+                    # find current point line interval
+                    upperBoundIdx = bisect_left(pointsList, (xMean, yMean))
+                    lowerBoundIdx = upperBoundIdx - 1
+                    # calc line slope
+                    xUpper, yUpper = pointsList[upperBoundIdx]
+                    xLower, yLower = pointsList[lowerBoundIdx]
+                    slope = (yUpper - yLower) / (xUpper - xLower)
+                    # calc line y value in xMean
+                    yLine = yLower + (slope * (xMean - xLower))
+                    # do not plot error bar if error bar lower bound is under line y value in xMean
+                    if yLine > (yMean - confidenceHalfInterval):
+                        return
+
+            self.ax.errorbar(self.xValues, [yMean], yerr=confidenceHalfInterval, c=self.colors[self.nextColorIdx],
+                             ms=5, marker='X', capsize=4, markeredgewidth=1, elinewidth=2)
+
+        return confidenceHalfInterval
 
     # plot label values
     def plot(self, label):
@@ -505,17 +566,11 @@ class FlopsAveragePlot(FlopsPlotWithConnection):
         self.yMin = min(self.yMin, yMean)
 
         # connect label
-        self.connectLabel(label, self.xValues[-1], yMean)
-
-        # add error bar if there is more than single value
-        if len(self.yValues) > 1:
-            # calc standard error of the mean
-            sem = st.sem(self.yValues)
-            # calc confidence interval
-            intervalMin, intervalMax = st.t.interval(self.confidence, len(self.yValues) - 1, loc=yMean, scale=sem)
-            confidenceInterval = intervalMax - intervalMin
-            self.ax.errorbar(self.xValues, [yMean], yerr=(confidenceInterval / 2),
-                             ms=5, marker='X', capsize=4, markeredgewidth=1, elinewidth=2, c=self.colors[self.nextColorIdx])
+        labelIndices = self.connectLabel(label, self.xValues[-1], yMean)
+        # plot error bar
+        confidenceHalfInterval = self.plotErrorBar(yMean, checkConditionsFlag=(len(labelIndices) == 0))
+        # connect error bars if we have connected label
+        self._connectErrorBar(labelIndices, self.xValues[0], yMean, confidenceHalfInterval)
 
         # update variables for next plot
         self.nextColorIdx += 1
@@ -562,6 +617,11 @@ class FlopsAveragePlot3D(FlopsAveragePlot):
 
     # plot label values
     def plot(self, label):
+        # check all xValues are non-string
+        for x in self.xValues[0]:
+            if isinstance(x, str):
+                return
+
         x1, x2, x3 = self.xValues[0]
         # average accuracy
         yMean = mean(self.yValues)
@@ -585,7 +645,7 @@ class FlopsStandardPlot(FlopsPlot):
         pass
 
 
-class FlopsPlotWithCondition(FlopsPlotWithConnection):
+class FlopsPlotWithCondition(FlopsPlotWithLine):
     def __init__(self, title, nKeys, xFunc, yFunc, labelsToConnect, labelsMap):
         super(FlopsPlotWithCondition, self).__init__(title, nKeys, xFunc, yFunc, labelsToConnect, labelsMap)
 
