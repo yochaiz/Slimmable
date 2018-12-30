@@ -161,8 +161,9 @@ class TrainRegime:
         # apply formats
         self._applyFormats(summaryData)
 
-        for _, logger in loggers.items():
-            logger.addSummaryDataRow(summaryData)
+        for logger in loggers.values():
+            if logger:
+                logger.addSummaryDataRow(summaryData)
 
         # log forward counters. if loggerFuncs==[] then it is just resets counters
         func = [lambda rows: trainLogger.addInfoTable(title='{} - Training'.format(self.forwardCountersKey), rows=rows)] if trainLogger else []
@@ -224,8 +225,9 @@ class TrainRegime:
         # apply formats
         self._applyFormats(summaryRow)
 
-        for _, logger in loggers.items():
-            logger.addSummaryDataRow(summaryRow)
+        for logger in loggers.values():
+            if logger:
+                logger.addSummaryDataRow(summaryRow)
 
         # log forward counters. if loggerFuncs==[] then it is just resets counters
         func = [lambda rows: trainLogger.addInfoTable(title='{} - Validation'.format(self.forwardCountersKey), rows=rows)] if trainLogger else []
