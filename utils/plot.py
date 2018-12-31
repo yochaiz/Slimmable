@@ -2,30 +2,41 @@ from os import listdir, remove
 from os.path import isfile, isdir, exists
 from shutil import copy2
 from ast import literal_eval
+from numpy import linspace
 
 from torch import load, save
 
 from models.BaseNet import BaseNet
 from trainRegimes.regime import TrainRegime
-from utils.statistics import Statistics
+from utils.statistics import Statistics, FlopsPlot, PlotLabelData, plt
 from utils.checkpoint import checkpointFileType, blocksPartitionKey
 from utils.training import TrainingData
 
 _flopsKey = Statistics.flopsKey()
 _partitionKey = BaseNet.partitionKey()
 _avgKey = TrainingData.avgKey()
+_titleKey = FlopsPlot.getTitleKey()
 
 
-def extractAttributesFromCheckpoint(file, filePath):
-    checkpoint = load(filePath)
-    # get attributes from checkpoint
+def getPartitionFlops(checkpoint):
     baselineFlops = getattr(checkpoint, BaseNet.baselineFlopsKey())
     flops = baselineFlops.get(BaseNet.partitionKey())
+    return flops
+
+
+def getPartitionValidAcc(checkpoint):
     validAcc = getattr(checkpoint, TrainRegime.validAccKey)
     validAcc = validAcc.get(BaseNet.partitionKey())
+    return validAcc
+
+
+def extractAttributesFromCheckpoint(file, checkpoint):
+    # get attributes from checkpoint
+    flops = getPartitionFlops(checkpoint)
+    validAcc = getPartitionValidAcc(checkpoint)
     repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
 
-    return checkpoint, flops, validAcc, repeatNum
+    return flops, validAcc, repeatNum
 
 
 def generateCSV(folderPath):
@@ -41,10 +52,11 @@ def generateCSV(folderPath):
     for file in sorted(listdir(folderPath)):
         fPath = '{}/{}'.format(folderPath, file)
         if isfile(fPath):
+            checkpoint = load(fPath)
             # get attributes from checkpoint
             try:
-                checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(file, fPath)
                 partition = getattr(checkpoint, blocksPartitionKey)
+                flops, validAcc, repeatNum = extractAttributesFromCheckpoint(file, checkpoint)
             except Exception as e:
                 print('Missing values in {}'.format(file))
                 # remove(fPath)
@@ -52,10 +64,11 @@ def generateCSV(folderPath):
 
             partitionStr = str(partition)
             if partitionStr not in data:
-                data[partitionStr] = {_flopsKey: flops, _resultsKey: [None] * 5}
+                data[partitionStr] = {_flopsKey: flops, _resultsKey: [','] * 7}
                 partitionKeys.append(partition)
 
             # update checkpoint result in results list
+            data[partitionStr][_flopsKey] = min(data[partitionStr][_flopsKey], flops)
             results = data[partitionStr][_resultsKey]
             results[repeatNum - 1] = validAcc
 
@@ -68,7 +81,7 @@ def generateCSV(folderPath):
         resultsList = partitionData[_resultsKey]
         resultsStr = ''
         for r in resultsList:
-            resultsStr += ',{:.3f}'.format(r) if r else ','
+            resultsStr += ',{:.3f}'.format(r) if isinstance(r, float) else r
         print('"{}",{}{}'.format(partition, flops, resultsStr))
 
     print('Partition,Flops,1,2,3,4,5')
@@ -157,17 +170,44 @@ def buildWidthRatioMissingCheckpoints(widthRatio, nBlocks):
             print('=================================================')
 
 
+def fixCheckpointFlops(folderPath):
+    modelFileName = 'model.html'
+    # init array of folders name we need to fix their checkpoint flops dictionary
+    foldersToFix = []
+    # iterate over folder and mark the folders checkpoint we have to fix their flops dictionary
+    for folder in sorted(listdir(folderPath)):
+        fPath = '{}/{}'.format(folderPath, folder)
+        if isdir(fPath):
+            modelFilePath = '{}/{}'.format(fPath, modelFileName)
+            if exists(modelFilePath):
+                with open(modelFilePath, 'r') as modelFile:
+                    # read model HTML file
+                    modelStr = modelFile.read()
+                    # count how many conv with kernel_size=(1, 1) exist
+                    nDownsample = modelStr.count('kernel_size=(1, 1)')
+                    if nDownsample > 2:
+                        foldersToFix.append(folder)
+
+    # load the wrong checkpoints and fix their flops dictionary
+    for folder in foldersToFix:
+        checkpointPath = '{}/{}.{}'.format(folderPath, folder, checkpointFileType)
+        checkpoint = load(checkpointPath)
+        # make sure checkpoint is ready, i.e. we are not in the middle of training
+        if hasattr(checkpoint, TrainRegime.validAccKey):
+            # reset flops dictionary
+            setattr(checkpoint, BaseNet.baselineFlopsKey(), None)
+            save(checkpoint, checkpointPath)
+
+
 # folderPath should be a path to folder which has folders inside
 # each inner folder will be the title for the checkpoints in it
 def plotFolders(folderPath):
     # init flops data with inner folders as keys, [] as values
     flopsData = {}
-    # init labels to connect dictionary
-    labelsToConnect = dict(with_pre_trained=[], without_pre_trained=[])
+    # init labels to connect list
+    labelsToConnect = []
     # Map each partition to index, for easier mapping in plot
     partitionIdxMap = {}
-    # init labels map, mapping plot labels to the value we want to display
-    labelsMap = {}
     # iterate over folders
     for folder in sorted(listdir(folderPath)):
         fPath = '{}/{}'.format(folderPath, folder)
@@ -175,56 +215,170 @@ def plotFolders(folderPath):
             if isdir(fPath):
                 # set label
                 label = folder
-                # set label map
-                labelsMap[label] = folder
-                # add to labelsToConnect dict
-                for key in labelsToConnect:
-                    if key in folder:
-                        labelsToConnect[key].append(folder)
-                        break
-                # init empty list under folder key
-                flopsData[label] = []
+                # create PlotLabelData instance
+                labelData = PlotLabelData(label, label)
+                # add PlotLabelData instance to folder FlopsData dictionary
+                flopsData[label] = labelData
+                # add to labelsToConnect list
+                labelsToConnect.append(label)
                 # iterate over checkpoints
                 for file in listdir(fPath):
                     filePath = '{}/{}'.format(fPath, file)
                     if isfile(filePath):
-                        checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(file, filePath)
-                        # add attributes to plot data
-                        flopsData[label].append((repeatNum, flops, validAcc))
+                        # repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
+                        # load checkpoint
+                        checkpoint = load(filePath)
+                        # check accuracy exists in checkpoint
+                        if hasattr(checkpoint, TrainRegime.validAccKey):
+                            # set title to checkpoint
+                            setattr(checkpoint, _titleKey, label)
+                            # add checkpoint
+                            labelData.addCheckpoint(checkpoint)
             elif isfile(fPath):
-                checkpoint, flops, validAcc, repeatNum = extractAttributesFromCheckpoint(folder, fPath)
-                partition = str(getattr(checkpoint, blocksPartitionKey))
-                # create partition key in flopsData dict if does not exist
-                if partition not in partitionIdxMap:
-                    idx = len(partitionIdxMap)
-                    partitionIdxMap[partition] = idx
+                # partitionAttrKey = 'partition'
+                partitionAttrKey = blocksPartitionKey
+                # load checkpoint
+                checkpoint = load(fPath)
+                # check accuracy exists in checkpoint
+                if hasattr(checkpoint, TrainRegime.validAccKey):
+                    # get partition from checkpoint
+                    partition = str(getattr(checkpoint, partitionAttrKey))
+                    # create partition key in flopsData dict if does not exist
+                    if partition not in partitionIdxMap:
+                        idx = len(partitionIdxMap)
+                        partitionIdxMap[partition] = idx
+                    else:
+                        idx = partitionIdxMap[partition]
+                    # set partition key
                     partitionKey = '{}-[{}]'.format(partition, idx)
-                    flopsData[partitionKey] = []
-                else:
-                    idx = partitionIdxMap[partition]
-                    partitionKey = '{}-[{}]'.format(partition, idx)
-                # set title
-                title = '[{}]'.format(idx)
-                # add data to flops dict
-                flopsData[partitionKey].append((title, flops, validAcc))
-                # set label map
-                labelsMap[partitionKey] = title
+                    # set label
+                    label = '[{}]'.format(idx)
+                    # set label to checkpoint
+                    setattr(checkpoint, _titleKey, label)
+                    # check if partitionKey exits under folderName
+                    if partitionKey not in flopsData:
+                        # add PlotLabelData instance to folder FlopsData dictionary
+                        flopsData[partitionKey] = PlotLabelData(partitionKey, label)
+                    # add checkpoint
+                    flopsData[partitionKey].addCheckpoint(checkpoint)
 
         except Exception as e:
             print('Missing values in {}'.format(file))
             # remove(fPath)
             continue
 
+    # init colors
+    colormap = plt.cm.hot
+    colors = [colormap(i) for i in linspace(0.7, 0.0, len(flopsData.keys()))]
+    # set color to each key
+    for idx, v in enumerate(flopsData.values()):
+        v.setColor(colors[idx])
+
     # plot
-    Statistics.plotFlops(flopsData, list(labelsToConnect.values()), labelsMap, 'acc_vs_flops_summary', folderPath)
+    partitionFunc = lambda checkpoint: getattr(checkpoint, partitionAttrKey, None)
+    Statistics.plotFlops(flopsData.values(), (getPartitionFlops, getPartitionValidAcc, partitionFunc), [labelsToConnect],
+                         'acc_vs_flops_summary', folderPath)
 
 
-widthRatio = [0.25, 0.5, 0.75, 1.0]
+def plotCompareFolders(foldersList):
+    # init colors
+    colormap = plt.cm.hot
+    colors = [colormap(i) for i in linspace(0.7, 0.0, len(foldersList))]
+    # init flops data with inner folders as keys, [] as values
+    flopsData = {}
+    # init labels to connect list
+    labelsToConnect = []
+    # Map each partition to index, for easier mapping in plot
+    partitionIdxMap = {}
+    # iterate over folders in foldersList
+    for folderIdx, (folderPath, folderName) in enumerate(foldersList):
+        # add folderName as key to flopsData
+        flopsData[folderName] = {}
+        folderFlopsData = flopsData[folderName]
+        folderLabelsToConnect = []
+        labelsToConnect.append(folderLabelsToConnect)
+        # iterate over checkpoints in folder
+        for name in sorted(listdir(folderPath)):
+            fPath = '{}/{}'.format(folderPath, name)
+            if isdir(fPath):
+                # set label
+                label = name
+                # create PlotLabelData instance
+                legendString = '[{}]-{}'.format(folderName, label)
+                labelData = PlotLabelData(legendString, label, colors[folderIdx])
+                # add PlotLabelData instance to folder FlopsData dictionary
+                folderFlopsData[label] = labelData
+                # add to labelsToConnect list
+                folderLabelsToConnect.append(legendString)
+                # iterate over checkpoints
+                for file in listdir(fPath):
+                    filePath = '{}/{}'.format(fPath, file)
+                    if isfile(filePath):
+                        # repeatNum = int(file[file.rfind('-') + 1:file.rfind(checkpointFileType) - 1])
+                        # load checkpoint
+                        checkpoint = load(filePath)
+                        # check accuracy exists in checkpoint
+                        if hasattr(checkpoint, TrainRegime.validAccKey):
+                            # set label to checkpoint
+                            setattr(checkpoint, _titleKey, label)
+                            # add checkpoint
+                            labelData.addCheckpoint(checkpoint)
+            elif isfile(fPath) and fPath.endswith(checkpointFileType):
+                # partitionAttrKey = 'partition'
+                partitionAttrKey = blocksPartitionKey
+                # load checkpoint
+                checkpoint = load(fPath)
+                # check accuracy exists in checkpoint
+                if hasattr(checkpoint, TrainRegime.validAccKey):
+                    # get partition from checkpoint
+                    partition = str(getattr(checkpoint, partitionAttrKey))
+                    # create partition key in flopsData dict if does not exist
+                    if partition not in partitionIdxMap:
+                        idx = len(partitionIdxMap)
+                        partitionIdxMap[partition] = idx
+                    else:
+                        idx = partitionIdxMap[partition]
+                    # set partition key
+                    partitionKey = '{}-[{}]'.format(partition, idx)
+                    # set label
+                    label = '[{}]'.format(idx)
+                    # set label to checkpoint
+                    setattr(checkpoint, _titleKey, label)
+                    # check if partitionKey exits under folderName
+                    if partitionKey not in folderFlopsData:
+                        # add PlotLabelData instance to folder FlopsData dictionary
+                        folderFlopsData[partitionKey] = PlotLabelData('[{}]-{}'.format(folderName, partitionKey), label, colors[folderIdx])
+                    # add checkpoint
+                    folderFlopsData[partitionKey].addCheckpoint(checkpoint)
+
+    # put all PlotLabelData instances in list
+    labelsList = []
+    for v in flopsData.values():
+        labelsList.extend(v.values())
+
+    # group partition label from all folders, in order to connect them in plot
+    # labelsDict = {}
+    # for labelData in labelsList:
+    #     key = labelData.annotateString()
+    #     if key not in labelsDict:
+    #         labelsDict[key] = []
+    #     labelsDict[key].append(labelData.legendString())
+    # labelsToConnect = list(labelsDict.values())
+
+    # plot
+    partitionFunc = lambda checkpoint: getattr(checkpoint, partitionAttrKey, None)
+    Statistics.plotFlops(labelsList, (getPartitionFlops, getPartitionValidAcc, partitionFunc), labelsToConnect,
+                         'acc_vs_flops_folders_summary', folderPath)
+
+
+# widthRatio = [0.25, 0.5, 0.75, 1.0]
 dataset = 'cifar10'
-# folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/width:{}/'.format(dataset, widthRatio)
-folderPath = '/home/vista/Desktop/Architecture_Search/results/{}/individual_training'.format(dataset)
+basePath = '/home/vista/Desktop/Architecture_Search/results/{}'.format(dataset)
+folderPath = '{}/individual_training'.format(basePath)
 
 # buildWidthRatioMissingCheckpoints(widthRatio, nBlocks=3)
 # updateCheckpointBlocksPartition(folderPath)
 plotFolders(folderPath)
 # generateCSV(folderPath)
+# fixCheckpointFlops('/home/vista/Desktop/Architecture_Search/results/mixed_training')
+# plotCompareFolders([('{}/{}'.format(basePath, x), x) for x in ['mixed_training', 'individual_training']])
