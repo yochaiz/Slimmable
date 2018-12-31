@@ -694,7 +694,7 @@ class FlopsPlotWithCondition(FlopsPlotWithLine):
             # annotate label
             self.ax.annotate(label.annotateString(), (flops, accuracy), size=6)
             # connect label
-            self.connectLabel(label, self.xValues[0], self.yValues[0])
+            self.connectLabel(label.legendString(), self.xValues[0], self.yValues[0])
 
 
 class FlopsMaxAccuracyPlot(FlopsPlotWithCondition):
