@@ -1,4 +1,6 @@
-from torch.nn import ModuleList, ReLU, Linear, AvgPool2d
+from abc import abstractmethod
+
+from torch.nn import ModuleList, ReLU, Linear, AvgPool2d, MaxPool2d
 from torch.nn.functional import linear
 
 from .BaseNet import BaseNet, Block, ConvSlimLayer
@@ -74,7 +76,7 @@ class BasicBlock(Block):
 
 class ResNet18(BaseNet):
     def __init__(self, args):
-        super(ResNet18, self).__init__(args, initLayersParams=(args.width, args.kernel, args.nClasses, args.input_size, args.partition))
+        super(ResNet18, self).__init__(args, initLayersParams=(args.width, args.nClasses, args.input_size, args.partition))
 
     # init layers (type, out_planes)
     def initBlocksPlanes(self):
@@ -86,15 +88,32 @@ class ResNet18(BaseNet):
     def nPartitionBlocks():
         return 3, [4, 3, 3]
 
+    @abstractmethod
     def initBlocks(self, params):
-        widthRatioList, kernel_size, nClasses, input_size, partition = params
+        raise NotImplementedError('subclasses must override initBlocks()!')
+
+    @abstractmethod
+    def forward(self, x):
+        raise NotImplementedError('subclasses must override forward()!')
+
+
+class ResNet18_Cifar(ResNet18):
+    def __init__(self, args):
+        super(ResNet18_Cifar, self).__init__(args)
+
+    def initBlocks(self, params):
+        widthRatioList, nClasses, input_size, partition = params
 
         blocksPlanes = self.initBlocksPlanes()
+
+        # init parameters
+        kernel_size = 3
+        stride = 1
 
         # create list of blocks from blocksPlanes
         blocks = ModuleList()
         prevLayer = Input(3, input_size)
-        stride = 1
+
         for i, (blockType, out_planes) in enumerate(blocksPlanes):
             layerWidthRatioList = widthRatioList.copy()
             # add partition ratio if exists
@@ -114,12 +133,73 @@ class ResNet18(BaseNet):
 
     def forward(self, x):
         out = x
-        for layer in self.blocks:
-            out = layer(out)
+        for block in self.blocks:
+            out = block(out)
 
         out = self.avgpool(out)
         out = out.view(out.size(0), -1)
         # narrow linear according to last conv2d layer
-        out = linear(out, self.fc.weight.narrow(1, 0, layer.outputLayer().currWidth()), bias=self.fc.bias)
+        out = linear(out, self.fc.weight.narrow(1, 0, block.outputLayer().currWidth()), bias=self.fc.bias)
+
+        return out
+
+
+class ResNet18_Imagenet(ResNet18):
+    def __init__(self, args):
+        super(ResNet18_Imagenet, self).__init__(args)
+
+    def initBlocks(self, params):
+        widthRatioList, nClasses, input_size, partition = params
+
+        blocksPlanes = self.initBlocksPlanes()
+
+        # init parameters
+        kernel_size = 7
+        stride = 2
+
+        # create list of blocks from blocksPlanes
+        blocks = ModuleList()
+        prevLayer = Input(3, input_size)
+
+        for i, (blockType, out_planes) in enumerate(blocksPlanes):
+            # increase number of out_planes
+            out_planes *= 4
+            # copy width ratio list
+            layerWidthRatioList = widthRatioList.copy()
+            # add partition ratio if exists
+            if partition:
+                layerWidthRatioList += [partition[i]]
+            # build layer
+            l = blockType(layerWidthRatioList, prevLayer.outputChannels(), out_planes, kernel_size, stride, prevLayer)
+            # update kernel size
+            kernel_size = 3
+            # update stride
+            stride = 1
+            # add layer to blocks list
+            blocks.append(l)
+            # update previous layer
+            prevLayer = l.outputLayer()
+
+        self.maxpool = MaxPool2d(kernel_size=kernel_size, stride=2, padding=1)
+        self.avgpool = AvgPool2d(7)
+        self.fc = Linear(1024, nClasses).cuda()
+
+        return blocks
+
+    def forward(self, x):
+        out = x
+
+        block = self.blocks[0]
+        out = block(out)
+        out = self.maxpool(out)
+
+        for block in self.blocks[1:]:
+            out = block(out)
+
+        out = self.avgpool(out)
+        out = out.view(out.size(0), -1)
+        # narrow linear according to last conv2d layer
+        in_features = int(self.fc.in_features * block.outputLayer().currWidthRatio())
+        out = linear(out, self.fc.weight.narrow(1, 0, in_features), bias=self.fc.bias)
 
         return out
