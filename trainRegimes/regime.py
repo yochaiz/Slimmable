@@ -249,7 +249,6 @@ class TrainRegime:
         # init optimizer
         optimizer = SGD(modelParallel.parameters(), args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
 
-        epoch = 0
         # init table in main logger
         logger.createDataTable(self.initWeightsTrainTableTitle, self.colsMainInitWeightsTrain)
 
@@ -264,14 +263,14 @@ class TrainRegime:
         optimalEpochData = None
 
         # count how many epochs current optimum hasn't changed
+        epoch = 0
         nEpochsOptimum = 0
+        trainLoggerFlag = True
 
         # init scheduler
         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=2, min_lr=args.learning_rate_min)
 
         while nEpochsOptimum <= args.optimal_epochs:
-            # update train logger condition
-            trainLoggerFlag = (epoch % args.logInterval) == 0
             # update epoch number
             epoch += 1
             # init train logger
@@ -279,6 +278,9 @@ class TrainRegime:
             if trainLoggerFlag:
                 trainLogger = HtmlLogger(folderPath, str(epoch))
                 trainLogger.addInfoTable('Learning rates', [['optimizer_lr', self.formats[self.lrKey](optimizer.param_groups[0]['lr'])]])
+
+            # update train logger condition for next epoch
+            trainLoggerFlag = ((epoch + 1) % args.logInterval) == 0
 
             # set loggers dictionary
             loggersDict = dict(train=trainLogger)
