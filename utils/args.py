@@ -60,8 +60,8 @@ def parseArgs():
     parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
     parser.add_argument('--train_regime', default='TrainRegime', choices=trainRegimesNames, help='Training regime')
     parser.add_argument('--alphas_data_parts', type=int, default=4, help='split alphas training data to parts. each loop uses single part')
-    # Conv2d params
-    parser.add_argument('--kernel', type=int, default=3, help='conv kernel size, e.g. 1,3,5')
+    # # Conv2d params
+    # parser.add_argument('--kernel', type=int, default=3, help='conv kernel size, e.g. 1,3,5')
     # width params
     parser.add_argument('--width', type=str, required=True, help='list of width values, e.g. 0.25,0.5,0.75,1.0')
     parser.add_argument('--baseline', type=float, default=None, help='baseline width ratio we want to compare to')
