@@ -60,7 +60,8 @@ class TrainRegime:
 
     def __init__(self, args, logger):
         # get model constructor
-        modelClass = models.__dict__[args.model]
+        modelKey = '{}_{}'.format(args.model, args.dataset)
+        modelClass = models.__dict__[modelKey]
         # init model
         model = modelClass(args)
         model = model.cuda()
