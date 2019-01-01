@@ -162,7 +162,7 @@ class ResNet18_Imagenet(ResNet18):
         # create list of blocks from blocksPlanes
         blocks = ModuleList()
         # output size is divided by 2 due to maxpool after 1st conv layer
-        prevLayer = Input(3, input_size / 2)
+        prevLayer = Input(3, int(input_size / 2))
 
         for i, (blockType, out_planes) in enumerate(blocksPlanes):
             # increase number of out_planes
