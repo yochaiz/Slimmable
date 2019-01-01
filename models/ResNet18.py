@@ -46,19 +46,21 @@ class BasicBlock(Block):
         # init function to calculate residual
         self.residual = self.standardResidual if self.downsample is None else self.downsampleResidual
 
+    @staticmethod
     # calc residual without downsample
-    def standardResidual(self, x):
+    def standardResidual(downsample, x):
         return x
 
+    @staticmethod
     # calc residual with downsample
-    def downsampleResidual(self, x):
-        return self.downsample(x)
+    def downsampleResidual(downsample, x):
+        return downsample(x)
 
     def forward(self, x):
         out = self.conv1(x)
         out = self.relu1(out)
         out = self.conv2(out)
-        out += self.residual(x)
+        out += self.residual(self.downsample, x)
         out = self.relu2(out)
 
         return out
