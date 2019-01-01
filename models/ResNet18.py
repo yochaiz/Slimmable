@@ -7,9 +7,9 @@ from .BaseNet import BaseNet, Block, ConvSlimLayer
 
 
 class Input:
-    def __init__(self, channels, input_size):
+    def __init__(self, channels, output_size):
         self.channels = channels
-        self.input_size = input_size
+        self.output_size = output_size
 
     # number of channels in input
     def currWidth(self):
@@ -22,7 +22,7 @@ class Input:
         return [self.channels]
 
     def outputSize(self):
-        return self.input_size
+        return self.output_size
 
 
 class BasicBlock(Block):
@@ -161,7 +161,8 @@ class ResNet18_Imagenet(ResNet18):
 
         # create list of blocks from blocksPlanes
         blocks = ModuleList()
-        prevLayer = Input(3, input_size)
+        # output size is divided by 2 due to maxpool after 1st conv layer
+        prevLayer = Input(3, input_size / 2)
 
         for i, (blockType, out_planes) in enumerate(blocksPlanes):
             # increase number of out_planes
