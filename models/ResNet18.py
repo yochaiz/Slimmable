@@ -133,6 +133,9 @@ class ResNet18_Cifar(ResNet18):
 
         return blocks
 
+    def additionalLayersToLog(self):
+        return [self.avgpool, self.fc]
+
     def forward(self, x):
         out = x
         for block in self.blocks:
@@ -188,6 +191,9 @@ class ResNet18_Imagenet(ResNet18):
         self.fc = Linear(1024, nClasses).cuda()
 
         return blocks
+
+    def additionalLayersToLog(self):
+        return [self.maxpool, self.avgpool, self.fc]
 
     def forward(self, x):
         out = x

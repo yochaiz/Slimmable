@@ -224,6 +224,9 @@ class BaseNet(Module):
     def baselineFlopsKey():
         return BaseNet._baselineFlopsKey
 
+    def additionalLayersToLog(self):
+        return []
+
     def countFlops(self):
         return sum([block.countFlops() for block in self.blocks])
 
@@ -360,6 +363,13 @@ class BaseNet(Module):
 
             dataRow = {layerIdxKey: layerIdx, nFiltersKey: layer.outputChannels(), widthsKey: [widths], layerArchKey: layer}
             logger.addDataRow(dataRow)
+
+        layerIdx += 1
+        # log additional layers, like Linear, MaxPool2d, AvgPool2d
+        for layer in self.additionalLayersToLog():
+            dataRow = {layerIdxKey: layerIdx, layerArchKey: layer}
+            logger.addDataRow(dataRow)
+            layerIdx += 1
 
         # # log layers alphas distribution
         # self.logDominantQuantizedOp(len(bitwidths), loggerFuncs=[lambda k, rows: logger.addInfoTable(alphasKey, rows)])
