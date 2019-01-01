@@ -4,8 +4,10 @@ from numpy import argsort
 from functools import reduce
 from os.path import exists
 
+from torch import zeros
 from torch import load as loadModel
 from torch.nn import Module, ModuleList, Conv2d, BatchNorm2d
+from torch.nn import functional as F
 from torch.nn.functional import conv2d
 
 from utils.HtmlLogger import HtmlLogger
@@ -32,6 +34,7 @@ class SlimLayer(Block):
     def __init__(self, buildParams, widthRatioList, widthList, prevLayer):
         super(SlimLayer, self).__init__()
 
+        assert (len(widthRatioList) == len(widthList))
         # save previous layer
         self.prevLayer = [prevLayer]
 
@@ -41,6 +44,9 @@ class SlimLayer(Block):
         self._widthList = widthList
         # init current number of filters index
         self._currWidthIdx = 0
+
+        # init alphas
+        self._alphas = zeros(len(widthList), requires_grad=True).cuda()
 
         # init forward counters
         self._forwardCounters = self._initForwardCounters()
@@ -67,6 +73,9 @@ class SlimLayer(Block):
 
     def countFlops(self):
         return self.flopsDict[(self.prevLayer[0].currWidth(), self.currWidth())]
+
+    def alphas(self):
+        return self._alphas
 
     def widthList(self):
         return self._widthList
@@ -347,6 +356,44 @@ class BaseNet(Module):
             # load pre-trained model if we tried to load pre-trained
             logger.addInfoTable('Pre-trained model', loggerRows)
 
+    def _topAlphas(self, k):
+        top = []
+        for layer in self.layersList():
+            alphas = layer.alphas()
+            # calc weights from alphas and sort them
+            weights = F.softmax(alphas, dim=-1)
+            wSorted, wIndices = weights.sort(descending=True)
+            # keep only top-k
+            wSorted = wSorted[:k]
+            wIndices = wIndices[:k]
+            # get layer widths
+            widths = layer.widthList()
+            # add to top
+            top.append([(i, w.item(), alphas[i], widths[i]) for w, i in zip(wSorted, wIndices)])
+
+        return top
+
+    def logTopAlphas(self, k, loggerFuncs=[]):
+        if (not loggerFuncs) or (len(loggerFuncs) == 0):
+            return
+
+        rows = [['Layer #', 'Alphas']]
+        alphaCols = ['Index', 'Ratio', 'Value', 'Width']
+
+        top = self._topAlphas(k=k)
+        for i, layerTop in enumerate(top):
+            layerRow = [alphaCols]
+            for idx, w, alpha, width in layerTop:
+                alphaRow = [idx, '{:.5f}'.format(w), '{:.5f}'.format(alpha), width]
+                # add alpha data row to layer data table
+                layerRow.append(alphaRow)
+            # add layer data table to model table as row
+            rows.append([i, layerRow])
+
+        # apply loggers functions
+        for f in loggerFuncs:
+            f(k, rows)
+
     def printToFile(self, saveFolder):
         logger = HtmlLogger(saveFolder, 'model')
         logger.setMaxTableCellLength(1000)
@@ -371,8 +418,8 @@ class BaseNet(Module):
             logger.addDataRow(dataRow)
             layerIdx += 1
 
-        # # log layers alphas distribution
-        # self.logDominantQuantizedOp(len(bitwidths), loggerFuncs=[lambda k, rows: logger.addInfoTable(alphasKey, rows)])
+        # log layers alphas distribution
+        self.logTopAlphas(len(widths), loggerFuncs=[lambda k, rows: logger.addInfoTable(alphasKey, rows)])
 
     def _resetForwardCounters(self):
         for layer in self.layersList():
