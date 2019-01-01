@@ -4,6 +4,7 @@ from os import makedirs
 from os.path import exists
 
 from torch import tensor, no_grad
+from torch.nn.parallel.data_parallel import DataParallel
 from torch.nn import CrossEntropyLoss
 from torch.optim.sgd import SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -66,9 +67,9 @@ class TrainRegime:
         model = modelClass(args)
         model = model.cuda()
         # create DataParallel model instance
-        self.modelParallel = model
-        # self.modelParallel = DataParallel(model, args.gpu)
-        # assert (id(model) == id(self.modelParallel.module))
+        # self.modelParallel = model
+        self.modelParallel = DataParallel(model, args.gpu)
+        assert (id(model) == id(self.modelParallel.module))
 
         # load data
         self.train_queue, self.search_queue, self.valid_queue = load_data(args)
