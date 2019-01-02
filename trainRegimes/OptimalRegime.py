@@ -3,11 +3,11 @@ from .regime import TrainRegime
 
 class OptimalRegime(TrainRegime):
     def __init__(self, args, logger):
-        super(OptimalRegime, self).__init__(args, logger)
-
         # update values
         args.train_portion = 1.0
-        args.batch_size = 250
+        # args.batch_size = 250
+
+        super(OptimalRegime, self).__init__(args, logger)
 
     def train(self):
         # train model weights
