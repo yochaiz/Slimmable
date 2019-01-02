@@ -40,6 +40,7 @@ def train(scriptArgs):
     cuda_manual_seed(args.seed)
     # update values
     args.gpu = scriptArgs.gpu
+    args.workers = scriptArgs.workers
     args.data = scriptArgs.data
     args.pre_trained = scriptArgs.pre_trained
     args.optimal_epochs = scriptArgs.optimal_epochs
@@ -77,6 +78,7 @@ parser = ArgumentParser()
 parser.add_argument('--json', type=str, required=True, help='JSON file path')
 parser.add_argument('--data', type=str, required=True, help='datasets folder path')
 parser.add_argument('--gpu', type=str, default='0', help='gpu device id, e.g. 0,1,3')
+parser.add_argument('--workers', type=int, default=4, choices=range(1, 32), help='num of workers')
 parser.add_argument('--optimal_epochs', type=int, default=150, help='stop training weights if there is no new optimum in last optimal_epochs')
 parser.add_argument('--pre_trained', type=str, default=None, help='pre-trained model to copy weights from')
 parser.add_argument('--individual', action='store_true', default=False, help='Trains the partition individually in case value is True')
