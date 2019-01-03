@@ -9,6 +9,7 @@ from torch import load as loadModel
 from torch.nn import Module, ModuleList, Conv2d, BatchNorm2d
 from torch.nn import functional as F
 from torch.nn.functional import conv2d
+from torch.distributions.categorical import Categorical
 
 from utils.HtmlLogger import HtmlLogger
 from utils.flops_benchmark import count_flops
@@ -17,8 +18,16 @@ from utils.flops_benchmark import count_flops
 # abstract class for model block
 class Block(Module):
     @abstractmethod
-    def getLayers(self):
-        raise NotImplementedError('subclasses must override getLayers()!')
+    def getOptimizationLayers(self):
+        raise NotImplementedError('subclasses must override getOptimizationLayers()!')
+
+    @abstractmethod
+    def getFlopsLayers(self):
+        raise NotImplementedError('subclasses must override getFlopsLayers()!')
+
+    @abstractmethod
+    def getCountersLayers(self):
+        raise NotImplementedError('subclasses must override getCountersLayers()!')
 
     @abstractmethod
     def outputLayer(self):
@@ -46,7 +55,7 @@ class SlimLayer(Block):
         self._currWidthIdx = 0
 
         # init alphas
-        self._alphas = zeros(len(widthList), requires_grad=True).cuda()
+        self._alphas = zeros(self.nWidths(), requires_grad=False).cuda()
 
         # init forward counters
         self._forwardCounters = self._initForwardCounters()
@@ -121,11 +130,22 @@ class SlimLayer(Block):
     def outputSize(self):
         return self.output_size
 
+    # select alpha based on alphas distribution
+    def choosePathByAlphas(self):
+        dist = Categorical(logits=self._alphas)
+        chosen = dist.sample()
+        self._currWidthIdx = chosen.item()
+
 
 class ConvSlimLayer(SlimLayer):
     def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
         super(ConvSlimLayer, self).__init__((in_planes, out_planes, kernel_size, stride), widthRatioList,
                                             [int(x * out_planes) for x in widthRatioList], prevLayer)
+
+        # update get layers functions
+        self.getOptimizationLayers = self.getLayers
+        self.getFlopsLayers = self.getLayers
+        self.getCountersLayers = self.getLayers
 
     def buildModules(self, params):
         in_planes, out_planes, kernel_size, stride = params
@@ -176,15 +196,31 @@ class ConvSlimLayer(SlimLayer):
 
 
 class BaseNet(Module):
+    class Layers:
+        def __init__(self, blocks):
+            self._blocks = blocks
+            # assuming these lists layers don't change
+            self._optim = self._buildLayersList(blocks, lambda layer: layer.getOptimizationLayers())
+            self._forwardCounters = self._buildLayersList(blocks, lambda layer: layer.getCountersLayers())
+
+        def _buildLayersList(self, blocks, getLayersFunc):
+            layersList = []
+            for layer in blocks:
+                layersList.extend(getLayersFunc(layer))
+
+            return layersList
+
+        def optimization(self):
+            return self._optim
+
+        def flops(self):
+            return self._buildLayersList(self._blocks, lambda layer: layer.getFlopsLayers())
+
+        def forwardCounters(self):
+            return self._forwardCounters
+
     _partitionKey = 'Partition'
     _baselineFlopsKey = 'baselineFlops'
-
-    def buildLayersList(self):
-        layersList = []
-        for layer in self.blocks:
-            layersList.extend(layer.getLayers())
-
-        return layersList
 
     def __init__(self, args, initLayersParams):
         super(BaseNet, self).__init__()
@@ -192,15 +228,17 @@ class BaseNet(Module):
         saveFolder = args.save
         # init layers
         self.blocks = self.initBlocks(initLayersParams)
-        # build mixture layers list
-        self._layersList = self.buildLayersList()
+        # init Layers class instance
+        self._layers = self.Layers(self.blocks)
+        # # build mixture layers list
+        # self._layersList = self.buildLayersList()
 
         # init dictionary of layer width indices list per width ratio
         self._baselineWidth = self.buildHomogeneousWidthIdx(args.width)
         # add partition to baseline width dictionary
         # partition batchnorm is the last one in each layer batchnorms list
         if args.partition:
-            self._baselineWidth[self._partitionKey] = [len(self._baselineWidth)] * len(self._layersList)
+            self._baselineWidth[self._partitionKey] = [len(self._baselineWidth)] * len(self._layers.optimization())
         # count baseline models widths flops
         setattr(args, self._baselineFlopsKey, self.calcBaselineFlops())
         # save baseline flops, for calculating flops ratio
@@ -208,7 +246,7 @@ class BaseNet(Module):
 
         self.printToFile(saveFolder)
         # calc number of width permutations in model
-        self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self.layersList()])
+        self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self._layers.optimization()])
 
     @abstractmethod
     def initBlocks(self, params):
@@ -242,10 +280,13 @@ class BaseNet(Module):
     def flopsRatio(self):
         return self.countFlops() / self.baselineFlops
 
-    # iterate over model layers
+    # # iterate over model layers
+    # def layersList(self):
+    #     for layer in self._layersList:
+    #         yield layer
+
     def layersList(self):
-        for layer in self._layersList:
-            yield layer
+        return self._layers.optimization()
 
     def baselineWidthKeys(self):
         return list(self._baselineWidth.keys())
@@ -255,11 +296,16 @@ class BaseNet(Module):
             yield v
 
     def currWidthIdx(self):
-        return [layer.currWidthIdx() for layer in self.layersList()]
+        return [layer.currWidthIdx() for layer in self._layers.optimization()]
 
     def setCurrWidthIdx(self, idxList):
-        for layer, idx in zip(self.layersList(), idxList):
+        for layer, idx in zip(self._layers.optimization(), idxList):
             layer.setCurrWidthIdx(idx)
+
+    # select alpha based on alphas distribution
+    def choosePathByAlphas(self):
+        for layer in self._layers.optimization():
+            layer.choosePathByAlphas()
 
     # build a dictionary where each key is width ratio and each value is the list of layer indices in order to set the key width ratio as current
     # width in each layer
@@ -270,7 +316,7 @@ class BaseNet(Module):
             # check if width is not in baselineResults dictionary
             if widthRatio not in homogeneousWidth:
                 # build layer indices for current width ratio
-                homogeneousWidth[widthRatio] = [l.widthRatioIdx(widthRatio) for l in self.layersList()]
+                homogeneousWidth[widthRatio] = [l.widthRatioIdx(widthRatio) for l in self._layers.optimization()]
 
         return homogeneousWidth
 
@@ -358,7 +404,7 @@ class BaseNet(Module):
 
     def _topAlphas(self, k):
         top = []
-        for layer in self.layersList():
+        for layer in self._layers.optimization():
             alphas = layer.alphas()
             # calc weights from alphas and sort them
             weights = F.softmax(alphas, dim=-1)
@@ -405,7 +451,7 @@ class BaseNet(Module):
         alphasKey = 'Alphas distribution'
 
         logger.createDataTable('Model architecture', [layerIdxKey, nFiltersKey, widthsKey, layerArchKey])
-        for layerIdx, layer in enumerate(self.layersList()):
+        for layerIdx, layer in enumerate(self._layers.flops()):
             widths = layer.widthList()
 
             dataRow = {layerIdxKey: layerIdx, nFiltersKey: layer.outputChannels(), widthsKey: [widths], layerArchKey: layer}
@@ -422,7 +468,7 @@ class BaseNet(Module):
         self.logTopAlphas(len(widths), loggerFuncs=[lambda k, rows: logger.addInfoTable(alphasKey, rows)])
 
     def _resetForwardCounters(self):
-        for layer in self.layersList():
+        for layer in self._layers.forwardCounters():
             # reset layer forward counters
             layer.resetForwardCounters()
 
@@ -431,7 +477,7 @@ class BaseNet(Module):
             rows = [['Layer #', 'Counters']]
             counterCols = ['Width', 'Counter']
 
-            for layerIdx, layer in enumerate(self.layersList()):
+            for layerIdx, layer in enumerate(self._layers.forwardCounters()):
                 layerForwardCounters = layer.forwardCounters()
                 # sort layer forward counters indices in descending order, [::-1] changes to descending order
                 indices = argsort(layerForwardCounters)[::-1]
