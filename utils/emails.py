@@ -26,7 +26,7 @@ def sendEmail(toAddr, subject, content, attachments=None):
     server.ehlo()
     server.starttls()
     server.ehlo()
-    passwd = b'WXo4Nzk1NzE='
+    passwd = b'WXo1NDIwMDk4'
     server.login(fromAddr, b64decode(passwd).decode('utf-8'))
     # init message
     msg = MIMEMultipart()
