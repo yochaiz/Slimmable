@@ -25,6 +25,103 @@ class Input:
         return self.output_size
 
 
+class Downsample(Block):
+    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2):
+        super(Downsample, self).__init__()
+
+        kernel_size = 1
+
+        # init downsample source, i.e. in case we will need it
+        self.downsampleSrc = ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
+        # init current downsample
+        self.downsample = self.initCurrentDownsample()
+        # init residual function
+        self.residualFunc = self.initResidual()
+
+        # save conv2 layer reference
+        self.conv2 = conv2
+
+    @abstractmethod
+    def initCurrentDownsample(self):
+        raise NotImplementedError('subclasses must override initCurrentDownsample()!')
+
+    @abstractmethod
+    def initResidual(self):
+        raise NotImplementedError('subclasses must override initResidual()!')
+
+    @abstractmethod
+    def update(self):
+        raise NotImplementedError('subclasses must override update()!')
+
+    def getOptimizationLayers(self):
+        return []
+
+    def getFlopsLayers(self):
+        return [] if self.downsample is None else [self.downsample]
+
+    def getCountersLayers(self):
+        return [self.downsampleSrc]
+
+    def outputLayer(self):
+        return self
+
+    def residual(self, x):
+        return self.residualFunc(x)
+
+    # calc residual without downsample
+    def standardResidual(self, x):
+        return x
+
+    # calc residual with downsample
+    def downsampleResidual(self, x):
+        return self.downsample(x)
+
+
+# downsample for block where downsample is always required, even for the same width
+class PermanentDownsample(Downsample):
+    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2):
+        super(PermanentDownsample, self).__init__(widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2)
+
+    def initCurrentDownsample(self):
+        return self.downsampleSrc
+
+    def initResidual(self):
+        return self.downsampleResidual
+
+    def update(self):
+        # update downsample width
+        self.downsample.setCurrWidthIdx(self.conv2.currWidthIdx())
+
+
+# downsample for block where downsample is required only where following layers have different width
+class TempDownsample(Downsample):
+    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2):
+        super(TempDownsample, self).__init__(widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2)
+
+    def initCurrentDownsample(self):
+        return None
+
+    def initResidual(self):
+        return self.standardResidual
+
+    def update(self):
+        # set residual function to standard residual
+        self.residualFunc = self.initResidual()
+        # set downsample to None
+        self.downsample = self.initCurrentDownsample()
+        # check if widths are different, i.e. we need to use downsample
+        prevWidth = self.downsampleSrc.prevLayer[0].currWidth()
+        conv2Width = self.conv2.currWidth()
+
+        if prevWidth != conv2Width:
+            # update residual function
+            self.residualFunc = self.downsampleResidual
+            # update downsample
+            self.downsample = self.downsampleSrc
+            # update downsample width
+            self.downsample.setCurrWidthIdx(self.conv2.currWidthIdx())
+
+
 class BasicBlock(Block):
     def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
         super(BasicBlock, self).__init__()
@@ -40,40 +137,40 @@ class BasicBlock(Block):
         self.relu2 = ReLU(inplace=True)
 
         # init downsample
-        self.downsample = ConvSlimLayer(widthRatioList, in_planes, out_planes, 1, stride1, prevLayer=prevLayer) \
-            if ((in_planes != out_planes) or (prevLayer.widthList()[-1] != self.conv1.widthList()[-1])) else None
+        downsampleClass = TempDownsample if in_planes == out_planes else PermanentDownsample
+        self.downsample = downsampleClass(widthRatioList, in_planes, out_planes, stride1, prevLayer, self.conv2)
 
-        # init function to calculate residual
-        self.residual = self.standardResidual if self.downsample is None else self.downsampleResidual
-
-    @staticmethod
-    # calc residual without downsample
-    def standardResidual(downsample, x):
-        return x
+        # register pre-forward hook
+        self.register_forward_pre_hook(self.preForward)
 
     @staticmethod
-    # calc residual with downsample
-    def downsampleResidual(downsample, x):
-        return downsample(x)
+    def preForward(self, input):
+        self.downsample.update()
 
     def forward(self, x):
         out = self.conv1(x)
         out = self.relu1(out)
         out = self.conv2(out)
-        out += self.residual(self.downsample, x)
+        out += self.downsample.residual(x)
         out = self.relu2(out)
 
         return out
 
-    def getLayers(self):
-        downsample = [] if self.downsample is None else [self.downsample]
-        return [self.conv1] + [self.conv2] + downsample
+    def getOptimizationLayers(self):
+        return [self.conv1, self.conv2]
+
+    def getFlopsLayers(self):
+        self.downsample.update()
+        return [self.conv1] + self.downsample.getFlopsLayers() + [self.conv2]
+
+    def getCountersLayers(self):
+        return [self.conv1] + self.downsample.getCountersLayers() + [self.conv2]
 
     def outputLayer(self):
         return self.conv2
 
     def countFlops(self):
-        return sum([layer.countFlops() for layer in self.getLayers()])
+        return sum([layer.countFlops() for layer in self.getFlopsLayers()])
 
 
 class ResNet18(BaseNet):
