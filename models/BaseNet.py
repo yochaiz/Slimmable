@@ -103,6 +103,9 @@ class SlimLayer(Block):
     def widthByIdx(self, idx):
         return self._widthList[idx]
 
+    def widthRatioByIdx(self, idx):
+        return self._widthRatioList[idx]
+
     def currWidthIdx(self):
         return self._currWidthIdx
 
