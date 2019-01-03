@@ -1,3 +1,5 @@
+from scipy.stats import entropy
+
 from torch import tensor, zeros
 from torch.nn import functional as F
 
@@ -22,6 +24,7 @@ class SearchRegime(TrainRegime):
 
     def trainAlphas(self, epoch, loggers):
         print('*** trainAlphas() ***')
+        model = self.model
         modelParallel = self.modelParallel
         search_queue = self.search_queue[0]
 
@@ -39,6 +42,24 @@ class SearchRegime(TrainRegime):
             modelParallel.eval()
             # evaluate on samples and calc alphas gradients
             self._samplesSamePath(input, target)
+            # update entropy (after optimizer step)
+            self._calcAlphasDistStats(model)
+            # update statistics plots
+            self.statistics.plotData()
+
+            endTime = time()
+
+    def _calcAlphasDistStats(self, model):
+        stats = self.statistics
+        for layerIdx, layer in enumerate(model.layersList()):
+            # calc layer alphas distribution
+            probs = F.softmax(layer.alphas(), dim=-1)
+            # add entropy to statistics
+            stats.addValue(lambda containers: containers[self.entropyKey][0][layerIdx], entropy(probs))
+            # add alphas distribution
+            for alphaIdx, p in enumerate(probs):
+                alphaTitle = self._alphaPlotTitle(layer, alphaIdx)
+                stats.addValue(lambda containers: containers[self.alphaDistributionKey][layerIdx][alphaTitle], p.item())
 
     # given paths history dictionary and current path, checks if current path exists in history dictionary
     def _doesPathExist(self, pathsHistoryDict, currPath):
@@ -64,6 +85,8 @@ class SearchRegime(TrainRegime):
 
         # init containers to save loss values and variance
         lossValues = [[[] for _ in range(layer.nWidths())] for layer in model.layersList()]
+        ceLossValues = [[0.0 for _ in range(layer.nWidths())] for layer in model.layersList()]
+        flopsLossValues = [[0.0 for _ in range(layer.nWidths())] for layer in model.layersList()]
 
         # iterate over samples. generate a sample (path) and evaluate alphas on sample
         for _ in range(nSamples):
@@ -95,6 +118,8 @@ class SearchRegime(TrainRegime):
                     loss, crossEntropyLoss, flopsLoss = self.flopsLoss(logits, target, model.countFlops())
                     # add loss to container
                     layerLossValues[idx].append(loss.item())
+                    ceLossValues[layerIdx][idx] += crossEntropyLoss.item()
+                    flopsLossValues[layerIdx][idx] += flopsLoss.item()
 
                 # restore layer current width idx
                 layer.setCurrWidthIdx(layerCurrWidthIdx)
@@ -103,30 +128,35 @@ class SearchRegime(TrainRegime):
         totalLoss = 0.0
         # init alphas gradients
         alphasGrad = []
-        # init loss variance container
-        lossVariance = []
+        # get statistics element with a shorter name
+        stats = self.statistics
         # after we finished iterating over samples, we can calculate loss average & variance for each alpha
-        for layer, layerLossValues in zip(model.layersList(), lossValues):
-            # init layer loss variance container
-            layerLossVariance = []
+        for layerIdx, (layer, layerLossValues) in enumerate(zip(model.layersList(), lossValues)):
             # calc layer alphas probabilities
             probs = F.softmax(layer.alphas(), dim=-1)
             # init layer alphas gradient vector
             layerAlphasGrad = zeros(layer.nWidths()).cuda()
             for idx, alphaLossValues in enumerate(layerLossValues):
                 # calc alpha average loss
-                alphaLossAvg = tensor(sum(alphaLossValues) / nSamples).cuda()
+                alphaLossAvg = sum(alphaLossValues) / nSamples
                 # update alpha gradient
-                layerAlphasGrad[idx] = alphaLossAvg
+                layerAlphasGrad[idx] = tensor(alphaLossAvg).cuda()
                 # update total loss
                 totalLoss += (alphaLossAvg * probs[idx])
                 # calc alpha loss variance
                 alphaLossVariance = [((x - alphaLossAvg) ** 2) for x in alphaLossValues]
                 alphaLossVariance = sum(alphaLossVariance) / (nSamples - 1)
-                layerLossVariance.append(alphaLossVariance)
+                # add values to statistics
+                alphaTitle = self._alphaPlotTitle(layer, idx)
+                # init template for get list function based on container key
+                getListFunc = lambda key: lambda containers: containers[key][layerIdx][alphaTitle]
+                # add values
+                stats.addValue(getListFunc(self.lossAvgKey), alphaLossAvg)
+                stats.addValue(getListFunc(self.crossEntropyLossAvgKey), ceLossValues[layerIdx][idx] / nSamples)
+                stats.addValue(getListFunc(self.flopsLossAvgKey), flopsLossValues[layerIdx][idx] / nSamples)
+                stats.addValue(getListFunc(self.lossVarianceKey), alphaLossVariance)
 
             alphasGrad.append(layerAlphasGrad)
-            lossVariance.append(layerLossVariance)
 
 # ======= compare replicator vs. standard model, who is FASTER ===========
 # init model constructor func
