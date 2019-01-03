@@ -14,21 +14,21 @@ class LossFunction:
         self.minFlops = minFlops
 
     def calcLoss(self, modelFlops):
-        v = (modelFlops / self.minBops) ** 2
+        v = (modelFlops / self.minFlops) ** 2
         return tensor(v, dtype=float32).cuda()
 
 
 class FlopsLoss(Module):
-    def __init__(self, args, baselineFlops):
+    def __init__(self, args, baselineFlopsDict):
         super(FlopsLoss, self).__init__()
 
         self.lmbda = args.lmbda
         self.crossEntropyLoss = CrossEntropyLoss().cuda()
-        self.baselineFlops = baselineFlops
+        self.baselineFlops = baselineFlopsDict.get(args.baseline)
 
         self.flopsLoss = LossFunction(self.baselineFlops).calcLoss
         self.flopsLossImgPath = '{}/flops_loss_func.pdf'.format(args.save)
-        self._plotFunction(self.flopsLoss)
+        self._plotFunction(self.flopsLoss, min(baselineFlopsDict.values()), max(baselineFlopsDict.values()))
 
     def forward(self, input, target, modelFlops):
         crossEntropyLoss = self.crossEntropyLoss(input, target)
@@ -36,13 +36,12 @@ class FlopsLoss(Module):
         totalLoss = crossEntropyLoss + flopsLoss
         return totalLoss, crossEntropyLoss, flopsLoss
 
-    def _plotFunction(self, func):
+    def _plotFunction(self, func, xMin,xMax):
         # build data for function
-        xMax = 5
-        nPts = (xMax * 100) + 1
-        ptsGap = int((nPts - 1) / 50)
+        nPts = (5 * 100) + 1
+        ptsGap = int((nPts - 1) / 20)
 
-        pts = linspace(0, xMax, nPts).tolist()
+        pts = linspace(xMin, xMax, nPts).tolist()
         y = [round(func(x).item(), 5) for x in pts]
         data = [[pts, y, 'bo']]
         pts = [pts[x] for x in range(0, nPts, ptsGap)]
