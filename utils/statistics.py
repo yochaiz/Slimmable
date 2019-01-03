@@ -1,4 +1,3 @@
-from scipy.stats import entropy
 from os import makedirs, path
 from math import ceil
 from io import BytesIO
@@ -6,7 +5,6 @@ from base64 import b64encode
 from urllib.parse import quote
 from numpy import linspace
 
-import torch.nn.functional as F
 from torch import save as saveFile
 
 import matplotlib
@@ -18,16 +16,6 @@ from matplotlib.backends.backend_pdf import PdfPages
 
 
 class Statistics:
-    _entropyKey = 'alphas_entropy'
-    _alphaDistributionKey = 'alphas_distribution'
-    _lossVarianceKey = 'loss_variance'
-    _lossAvgKey = 'loss_avg'
-    _crossEntropyLossAvgKey = 'cross_entropy_loss_avg'
-    _flopsLossAvgKey = 'flops_loss_avg'
-    _flopsKey = 'flops'
-    _weightsLossKey = 'weights_loss'
-    _weightsAccKey = 'weights_acc'
-
     # set plot points style
     ptsStyle = '-'
 
@@ -35,7 +23,7 @@ class Statistics:
     nColsMax = 7
     nRowsDefault = 3
 
-    def __init__(self, saveFolder):
+    def __init__(self, containers, saveFolder):
         # create plot folder
         plotFolderPath = '{}/plots'.format(saveFolder)
         if not path.exists(plotFolderPath):
@@ -43,19 +31,7 @@ class Statistics:
 
         self.saveFolder = plotFolderPath
         # init containers
-        self.containers = {
-            # self._entropyKey: [[] for _ in range(nLayers)],
-            # self._lossVarianceKey: [[]], self._alphaDistributionKey: [[[] for _ in range(layer.numOfOps())] for layer in layersList],
-            self._lossAvgKey: [[]], self._crossEntropyLossAvgKey: [[]], self._flopsLossAvgKey: [[]],
-            self._weightsLossKey: {}, self._weightsAccKey: {}
-
-        }
-        # map each list we plot for all layers on single plot to filename
-        self.plotAllLayersKeys = [self._entropyKey, self._lossAvgKey, self._crossEntropyLossAvgKey, self._flopsLossAvgKey, self._lossVarianceKey]
-        self.plotLayersSeparateKeys = [self._alphaDistributionKey]
-        self.containersToPlot = [self._weightsLossKey, self._weightsAccKey]
-        # init number of batches
-        self.nBatches = 0
+        self._containers = containers
         # init colors map
         self.colormap = plt.cm.hot
         # init plots data dictionary
@@ -68,22 +44,26 @@ class Statistics:
     def flopsKey():
         return Statistics._flopsKey
 
-    # data is a list of dictionaries
-    def addBatchData(self, loss, acc):
-        # update number of batches
-        self.nBatches += 1
-        # add data
-        data = [(loss, self._weightsLossKey), (acc, self._weightsAccKey)]
-        for dataElement, dataKey in data:
-            container = self.containers[dataKey]
-            for title, value in dataElement.items():
-                # init new list to new title
-                if title not in container:
-                    container[title] = []
-                # add value to title list
-                container[title].append(value)
+    def addValue(self, getListFunc, value):
+        list = getListFunc(self._containers)
+        list.append(value)
 
-        self.plotData()
+    # # data is a list of dictionaries
+    # def addBatchData(self, loss, acc):
+    #     # update number of batches
+    #     self.nBatches += 1
+    #     # add data
+    #     data = [(loss, self._weightsLossKey), (acc, self._weightsAccKey)]
+    #     for dataElement, dataKey in data:
+    #         container = self._containers[dataKey]
+    #         for title, value in dataElement.items():
+    #             # init new list to new title
+    #             if title not in container:
+    #                 container[title] = []
+    #             # add value to title list
+    #             container[title].append(value)
+    #
+    #     self.plotData()
 
     # def addBatchData(self, model):
     #     # update number of batches
@@ -197,7 +177,7 @@ class Statistics:
         Statistics.__setAxesProperties(ax, xLabel, yLabel, yMax, title, yMin)
         Statistics.__setFigProperties(fig)
 
-    def __plotContainer(self, data, xValues, xLabel, yLabel, title, labelFunc, axOther=None, scale=True, annotate=None):
+    def __plotContainer(self, data, xLabel, yLabel, title, axMerged=None, scale=True, annotate=None):
         # create plot
         fig, ax = plt.subplots(nrows=1, ncols=1)
         # init ylim values
@@ -208,24 +188,27 @@ class Statistics:
         # init colors
         colors = [self.colormap(i) for i in linspace(0.6, 0.0, len(data))]
         # reset plot data in plotsData dictionary
-        self.plotsData[title] = dict(x=xValues, data=[])
+        # self.plotsData[title] = dict(x=xValues, data=[])
+        self.plotsData[title] = []
 
         # for i, layerData in enumerate(data):
         for i, (key, keyDataList) in enumerate(data.items()):
             # set arguments
             label = key
             color = colors[i]
-            # plot by shortest length between xValues, layerData
-            plotLength = min(len(xValues), len(keyDataList))
-            xValues = xValues[:plotLength]
-            keyDataList = keyDataList[:plotLength]
+            # # plot by shortest length between xValues, layerData
+            # plotLength = min(len(xValues), len(keyDataList))
+            # xValues = xValues[:plotLength]
+            # keyDataList = keyDataList[:plotLength]
 
             # add data to plotsData
-            self.plotsData[title]['data'].append(dict(y=keyDataList, style=self.ptsStyle, label=label, color=color))
+            # self.plotsData[title]['data'].append(dict(y=keyDataList, style=self.ptsStyle, label=label, color=color))
+            self.plotsData[title].append(dict(y=keyDataList, style=self.ptsStyle, label=label, color=color))
             # plot
+            xValues = list(range(len(keyDataList)))
             ax.plot(xValues, keyDataList, self.ptsStyle, label=label, c=color)
-            if axOther:
-                axOther.plot(xValues, keyDataList, self.ptsStyle, label=label, c=color)
+            if axMerged:
+                axMerged.plot(xValues, keyDataList, self.ptsStyle, label=label, c=color)
 
             isPlotEmpty = False
             dataMax = max(dataMax, max(keyDataList))
@@ -241,12 +224,12 @@ class Statistics:
             yMax = dataMax * 1.1
 
             # don't scale axOther
-            if axOther:
-                if yLabel == self._alphaDistributionKey:
-                    yMax = 1.1
-
-                axOther.grid()
-                self.__setAxesProperties(axOther, xLabel, yLabel, yMax, title)
+            if axMerged:
+                # if yLabel == self._alphaDistributionKey:
+                #     yMax = 1.1
+                #
+                #     axMerged.grid()
+                self.__setAxesProperties(axMerged, xLabel, yLabel, yMax, title)
 
             if scale:
                 yMax = min(yMax, (sum(dataSum) / len(dataSum)) * 1.5)
@@ -279,45 +262,38 @@ class Statistics:
         return nRowsOpt, nColsOpt
 
     def plotData(self):
-        # set x axis values
-        xValues = list(range(self.nBatches))
         # generate different plots
         # for fileName in self.plotAllLayersKeys:
-        for fileName in self.containersToPlot:
-            data = self.containers[fileName]
-            fig = self.__plotContainer(data, xValues, xLabel='Batch #', yLabel=fileName, title='{} over epochs'.format(fileName),
-                                       labelFunc=lambda x: x)
-
-            self.saveFigPDF([fig], fileName, self.saveFolder)
-
-        return
-
-        for fileName in self.plotLayersSeparateKeys:
-            data = self.containers[fileName]
+        for fileName, dataList in self._containers.items():
             # build subplot for all plots
-            nPlots = len(data)
-            nRows, nCols = self.__findGrid(nPlots)
-            fig, ax = plt.subplots(nrows=nRows, ncols=nCols)
-            axRow, axCol = 0, 0
-            figs = [fig]
-            # add each layer alphas data to plot
-            for i, layerData in enumerate(data):
-                layerFig = self.__plotContainer(layerData, xValues, xLabel='Batch #', axOther=ax[axRow, axCol],
-                                                title='{} --layer:[{}]-- over epochs'.format(fileName, i), yLabel=fileName,
-                                                labelFunc=lambda x: self.layersBitwidths[i][x])
-                figs.append(layerFig)
+            figs = []
+            # init merged plot
+            figMerged, axMerged = None, None
+            nPlots = len(dataList)
+            if nPlots > 1:
+                nRows, nCols = self.__findGrid(nPlots)
+                figMerged, axMerged = plt.subplots(nrows=nRows, ncols=nCols)
+                axRow, axCol = 0, 0
+                figs.append(figMerged)
+            # iterate over data elements
+            for dataIdx, dataDict in enumerate(dataList):
+                ax = axMerged[axRow, axCol] if nPlots > 1 else None
+                fig = self.__plotContainer(dataDict, xLabel='Batch #', yLabel=fileName, axMerged=ax,
+                                           title='[{}]-[{}] over epochs'.format(fileName, dataIdx))
+                # add fig to figs list
+                figs.append(fig)
                 # update next axes indices
                 axCol = (axCol + 1) % nCols
                 if axCol == 0:
                     axRow += 1
 
-            # set fig properties
-            self.__setFigProperties(fig, figSize=(40, 20))
-            # save as HTML
+            # set merged fig properties
+            if figMerged:
+                self.__setFigProperties(figMerged, figSize=(40, 20))
+            # save as PDF
             self.saveFigPDF(figs, fileName, self.saveFolder)
-
-        # save plots data
-        saveFile(self.plotsData, self.plotsDataFilePath)
+            # save plots data
+            saveFile(self.plotsData, self.plotsDataFilePath)
 
 # def plotBops(self, layersList):
 #     # create plot
