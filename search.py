@@ -3,13 +3,12 @@ from numpy import random as nprandom
 from sys import exit
 from traceback import format_exc
 
-# from torch.multiprocessing import set_start_method
 import torch.backends.cudnn as cudnn
 from torch.cuda import is_available, set_device
 from torch.cuda import manual_seed as cuda_manual_seed
 from torch import manual_seed as torch_manual_seed
 
-import trainRegimes
+from trainRegimes.SearchRegime import SearchRegime
 from utils.HtmlLogger import HtmlLogger
 from utils.emails import sendEmail
 from utils.args import parseArgs
@@ -39,8 +38,7 @@ if __name__ == '__main__':
 
     try:
         # build regime for alphas optimization
-        alphasRegimeClass = trainRegimes.__dict__[args.train_regime]
-        alphasRegime = alphasRegimeClass(args, logger)
+        alphasRegime = SearchRegime(args, logger)
         # # train according to chosen regime
         # alphasRegime.train()
         logger.addInfoToDataTable('Done !')
