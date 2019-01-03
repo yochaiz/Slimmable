@@ -58,13 +58,11 @@ class TrainRegime:
     colsMainInitWeightsTrain = [epochNumKey, trainLossKey, trainAccKey, validLossKey, validAccKey, lrKey]
     colsTrainWeights = [batchNumKey, trainLossKey, trainAccKey, timeKey]
     colsValidation = [batchNumKey, validLossKey, validAccKey, timeKey]
+    colsTrainAlphas = [batchNumKey, archLossKey, crossEntropyKey, flopsLossKey, alphasTableTitle, forwardCountersKey, timeKey]
 
     def __init__(self, args, logger):
-        # get model constructor
-        modelKey = '{}_{}'.format(args.model, args.dataset)
-        modelClass = models.__dict__[modelKey]
         # init model
-        model = modelClass(args)
+        model = self.buildModel(args)
         model = model.cuda()
         # create DataParallel model instance
         # self.modelParallel = model
@@ -84,7 +82,6 @@ class TrainRegime:
 
         self.args = args
         self.model = model
-        self.modelClass = modelClass
         self.logger = logger
 
         self.trainFolderPath = '{}/{}'.format(args.save, args.trainFolder)
@@ -95,6 +92,13 @@ class TrainRegime:
     @abstractmethod
     def train(self):
         raise NotImplementedError('subclasses must override train()!')
+
+    def buildModel(self, args):
+        # get model constructor
+        modelKey = '{}_{}'.format(args.model, args.dataset)
+        modelClass = models.__dict__[modelKey]
+
+        return modelClass(args)
 
     # apply defined format functions on dict values by keys
     def _applyFormats(self, dict):
