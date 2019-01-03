@@ -19,6 +19,7 @@ from utils.statistics import Statistics
 
 
 class TrainRegime:
+    # init tables keys
     trainLossKey = 'Training loss'
     trainAccKey = 'Training acc'
     validLossKey = 'Validation loss'
@@ -34,6 +35,17 @@ class TrainRegime:
     lrKey = 'Optimizer lr'
     widthKey = 'Width'
     forwardCountersKey = 'Forward counters'
+
+    # init statistics (plots) keys
+    entropyKey = 'alphas_entropy'
+    alphaDistributionKey = 'alphas_distribution'
+    lossVarianceKey = 'loss_variance'
+    lossAvgKey = 'loss_avg'
+    crossEntropyLossAvgKey = 'cross_entropy_loss_avg'
+    flopsLossAvgKey = 'flops_loss_avg'
+    flopsKey = 'flops'
+    weightsLossKey = 'weights_loss'
+    weightsAccKey = 'weights_acc'
 
     # init formats for keys
     formats = {
@@ -74,8 +86,17 @@ class TrainRegime:
         # load pre-trained model
         model.loadPreTrained(args.pre_trained, logger)
 
-        # # init statistics instance
-        # self.statistics = Statistics(args.save)
+        # build statistics containers
+        containers = {
+            self.lossAvgKey: self._containerPerAlpha(model),
+            self.crossEntropyLossAvgKey: self._containerPerAlpha(model),
+            self.flopsLossAvgKey: self._containerPerAlpha(model),
+            self.lossVarianceKey: self._containerPerAlpha(model),
+            self.alphaDistributionKey: self._containerPerAlpha(model),
+            self.entropyKey: [{layerIdx: [] for layerIdx in range(len(model.layersList()))}]
+        }
+        # init statistics instance
+        self.statistics = Statistics(containers, args.save)
 
         # log parameters
         logParameters(logger, args, model)
@@ -99,6 +120,12 @@ class TrainRegime:
         modelClass = models.__dict__[modelKey]
 
         return modelClass(args)
+
+    def _containerPerAlpha(self, model):
+        return [{self._alphaPlotTitle(layer, idx): [] for idx in range(layer.nWidths())} for layer in model.layersList()]
+
+    def _alphaPlotTitle(self, layer, alphaIdx):
+        return '{} ({})'.format(layer.widthRatioByIdx(alphaIdx), layer.widthByIdx(alphaIdx))
 
     # apply defined format functions on dict values by keys
     def _applyFormats(self, dict):
