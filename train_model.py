@@ -4,15 +4,14 @@ from numpy import random
 from os import path
 
 from torch import load as loadCheckpoint
-from torch import save as saveCheckpoint
 from torch import manual_seed as torch_manual_seed
 from torch.cuda import manual_seed as cuda_manual_seed
 from torch.cuda import is_available, set_device
 import torch.backends.cudnn as cudnn
 
-from trainRegimes.regime import TrainRegime
 from trainRegimes.OptimalRegime import OptimalRegime
 
+from utils.trainWeights import TrainWeights
 from utils.HtmlLogger import HtmlLogger
 from utils.zip import create_exp_dir
 from utils.checkpoint import checkpointFileType
@@ -23,7 +22,7 @@ def train(scriptArgs):
     args = loadCheckpoint(scriptArgs.json, map_location=lambda storage, loc: storage.cuda())
 
     # terminate if validAcc exists
-    if hasattr(args, TrainRegime.validAccKey):
+    if hasattr(args, TrainWeights.validAccKey):
         exit(0)
 
     if not hasattr(args, 'logInterval'):
@@ -44,6 +43,7 @@ def train(scriptArgs):
     args.data = scriptArgs.data
     args.pre_trained = scriptArgs.pre_trained
     args.optimal_epochs = scriptArgs.optimal_epochs
+    args.json = scriptArgs.json
 
     # extract args JSON folder path
     folderName = path.dirname(scriptArgs.json)
@@ -62,12 +62,7 @@ def train(scriptArgs):
         alphasRegime = OptimalRegime(args, logger)
         # train according to chosen regime
         alphasRegime.train()
-        # best_prec1, best_valid_loss are now part of args, therefore we have to save args again, the sender will be able to read these values
-        saveCheckpoint(args, scriptArgs.json)
-        # log finish
-        print(args)
-        logger.addInfoToDataTable('Saved args to [{}]'.format(scriptArgs.json))
-        logger.addInfoToDataTable('Done !')
+
 
 
 if not is_available():
