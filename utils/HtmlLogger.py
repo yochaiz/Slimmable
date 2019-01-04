@@ -17,7 +17,6 @@ class HtmlLogger:
 
     def __init__(self, save_path, filename, overwrite=False):
         self.save_path = save_path
-        self.filename = filename
         self.fullPath = '{}/{}.html'.format(save_path, filename)
         self._maxTableCellLength = 50
 
