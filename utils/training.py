@@ -75,17 +75,13 @@ class TrainingStats(TrainingData):
     # update values for given ratio
     def update(self, ratio, logits, target, loss):
         n = logits.size(0)
-        prec1 = self.accuracy(logits, target)[0].item()
+
         self._epochLoss[ratio].update(loss.item(), n)
-        self._top1[ratio].update(prec1, n)
-        self._prec1[ratio] = prec1
         self._batchLoss[ratio] = loss.item()
 
-    def update(self, logits, loss):
-        n = logits.size(0)
-        ratio = self.avgKey()
-        self._epochLoss[ratio].update(loss, n)
-        self._batchLoss[ratio] = loss
+        prec1 = self.accuracy(logits, target)[0].item()
+        self._top1[ratio].update(prec1, n)
+        self._prec1[ratio] = prec1
 
     @staticmethod
     def accuracy(output, target, topk=(1,)):
@@ -101,6 +97,16 @@ class TrainingStats(TrainingData):
             correct_k = correct[:k].view(-1).float().sum(0)
             res.append(correct_k.mul_(100.0 / batch_size))
         return res
+
+
+class AlphaTrainingStats(TrainingStats):
+    def __init__(self, widthRatio, useAvg=True):
+        super(AlphaTrainingStats, self).__init__(widthRatio, useAvg)
+
+    def update(self, ratio, logits, loss):
+        n = logits.size(0)
+        self._epochLoss[ratio].update(loss, n)
+        self._batchLoss[ratio] = loss
 
 
 class TrainingOptimum(TrainingData):
