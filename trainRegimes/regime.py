@@ -56,10 +56,12 @@ class TrainRegime:
         self.modelParallel = DataParallel(model, args.gpu)
         assert (id(model) == id(self.modelParallel.module))
 
+        self.args = args
+        self.model = model
+        self.logger = logger
+
         # load data
         self.train_queue, self.search_queue, self.valid_queue = load_data(args)
-        # load pre-trained model
-        model.loadPreTrained(args.pre_trained, logger)
 
         # build statistics containers
         containers = {
@@ -75,10 +77,6 @@ class TrainRegime:
 
         # log parameters
         logParameters(logger, args, model)
-
-        self.args = args
-        self.model = model
-        self.logger = logger
 
     @abstractmethod
     def train(self):
