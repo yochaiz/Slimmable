@@ -2,10 +2,8 @@ from abc import abstractmethod
 from math import floor
 from numpy import argsort
 from functools import reduce
-from os.path import exists
 
 from torch import zeros
-from torch import load as loadModel
 from torch.nn import Module, ModuleList, Conv2d, BatchNorm2d
 from torch.nn import functional as F
 from torch.nn.functional import conv2d
@@ -352,58 +350,8 @@ class BaseNet(Module):
 
         return baselineResults
 
-    def loadPreTrained(self, path, logger):
-        loggerRows = []
-        if path is not None:
-            if exists(path):
-                # load checkpoint
-                checkpoint = loadModel(path, map_location=lambda storage, loc: storage.cuda())
-                # set checkpoint state dict
-                chckpntStateDict = checkpoint['state_dict']
-                # load model state dict keys
-                modelStateDict = self.state_dict()
-                modelStateDictKeys = set(modelStateDict.keys())
-                # compare dictionaries
-                dictDiff = modelStateDictKeys.symmetric_difference(set(chckpntStateDict.keys()))
-
-                # init batchnorm token
-                token = '.bn.'
-                # init how many batchnorms we have loaded from pre-trained
-                bnLoadedCounter = 0
-                # init how many batchnorms are in total
-                bnTotalCounter = sum(1 for key in modelStateDictKeys if token in key)
-
-                # init new dict, based on current dict
-                newDict = modelStateDict
-                # iterate over checkpoint state dict keys
-                for key in chckpntStateDict.keys():
-                    # duplicate values with their corresponding new keys
-                    if token in key:
-                        # filters out num_batches_tracked in cases it is not needed
-                        if key in modelStateDict:
-                            if modelStateDict[key].size() == chckpntStateDict[key].size():
-                                newDict[key] = chckpntStateDict[key]
-                                bnLoadedCounter += 1
-                            else:
-                                # add model state dict values to new dict
-                                newDict[key] = modelStateDict[key]
-                    else:
-                        # add checkpoint state dict values to new dict
-                        newDict[key] = chckpntStateDict[key]
-
-                # load weights
-                self.load_state_dict(newDict)
-                # add info rows about checkpoint
-                loggerRows.append(['Path', '{}'.format(path)])
-                validationAccRows = [['Ratio', 'Accuracy']] + HtmlLogger.dictToRows(checkpoint['best_prec1'], nElementPerRow=1)
-                loggerRows.append(['Validation accuracy', validationAccRows])
-                loggerRows.append(['StateDict diff', list(dictDiff)])
-                loggerRows.append(['Loaded Batchnorm #', '{}/{}'.format(bnLoadedCounter, bnTotalCounter)])
-            else:
-                raise ValueError('Failed to load pre-trained from [{}], path does not exists'.format(path))
-
-            # load pre-trained model if we tried to load pre-trained
-            logger.addInfoTable('Pre-trained model', loggerRows)
+    def loadPreTrained(self, state_dict):
+        self.load_state_dict(state_dict)
 
     def _topAlphas(self, k):
         top = []
@@ -500,6 +448,80 @@ class BaseNet(Module):
 
         # reset counters
         self._resetForwardCounters()
+
+# def loadPreTrained(self, state_dict):
+#     from collections import OrderedDict
+#     newDict = OrderedDict()
+#
+#     tokenOrg = '.downsample.'
+#     tokenNew = '.downsample.downsampleSrc.'
+#     for key in state_dict.keys():
+#         if tokenOrg in key:
+#             newDict[key.replace(tokenOrg, tokenNew)] = state_dict[key]
+#         else:
+#             newDict[key] = state_dict[key]
+#
+#     currDict = self.state_dict()
+#     for key in currDict.keys():
+#         if key not in newDict:
+#             newDict[key] = currDict[key]
+#
+#     # load weights
+#     self.load_state_dict(newDict)
+
+# def loadPreTrained(self, path, logger):
+#     loggerRows = []
+#     if path is not None:
+#         if exists(path):
+#             # load checkpoint
+#             checkpoint = loadModel(path, map_location=lambda storage, loc: storage.cuda())
+#             # set checkpoint state dict
+#             chckpntStateDict = checkpoint['state_dict']
+#             # load model state dict keys
+#             modelStateDict = self.state_dict()
+#             modelStateDictKeys = set(modelStateDict.keys())
+#             # compare dictionaries
+#             dictDiff = modelStateDictKeys.symmetric_difference(set(chckpntStateDict.keys()))
+#
+#             # init batchnorm token
+#             token = '.bn.'
+#             # init how many batchnorms we have loaded from pre-trained
+#             bnLoadedCounter = 0
+#             # init how many batchnorms are in total
+#             bnTotalCounter = sum(1 for key in modelStateDictKeys if token in key)
+#
+#             # init new dict, based on current dict
+#             newDict = modelStateDict
+#             # iterate over checkpoint state dict keys
+#             for key in chckpntStateDict.keys():
+#                 # duplicate values with their corresponding new keys
+#                 if token in key:
+#                     # filters out num_batches_tracked in cases it is not needed
+#                     if key in modelStateDict:
+#                         if modelStateDict[key].size() == chckpntStateDict[key].size():
+#                             newDict[key] = chckpntStateDict[key]
+#                             bnLoadedCounter += 1
+#                         else:
+#                             # add model state dict values to new dict
+#                             newDict[key] = modelStateDict[key]
+#                 else:
+#                     # add checkpoint state dict values to new dict
+#                     newDict[key] = chckpntStateDict[key]
+#
+#             # load weights
+#             self.load_state_dict(newDict)
+#             # add info rows about checkpoint
+#             loggerRows.append(['Path', '{}'.format(path)])
+#             validationAccRows = [['Ratio', 'Accuracy']] + HtmlLogger.dictToRows(checkpoint['best_prec1'], nElementPerRow=1)
+#             loggerRows.append(['Validation accuracy', validationAccRows])
+#             loggerRows.append(['StateDict diff', list(dictDiff)])
+#             loggerRows.append(['Loaded Batchnorm #', '{}/{}'.format(bnLoadedCounter, bnTotalCounter)])
+#         else:
+#             raise ValueError('Failed to load pre-trained from [{}], path does not exists'.format(path))
+#
+#         # load pre-trained model if we tried to load pre-trained
+#         logger.addInfoTable('Pre-trained model', loggerRows)
+
 
 # def loadPreTrained(self, path, logger):
 # # replace old key (.layers.) with new key (.blocks.)
