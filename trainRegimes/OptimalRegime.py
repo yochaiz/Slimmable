@@ -13,7 +13,7 @@ class OptimalTrainWeights(TrainWeights):
                                 TrainWeights.validLossKey, TrainWeights.validAccKey, TrainWeights.lrKey]
 
     def __init__(self, args, model, modelParallel, logger, train_queue, valid_queue):
-        super(OptimalTrainWeights, self).__init__(args, model, modelParallel, train_queue, valid_queue)
+        super(OptimalTrainWeights, self).__init__(args, model, modelParallel, logger, train_queue, valid_queue)
 
         self.logger = logger
         # init table in main logger

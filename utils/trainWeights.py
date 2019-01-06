@@ -4,6 +4,7 @@ from os import makedirs
 from os.path import exists
 
 from torch import tensor, no_grad
+from torch import load as loadModel
 from torch.nn import CrossEntropyLoss
 from torch.optim.sgd import SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -39,7 +40,7 @@ class TrainWeights:
     colsTrainWeights = [batchNumKey, trainLossKey, trainAccKey, timeKey]
     colsValidation = [batchNumKey, validLossKey, validAccKey, timeKey]
 
-    def __init__(self, args, model, modelParallel, train_queue, valid_queue):
+    def __init__(self, args, model, modelParallel, logger, train_queue, valid_queue):
         self.args = args
         # save models
         self.model = model
@@ -53,6 +54,9 @@ class TrainWeights:
         self.cross_entropy = CrossEntropyLoss().cuda()
 
         self.trainFolderPath = '{}/{}'.format(args.save, args.trainFolder)
+
+        # load pre-trained model & optimizer
+        self.optimizerStateDict = self.loadPreTrained(args.pre_trained, logger)
 
     # apply defined format functions on dict values by keys
     def _applyFormats(self, dict):
@@ -224,6 +228,10 @@ class TrainWeights:
 
         # init optimizer
         optimizer = SGD(modelParallel.parameters(), args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
+        # load optimizer pre-trained state dict if exists
+        if self.optimizerStateDict:
+            optimizer.load_state_dict(self.optimizerStateDict)
+
         # init scheduler
         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=2, min_lr=args.learning_rate_min)
 
@@ -257,3 +265,26 @@ class TrainWeights:
             self.postEpoch(epoch, optimizer, trainData, validData, validAcc, validLoss)
 
         self.postTrain()
+
+    def loadPreTrained(self, path, logger):
+        optimizerStateDict = None
+
+        if path is not None:
+            if exists(path):
+                # load checkpoint
+                checkpoint = loadModel(path, map_location=lambda storage, loc: storage.cuda())
+                # load weights
+                self.model.loadPreTrained(checkpoint['state_dict'])
+                # load optimizer state dict
+                optimizerStateDict = checkpoint['optimizer']
+                # add info rows about checkpoint
+                loggerRows = []
+                loggerRows.append(['Path', '{}'.format(path)])
+                validationAccRows = [['Ratio', 'Accuracy']] + HtmlLogger.dictToRows(checkpoint['best_prec1'], nElementPerRow=1)
+                loggerRows.append(['Validation accuracy', validationAccRows])
+                # loggerRows.append(['Optimizer', HtmlLogger.dictToRows(optimizerStateDict, nElementPerRow=3)])
+                logger.addInfoTable('Pre-trained model', loggerRows)
+            else:
+                raise ValueError('Failed to load pre-trained from [{}], path does not exists'.format(path))
+
+        return optimizerStateDict
