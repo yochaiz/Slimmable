@@ -39,7 +39,7 @@ class Downsample(Block):
         self.residualFunc = self.initResidual()
 
         # save conv2 layer reference
-        self.conv2 = conv2
+        self.conv2 = [conv2]
 
     @abstractmethod
     def initCurrentDownsample(self):
@@ -90,7 +90,7 @@ class PermanentDownsample(Downsample):
 
     def update(self):
         # update downsample width
-        self.downsample.setCurrWidthIdx(self.conv2.currWidthIdx())
+        self.downsample.setCurrWidthIdx(self.conv2[0].currWidthIdx())
 
 
 # downsample for block where downsample is required only where following layers have different width
@@ -111,7 +111,7 @@ class TempDownsample(Downsample):
         self.downsample = self.initCurrentDownsample()
         # check if widths are different, i.e. we need to use downsample
         prevWidth = self.downsampleSrc.prevLayer[0].currWidth()
-        conv2Width = self.conv2.currWidth()
+        conv2Width = self.conv2[0].currWidth()
 
         if prevWidth != conv2Width:
             # update residual function
@@ -119,7 +119,7 @@ class TempDownsample(Downsample):
             # update downsample
             self.downsample = self.downsampleSrc
             # update downsample width
-            self.downsample.setCurrWidthIdx(self.conv2.currWidthIdx())
+            self.downsample.setCurrWidthIdx(self.conv2[0].currWidthIdx())
 
 
 class BasicBlock(Block):
