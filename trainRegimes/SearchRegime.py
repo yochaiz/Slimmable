@@ -31,7 +31,6 @@ class SearchRegime(TrainRegime):
     def trainAlphas(self, optimizer, epoch, loggers):
         print('*** trainAlphas() ***')
         model = self.model
-        modelParallel = self.modelParallel
         search_queue = self.search_queue[0]
 
         trainLogger = loggers.get('train')
@@ -47,7 +46,7 @@ class SearchRegime(TrainRegime):
             # reset optimizer gradients
             optimizer.zero_grad()
             # evaluate on samples and calc alphas gradients
-            loss = self._samplesSamePath(input, target)
+            loss = self._loss(input, target, self._samplesSamePath)
             # perform optimizer step
             optimizer.step()
             # update alphas distribution statistics (after optimizer step)
@@ -83,6 +82,23 @@ class SearchRegime(TrainRegime):
 
         return pathExists
 
+    # select paths for each alpha and calc loss
+    # add statistics
+    # update alphas gradients
+    def _loss(self, input, target, pathSelectionFunc):
+        model = self.model
+
+        # switch to inference mode
+        model.eval()
+        # calc paths loss for each alpha
+        lossValues, ceLossValues, flopsLossValues = pathSelectionFunc(input, target)
+        # switch to train mode
+        model.train()
+        # update statistics and alphas gradients based on loss
+        totalLossAvg = self._updateAlphasGradients(lossValues, ceLossValues, flopsLossValues)
+
+        return totalLossAvg
+
     # evaluate alphas on same paths
     def _samplesSamePath(self, input, target):
         model = self.model
@@ -95,9 +111,6 @@ class SearchRegime(TrainRegime):
         lossValues = [[[] for _ in range(layer.nWidths())] for layer in model.layersList()]
         ceLossValues = [[0.0 for _ in range(layer.nWidths())] for layer in model.layersList()]
         flopsLossValues = [[0.0 for _ in range(layer.nWidths())] for layer in model.layersList()]
-
-        # switch to inference mode
-        model.eval()
 
         # iterate over samples. generate a sample (path) and evaluate alphas on sample
         for _ in range(nSamples):
@@ -135,8 +148,11 @@ class SearchRegime(TrainRegime):
                 # restore layer current width idx
                 layer.setCurrWidthIdx(layerCurrWidthIdx)
 
-        # switch to train mode
-        model.train()
+    # updates alphas gradients
+    # update statistics
+    def _updateAlphasGradients(self, lossValues, ceLossValues, flopsLossValues):
+        model = self.model
+        nSamples = self.args.nSamplesPerAlpha
 
         # init total loss
         totalLoss = 0.0
@@ -152,8 +168,8 @@ class SearchRegime(TrainRegime):
         for layerIdx, (layer, layerLossValues) in enumerate(zip(model.layersList(), lossValues)):
             layerAlphas = layer.alphas()
             # calc layer alphas probabilities
-            probs = F.softmax(layerAlphas, dim=-1)
-            probsList.append(probs)
+            layerProbs = F.softmax(layerAlphas, dim=-1)
+            probsList.append(layerProbs)
             # init layer alphas gradient vector
             layerAlphasGrad = zeros(layer.nWidths(), requires_grad=True).cuda()
             # iterate over alphas
@@ -166,7 +182,7 @@ class SearchRegime(TrainRegime):
                 # update alpha gradient
                 layerAlphasGrad[idx] = alphaLossAvg
                 # update total loss
-                totalLoss += (alphaLossAvg * probs[idx])
+                totalLoss += (alphaLossAvg * layerProbs[idx])
                 # calc alpha loss variance
                 alphaLossVariance = [((x - alphaLossAvg) ** 2) for x in alphaLossValues]
                 alphaLossVariance = sum(alphaLossVariance) / (nSamples - 1)
@@ -174,7 +190,7 @@ class SearchRegime(TrainRegime):
                 alphaTitle = self._alphaPlotTitle(layer, idx)
                 # init template for get list function based on container key
                 getListFunc = lambda key: lambda containers: containers[key][layerIdx][alphaTitle]
-                # add values
+                # add statistics values
                 stats.addValue(getListFunc(self.lossAvgKey), alphaLossAvg)
                 stats.addValue(getListFunc(self.crossEntropyLossAvgKey), ceLossValues[layerIdx][idx] / nSamples)
                 stats.addValue(getListFunc(self.flopsLossAvgKey), flopsLossValues[layerIdx][idx] / nSamples)
@@ -190,13 +206,12 @@ class SearchRegime(TrainRegime):
             layerAlphas = layer.alphas()
             layerAlphas.grad -= totalLoss
             # multiply each grad by its probability
-            layerAlphas.grad *= probs
+            layerAlphas.grad *= layerProbs
 
         # average (total loss average) by number of alphas
         totalLossAvg /= nAlphas
 
         return totalLossAvg
-
 
 # ======= compare replicator vs. standard model, who is FASTER ===========
 # init model constructor func
