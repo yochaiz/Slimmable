@@ -18,43 +18,14 @@ from utils.statistics import Statistics
 
 
 class TrainRegime:
-    # init tables keys
-    archLossKey = 'Arch loss'
-    crossEntropyKey = 'CrossEntropy loss'
-    flopsLossKey = 'Flops loss'
-    pathFlopsRatioKey = 'Path flops ratio'
-    validFlopsRatioKey = 'Validation flops ratio'
-
-    # init statistics (plots) keys
-    entropyKey = 'alphas_entropy'
-    alphaDistributionKey = 'alphas_distribution'
-    lossVarianceKey = 'loss_variance'
-    lossAvgKey = 'loss_avg'
-    crossEntropyLossAvgKey = 'cross_entropy_loss_avg'
-    flopsLossAvgKey = 'flops_loss_avg'
-    flopsKey = 'flops'
-    weightsLossKey = 'weights_loss'
-    weightsAccKey = 'weights_acc'
-
-    # init formats for keys
-    formats = {
-        archLossKey: lambda x: '{:.5f}'.format(x),
-        crossEntropyKey: lambda x: '{:.5f}'.format(x),
-        flopsLossKey: lambda x: '{:.5f}'.format(x),
-        pathFlopsRatioKey: lambda x: '{:.3f}'.format(x),
-        validFlopsRatioKey: lambda x: '{:.3f}'.format(x)
-    }
-
-    # colsMainLogger = [epochNumKey, archLossKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, widthKey, lrKey]
-
     def __init__(self, args, logger):
         # init model
         model = self.buildModel(args)
         model = model.cuda()
         # create DataParallel model instance
-        # self.modelParallel = model
-        self.modelParallel = DataParallel(model, args.gpu)
-        assert (id(model) == id(self.modelParallel.module))
+        self.modelParallel = model
+        # self.modelParallel = DataParallel(model, args.gpu)
+        # assert (id(model) == id(self.modelParallel.module))
 
         self.args = args
         self.model = model
@@ -62,16 +33,19 @@ class TrainRegime:
 
         # load data
         self.train_queue, self.search_queue, self.valid_queue = load_data(args)
+        # init train folder path, where to save loggers, checkpoints, etc.
+        self.trainFolderPath = '{}/{}'.format(args.save, args.trainFolder)
 
         # build statistics containers
-        containers = {
-            self.lossAvgKey: self._containerPerAlpha(model),
-            self.crossEntropyLossAvgKey: self._containerPerAlpha(model),
-            self.flopsLossAvgKey: self._containerPerAlpha(model),
-            self.lossVarianceKey: self._containerPerAlpha(model),
-            self.alphaDistributionKey: self._containerPerAlpha(model),
-            self.entropyKey: [{layerIdx: [] for layerIdx in range(len(model.layersList()))}]
-        }
+        containers = self.buildStatsContainers()
+        # containers = {
+        #     self.lossAvgKey: self._containerPerAlpha(model),
+        #     self.crossEntropyLossAvgKey: self._containerPerAlpha(model),
+        #     self.flopsLossAvgKey: self._containerPerAlpha(model),
+        #     self.lossVarianceKey: self._containerPerAlpha(model),
+        #     self.alphaDistributionKey: self._containerPerAlpha(model),
+        #     self.entropyKey: [{layerIdx: [] for layerIdx in range(len(model.layersList()))}]
+        # }
         # init statistics instance
         self.statistics = Statistics(containers, args.save)
 
@@ -81,6 +55,10 @@ class TrainRegime:
     @abstractmethod
     def train(self):
         raise NotImplementedError('subclasses must override train()!')
+
+    @abstractmethod
+    def buildStatsContainers(self):
+        raise NotImplementedError('subclasses must override buildStatsContainers()!')
 
     def buildModel(self, args):
         # get model constructor
