@@ -14,6 +14,8 @@ from utils.HtmlLogger import HtmlLogger
 
 
 class TrainWeights:
+    # init train logger key
+    trainLoggerKey = 'train'
     # init tables keys
     trainLossKey = 'Training loss'
     trainAccKey = 'Training acc'
@@ -53,8 +55,6 @@ class TrainWeights:
         # init cross entropy loss
         self.cross_entropy = CrossEntropyLoss().cuda()
 
-        self.trainFolderPath = '{}/{}'.format(args.save, args.trainFolder)
-
         # load pre-trained model & optimizer
         self.optimizerStateDict = self.loadPreTrained(args.pre_trained, logger)
 
@@ -89,7 +89,7 @@ class TrainWeights:
         train_queue = self.train_queue
         trainStats = TrainingStats(model.baselineWidthKeys())
 
-        trainLogger = loggers.get('train')
+        trainLogger = loggers.get(self.trainLoggerKey)
         if trainLogger:
             trainLogger.createDataTable('Epoch:[{}] - Training weights'.format(epoch), self.colsTrainWeights)
 
@@ -161,7 +161,7 @@ class TrainWeights:
         crit = self.cross_entropy
         trainStats = TrainingStats(model.baselineWidthKeys())
 
-        trainLogger = loggers.get('train')
+        trainLogger = loggers.get(self.trainLoggerKey)
         if trainLogger:
             trainLogger.createDataTable('Epoch:[{}] - Validation'.format(nEpoch), self.colsValidation)
 
@@ -217,12 +217,12 @@ class TrainWeights:
 
         return validAcc, validLoss, summaryRow
 
-    def train(self, trainFolderName):
+    def train(self, trainFolderPath, trainFolderName):
         modelParallel = self.modelParallel
         args = self.args
 
         # create train folder
-        folderPath = '{}/{}'.format(self.trainFolderPath, trainFolderName)
+        folderPath = '{}/{}'.format(trainFolderPath, trainFolderName)
         if not exists(folderPath):
             makedirs(folderPath)
 
@@ -251,7 +251,7 @@ class TrainWeights:
             trainLoggerFlag = ((epoch + 1) % args.logInterval) == 0
 
             # set loggers dictionary
-            loggersDict = dict(train=trainLogger)
+            loggersDict = {self.trainLoggerKey: trainLogger}
 
             print('========== Epoch:[{}] =============='.format(epoch))
             # train
