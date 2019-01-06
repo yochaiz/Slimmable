@@ -19,6 +19,12 @@ class LossFunction:
 
 
 class FlopsLoss(Module):
+    # init loss types keys
+    _totalKey = 'Total'
+    _crossEntropyKey = 'CrossEntropy'
+    _flopsKey = 'Flops'
+    _lossKeys = [_totalKey, _crossEntropyKey, _flopsKey]
+
     def __init__(self, args, baselineFlopsDict):
         super(FlopsLoss, self).__init__()
 
@@ -30,13 +36,22 @@ class FlopsLoss(Module):
         self.flopsLossImgPath = '{}/flops_loss_func.pdf'.format(args.save)
         self._plotFunction(self.flopsLoss, min(baselineFlopsDict.values()), max(baselineFlopsDict.values()))
 
-    def forward(self, input, target, modelFlops):
-        crossEntropyLoss = self.crossEntropyLoss(input, target)
-        flopsLoss = self.lmbda * self.flopsLoss(modelFlops)
-        totalLoss = crossEntropyLoss + flopsLoss
-        return totalLoss, crossEntropyLoss, flopsLoss
+    @staticmethod
+    def lossKeys():
+        return FlopsLoss._lossKeys
 
-    def _plotFunction(self, func, xMin,xMax):
+    @staticmethod
+    def totalKey():
+        return FlopsLoss._totalKey
+
+    def forward(self, input, target, modelFlops):
+        loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
+                self._flopsKey: self.lmbda * self.flopsLoss(modelFlops)}
+        loss[self._totalKey] = sum(loss.values())
+
+        return loss
+
+    def _plotFunction(self, func, xMin, xMax):
         # build data for function
         nPts = (5 * 100) + 1
         ptsGap = int((nPts - 1) / 20)
