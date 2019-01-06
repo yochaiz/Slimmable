@@ -45,10 +45,17 @@ def parseArgs():
     parser.add_argument('--dataset', metavar='DATASET', default='cifar10', choices=datasets.keys(), help='dataset name')
     parser.add_argument('--model', metavar='MODEL', default='resnet18', choices=modelNames)
     parser.add_argument('--batch_size', type=int, default=250, help='batch size')
+    # model weights optimization params
     parser.add_argument('--learning_rate', type=float, default=0.01, help='init learning rate')
     parser.add_argument('--learning_rate_min', type=float, default=1E-8, help='min learning rate')
     parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
     parser.add_argument('--weight_decay', type=float, default=4e-5, help='weight decay')
+    # search optimization params
+    parser.add_argument('--search_learning_rate', type=float, default=0.01, help='init learning rate')
+    parser.add_argument('--search_learning_rate_min', type=float, default=1E-8, help='min learning rate')
+    parser.add_argument('--search_momentum', type=float, default=0.9, help='momentum')
+    parser.add_argument('--search_weight_decay', type=float, default=4e-5, help='weight decay')
+    # GPU params
     parser.add_argument('--gpu', type=str, default='0', help='gpu device id, e.g. 0,1,3')
     parser.add_argument('--workers', type=int, default=4, choices=range(1, 32), help='num of workers')
     # logging params
