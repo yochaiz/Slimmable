@@ -5,8 +5,7 @@ from functools import reduce
 
 from torch import zeros
 from torch.nn import Module, ModuleList, Conv2d, BatchNorm2d
-from torch.nn import functional as F
-from torch.nn.functional import conv2d
+from torch.nn.functional import conv2d, softmax
 from torch.distributions.categorical import Categorical
 
 from utils.HtmlLogger import HtmlLogger
@@ -81,8 +80,13 @@ class SlimLayer(Block):
     def countFlops(self):
         return self.flopsDict[(self.prevLayer[0].currWidth(), self.currWidth())]
 
+    # return alphas value
     def alphas(self):
         return self._alphas
+
+    # return alphas probabilities
+    def probs(self):
+        return softmax(self._alphas, dim=-1)
 
     def widthList(self):
         return self._widthList
@@ -357,9 +361,8 @@ class BaseNet(Module):
         top = []
         for layer in self._layers.optimization():
             alphas = layer.alphas()
-            # calc weights from alphas and sort them
-            weights = F.softmax(alphas, dim=-1)
-            wSorted, wIndices = weights.sort(descending=True)
+            # sort alphas probabilities
+            wSorted, wIndices = layer.probs().sort(descending=True)
             # keep only top-k
             wSorted = wSorted[:k]
             wIndices = wIndices[:k]
