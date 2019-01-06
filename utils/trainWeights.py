@@ -98,7 +98,7 @@ class TrainWeights:
         modelParallel.train()
         assert (model.training is True)
 
-        for step, (input, target) in enumerate(train_queue):
+        for batchNum, (input, target) in enumerate(train_queue):
             startTime = time()
 
             input = tensor(input, requires_grad=False).cuda()
@@ -125,7 +125,7 @@ class TrainWeights:
 
             if trainLogger:
                 dataRow = {
-                    self.batchNumKey: '{}/{}'.format(step, nBatches), self.timeKey: (endTime - startTime),
+                    self.batchNumKey: '{}/{}'.format(batchNum, nBatches), self.timeKey: (endTime - startTime),
                     self.trainLossKey: trainStats.batchLoss(), self.trainAccKey: trainStats.prec1()
                 }
                 # apply formats
@@ -171,7 +171,7 @@ class TrainWeights:
         assert (model.training is False)
 
         with no_grad():
-            for step, (input, target) in enumerate(valid_queue):
+            for batchNum, (input, target) in enumerate(valid_queue):
                 startTime = time()
 
                 input = tensor(input).cuda()
@@ -192,7 +192,7 @@ class TrainWeights:
 
                 if trainLogger:
                     dataRow = {
-                        self.batchNumKey: '{}/{}'.format(step, nBatches), self.validLossKey: trainStats.batchLoss(),
+                        self.batchNumKey: '{}/{}'.format(batchNum, nBatches), self.validLossKey: trainStats.batchLoss(),
                         self.validAccKey: trainStats.prec1(), self.timeKey: endTime - startTime
                     }
                     # apply formats
