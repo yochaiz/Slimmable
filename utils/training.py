@@ -18,19 +18,21 @@ class TrainingData:
     nRoundDigits = 5
     _avgKey = 'Avg'
 
+    def __init__(self, widthRatio, useAvg):
+        self.useAvg = useAvg and len(widthRatio) > 1
+
     @staticmethod
     def avgKey():
         return TrainingData._avgKey
 
-    @staticmethod
     # returns only average value from dict
-    def dictAvg(dict):
-        return dict[TrainingData._avgKey] if len(dict) > 1 else dict[next(iter(dict))]
+    def dictAvg(self, dict):
+        return dict[TrainingData._avgKey] if self.useAvg else dict[next(iter(dict))]
 
 
 class TrainingStats(TrainingData):
-    def __init__(self, widthRatio):
-        super(TrainingStats, self).__init__()
+    def __init__(self, widthRatio, useAvg=True):
+        super(TrainingStats, self).__init__(widthRatio, useAvg)
 
         self._epochLoss = {}
         self._batchLoss = {}
@@ -53,7 +55,7 @@ class TrainingStats(TrainingData):
             sum += value
 
         # add average
-        if len(dict) > 1:
+        if self.useAvg:
             newDict[self._avgKey] = round(sum / len(dict), self.nRoundDigits)
 
         return newDict
@@ -79,6 +81,12 @@ class TrainingStats(TrainingData):
         self._prec1[ratio] = prec1
         self._batchLoss[ratio] = loss.item()
 
+    def update(self, logits, loss):
+        n = logits.size(0)
+        ratio = self.avgKey()
+        self._epochLoss[ratio].update(loss, n)
+        self._batchLoss[ratio] = loss
+
     @staticmethod
     def accuracy(output, target, topk=(1,)):
         maxk = max(topk)
@@ -96,8 +104,8 @@ class TrainingStats(TrainingData):
 
 
 class TrainingOptimum(TrainingData):
-    def __init__(self, widthList, tableHeaders, optCompareFunc):
-        super(TrainingOptimum, self).__init__()
+    def __init__(self, widthList, tableHeaders, optCompareFunc, useAvg=True):
+        super(TrainingOptimum, self).__init__(widthList, useAvg)
 
         self.optCompareFunc = optCompareFunc
         self._tableHeaders = tableHeaders
@@ -106,7 +114,7 @@ class TrainingOptimum(TrainingData):
         # copy width list
         widthList = widthList.copy()
         # add average key if there multiple width
-        if len(widthList) > 1:
+        if self.useAvg:
             widthList.append(self._avgKey)
         # init with invalid values
         for width in widthList:
@@ -136,7 +144,7 @@ class TrainingOptimum(TrainingData):
     # returns if given epoch is average best
     def is_best(self, epoch):
         # average key is not always in dictionary
-        key = self._avgKey if len(self._opt) > 1 else next(iter(self._opt))
+        key = self._avgKey if self.useAvg else next(iter(self._opt))
         # return value
         return epoch == self._opt[key][-1]
 
