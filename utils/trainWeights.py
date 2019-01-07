@@ -16,6 +16,7 @@ from utils.HtmlLogger import HtmlLogger
 class TrainWeights:
     # init train logger key
     trainLoggerKey = 'train'
+    summaryKey = 'Summary'
     # init tables keys
     trainLossKey = 'Training loss'
     trainAccKey = 'Training acc'
@@ -63,6 +64,10 @@ class TrainWeights:
         for k in dict.keys():
             if k in self.formats:
                 dict[k] = self.formats[k](dict[k])
+
+    @staticmethod
+    def getFormats():
+        return TrainWeights.formats
 
     @abstractmethod
     def stopCondition(self):
@@ -138,7 +143,7 @@ class TrainWeights:
         # # add epoch data to statistics plots
         # self.statistics.addBatchData(epochLossDict, epochAccDict)
         # log accuracy, loss, etc.
-        summaryData = {self.trainLossKey: epochLossDict, self.trainAccKey: epochAccDict, self.batchNumKey: 'Summary'}
+        summaryData = {self.trainLossKey: epochLossDict, self.trainAccKey: epochAccDict, self.batchNumKey: self.summaryKey}
         # apply formats
         self._applyFormats(summaryData)
 
@@ -203,7 +208,7 @@ class TrainWeights:
         # create summary row
         validAcc = trainStats.top1()
         validLoss = trainStats.epochLoss()
-        summaryRow = {self.batchNumKey: 'Summary', self.validLossKey: validLoss, self.validAccKey: validAcc}
+        summaryRow = {self.batchNumKey: self.summaryKey, self.validLossKey: validLoss, self.validAccKey: validAcc}
         # apply formats
         self._applyFormats(summaryRow)
 
