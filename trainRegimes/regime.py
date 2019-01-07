@@ -1,20 +1,11 @@
 from abc import abstractmethod
 
-from torch.nn.parallel.data_parallel import DataParallel
+# from torch.nn.parallel.data_parallel import DataParallel
 
 import models
 from utils.data import load_data
 from utils.args import logParameters
 from utils.statistics import Statistics
-
-
-# from os import makedirs
-# from os.path import exists
-# from torch.optim.sgd import SGD
-# from torch.optim.lr_scheduler import ReduceLROnPlateau
-# from utils.checkpoint import save_checkpoint
-# from utils.HtmlLogger import HtmlLogger
-# from utils.training import TrainingOptimum
 
 
 class TrainRegime:
