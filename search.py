@@ -40,8 +40,11 @@ if __name__ == '__main__':
         # build regime for alphas optimization
         alphasRegime = SearchRegime(args, logger)
         # # train according to chosen regime
-        # alphasRegime.train()
+        alphasRegime.train()
+        # print done message
         logger.addInfoToDataTable('Done !')
+        # # send done email
+        # sendMail()
 
     except Exception as e:
         # create message content
