@@ -3,7 +3,7 @@ from math import floor
 from numpy import argsort
 from functools import reduce
 
-from torch import zeros
+from torch import tensor, zeros
 from torch.nn import Module, ModuleList, Conv2d, BatchNorm2d
 from torch.nn.functional import conv2d, softmax
 from torch.distributions.categorical import Categorical
@@ -52,7 +52,7 @@ class SlimLayer(Block):
         self._currWidthIdx = 0
 
         # init alphas
-        self._alphas = zeros(self.nWidths(), requires_grad=False).cuda()
+        self._alphas = tensor(zeros(self.nWidths()).cuda(), requires_grad=True)
 
         # init forward counters
         self._forwardCounters = self._initForwardCounters()
@@ -235,8 +235,8 @@ class BaseNet(Module):
         self.blocks = self.initBlocks(initLayersParams)
         # init Layers class instance
         self._layers = self.Layers(self.blocks)
-        # # build mixture layers list
-        # self._layersList = self.buildLayersList()
+        # build layers alphas list
+        self._alphas = [layer.alphas() for layer in self.layersList()]
 
         # init dictionary of layer width indices list per width ratio
         self._baselineWidth = self.buildHomogeneousWidthIdx(args.width)
@@ -285,13 +285,11 @@ class BaseNet(Module):
     def flopsRatio(self):
         return self.countFlops() / self.baselineFlops
 
-    # # iterate over model layers
-    # def layersList(self):
-    #     for layer in self._layersList:
-    #         yield layer
-
     def layersList(self):
         return self._layers.optimization()
+
+    def alphas(self):
+        return self._alphas
 
     def baselineWidthKeys(self):
         return list(self._baselineWidth.keys())
@@ -436,7 +434,7 @@ class BaseNet(Module):
                 # sort layer forward counters indices in descending order, [::-1] changes to descending order
                 indices = argsort(layerForwardCounters)[::-1]
                 # build layer data row
-                layerRows = [counterCols]
+                layerRows = [[layer], counterCols]
                 for idx in indices:
                     layerRows.append([layer.widthByIdx(idx), layerForwardCounters[idx]])
                 # add summary row
