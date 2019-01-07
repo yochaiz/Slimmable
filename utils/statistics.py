@@ -157,13 +157,12 @@ class Statistics:
 
     @staticmethod
     def __setAxesProperties(ax, xLabel, yLabel, yMax, title, yMin=0.0):
-        # ax.set_xticks(xValues)
         ax.set_xlabel(xLabel)
         ax.set_ylabel(yLabel)
         ax.set_ylim(top=yMax, bottom=yMin)
         ax.set_title(title)
         # put legend in bottom right corner, transparent (framealpha), small font
-        ax.legend(loc='lower right', ncol=5, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 6})
+        ax.legend(loc='upper center', ncol=6, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 8})
 
     @staticmethod
     def __setFigProperties(fig, figSize=(15, 10)):
@@ -223,7 +222,7 @@ class Statistics:
             # set yMax
             yMax = dataMax * 1.1
 
-            # don't scale axOther
+            # don't scale axMerged
             if axMerged:
                 # if yLabel == self._alphaDistributionKey:
                 #     yMax = 1.1
