@@ -100,6 +100,9 @@ class OptimalRegime(TrainRegime):
 
         self.trainWeights = OptimalTrainWeights(self.args, self.model, self.modelParallel, self.logger, self.train_queue, self.valid_queue)
 
+    def buildStatsContainers(self):
+        pass
+
     def train(self):
         args = self.args
         logger = self.logger
