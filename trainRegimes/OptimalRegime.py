@@ -107,7 +107,7 @@ class OptimalRegime(TrainRegime):
         self.trainWeights.train(self.trainFolderPath, 'init_weights_train')
 
         # init logger data table
-        self.logger.createDataTable('Summary', self.colsMainLogger)
+        self.logger.createDataTable(self.trainWeights.summaryKey, self.colsMainLogger)
         # set save target path
         targetPath = args.json
         # best_prec1, best_valid_loss are now part of args, therefore we have to save args again
