@@ -226,6 +226,7 @@ class BaseNet(Module):
 
     _partitionKey = 'Partition'
     _baselineFlopsKey = 'baselineFlops'
+    _baselineFlopsRatioKey = 'baselineFlopsRatio'
 
     def __init__(self, args, initLayersParams):
         super(BaseNet, self).__init__()
@@ -245,10 +246,13 @@ class BaseNet(Module):
         if args.partition:
             self._baselineWidth[self._partitionKey] = [len(self._baselineWidth)] * len(self._layers.optimization())
         # count baseline models widths flops
-        setattr(args, self._baselineFlopsKey, self.calcBaselineFlops())
+        baselineFlops = self.calcBaselineFlops()
         # save baseline flops, for calculating flops ratio
-        self.baselineFlops = getattr(args, self._baselineFlopsKey).get(args.baseline)
-
+        self.baselineFlops = baselineFlops.get(args.baseline)
+        # add baseline models widths flops to args
+        setattr(args, self._baselineFlopsKey, baselineFlops)
+        # add baseline models widths flops ratio to args
+        setattr(args, self._baselineFlopsRatioKey, {k: (v / self.baselineFlops) for k, v in baselineFlops.items()})
         self.printToFile(saveFolder)
         # calc number of width permutations in model
         self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self._layers.optimization()])
