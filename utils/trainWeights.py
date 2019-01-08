@@ -74,6 +74,11 @@ class TrainWeights:
         raise NotImplementedError('subclasses must override stopCondition()!')
 
     @abstractmethod
+    # returns (widthRatio, idxList) list or generator
+    def widthList(self):
+        raise NotImplementedError('subclasses must override widthList()!')
+
+    @abstractmethod
     def schedulerMetric(self, validLoss):
         raise NotImplementedError('subclasses must override schedulerMetric()!')
 
@@ -144,7 +149,7 @@ class TrainWeights:
         # init loss list
         lossList = []
         # iterate & forward widths
-        for widthRatio, idxList in model.baselineWidth():
+        for widthRatio, idxList in self.widthList():
             # set model layers current width index
             model.setCurrWidthIdx(idxList)
             # forward
