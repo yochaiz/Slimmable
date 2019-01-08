@@ -15,7 +15,6 @@ class OptimalTrainWeights(TrainWeights):
     def __init__(self, args, model, modelParallel, logger, train_queue, valid_queue):
         super(OptimalTrainWeights, self).__init__(args, model, modelParallel, logger, train_queue, valid_queue)
 
-        self.logger = logger
         # init table in main logger
         self.logger.createDataTable(self.initWeightsTrainTableTitle, self.colsMainInitWeightsTrain)
 

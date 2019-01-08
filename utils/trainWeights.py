@@ -45,6 +45,8 @@ class TrainWeights:
 
     def __init__(self, args, model, modelParallel, logger, train_queue, valid_queue):
         self.args = args
+        self.logger = logger
+
         # save models
         self.model = model
         self.modelParallel = modelParallel
