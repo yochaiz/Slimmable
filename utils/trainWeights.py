@@ -137,12 +137,32 @@ class TrainWeights:
 
         return epochAccDict, epochLossDict, summaryData
 
+    def _slimForward(self, input, target, trainStats):
+        model = self.model
+        modelParallel = self.modelParallel
+        crit = self.cross_entropy
+        # init loss list
+        lossList = []
+        # iterate & forward widths
+        for widthRatio, idxList in model.baselineWidth():
+            # set model layers current width index
+            model.setCurrWidthIdx(idxList)
+            # forward
+            logits = modelParallel(input)
+            # calc loss
+            loss = crit(logits, target)
+            # add to loss list
+            lossList.append(loss)
+            # update training stats
+            trainStats.update(widthRatio, logits, target, loss)
+
+        return lossList
+
     # performs single epoch of model weights training
     def weightsEpoch(self, optimizer, epoch, loggers):
         print('*** weightsEpoch() ***')
         model = self.model
         modelParallel = self.modelParallel
-        crit = self.cross_entropy
 
         modelParallel.train()
         assert (model.training is True)
@@ -150,18 +170,11 @@ class TrainWeights:
         def forwardFunc(input, target, trainStats):
             # optimize model weights
             optimizer.zero_grad()
-            # iterate & forward widths
-            for widthRatio, idxList in model.baselineWidth():
-                # set model layers current width index
-                model.setCurrWidthIdx(idxList)
-                # forward
-                logits = modelParallel(input)
-                # calc loss
-                loss = crit(logits, target)
-                # back propagate
+            # forward
+            lossList = self._slimForward(input, target, trainStats)
+            # back propagate
+            for loss in lossList:
                 loss.backward()
-                # update training stats
-                trainStats.update(widthRatio, logits, target, loss)
             # update weights
             optimizer.step()
 
@@ -184,16 +197,7 @@ class TrainWeights:
 
         def forwardFunc(input, target, trainStats):
             with no_grad():
-                # iterate & forward widths
-                for widthRatio, idxList in model.baselineWidth():
-                    # set model layers current width index
-                    model.setCurrWidthIdx(idxList)
-                    # forward
-                    logits = modelParallel(input)
-                    # calc loss
-                    loss = crit(logits, target)
-                    # update training stats
-                    trainStats.update(widthRatio, logits, target, loss)
+                self._slimForward(input, target, trainStats)
 
         tableTitle = 'Epoch:[{}] - Validation'.format(nEpoch)
         forwardCountersTitle = '{} - Validation'.format(self.forwardCountersKey)
