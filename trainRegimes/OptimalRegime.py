@@ -35,6 +35,9 @@ class OptimalTrainWeights(TrainWeights):
     def stopCondition(self):
         return self.nEpochsOptimum > self.args.optimal_epochs
 
+    def widthList(self):
+        return self.model.baselineWidth()
+
     def schedulerMetric(self, validLoss):
         return self.trainOptimum.dictAvg(validLoss)
 
