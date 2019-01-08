@@ -85,30 +85,69 @@ class TrainWeights:
     def postTrain(self):
         raise NotImplementedError('subclasses must override postTrain()!')
 
+    # generic epoch flow
+    def _genericEpoch(self, forwardFunc, data_queue, loggers, lossKey, accKey, tableTitle, tableCols, forwardCountersTitle):
+        model = self.model
+        trainStats = TrainingStats(model.baselineWidthKeys())
+
+        trainLogger = loggers.get(self.trainLoggerKey)
+        if trainLogger:
+            trainLogger.createDataTable(tableTitle, tableCols)
+
+        nBatches = len(data_queue)
+
+        for batchNum, (input, target) in enumerate(data_queue):
+            startTime = time()
+
+            input = tensor(input, requires_grad=False).cuda()
+            target = tensor(target, requires_grad=False).cuda(async=True)
+
+            # do forward
+            forwardFunc(input, target, trainStats)
+
+            endTime = time()
+
+            if trainLogger:
+                dataRow = {
+                    self.batchNumKey: '{}/{}'.format(batchNum, nBatches), self.timeKey: (endTime - startTime),
+                    lossKey: trainStats.batchLoss(), accKey: trainStats.prec1()
+                }
+                # apply formats
+                self._applyFormats(dataRow)
+                # add row to data table
+                trainLogger.addDataRow(dataRow)
+
+        epochLossDict = trainStats.epochLoss()
+        epochAccDict = trainStats.top1()
+        # # add epoch data to statistics plots
+        # self.statistics.addBatchData(epochLossDict, epochAccDict)
+        # log accuracy, loss, etc.
+        summaryData = {lossKey: epochLossDict, accKey: epochAccDict, self.batchNumKey: self.summaryKey}
+        # apply formats
+        self._applyFormats(summaryData)
+
+        for logger in loggers.values():
+            if logger:
+                logger.addSummaryDataRow(summaryData)
+
+        trainLogger = loggers.get(self.trainLoggerKey)
+        # log forward counters. if loggerFuncs==[] then it is just resets counters
+        func = [lambda rows: trainLogger.addInfoTable(title=forwardCountersTitle, rows=rows)] if trainLogger else []
+        self.model.logForwardCounters(loggerFuncs=func)
+
+        return epochAccDict, epochLossDict, summaryData
+
     # performs single epoch of model weights training
     def weightsEpoch(self, optimizer, epoch, loggers):
         print('*** weightsEpoch() ***')
         model = self.model
         modelParallel = self.modelParallel
         crit = self.cross_entropy
-        train_queue = self.train_queue
-        trainStats = TrainingStats(model.baselineWidthKeys())
-
-        trainLogger = loggers.get(self.trainLoggerKey)
-        if trainLogger:
-            trainLogger.createDataTable('Epoch:[{}] - Training weights'.format(epoch), self.colsTrainWeights)
-
-        nBatches = len(train_queue)
 
         modelParallel.train()
         assert (model.training is True)
 
-        for batchNum, (input, target) in enumerate(train_queue):
-            startTime = time()
-
-            input = tensor(input, requires_grad=False).cuda()
-            target = tensor(target, requires_grad=False).cuda(async=True)
-
+        def forwardFunc(input, target, trainStats):
             # optimize model weights
             optimizer.zero_grad()
             # iterate & forward widths
@@ -126,34 +165,10 @@ class TrainWeights:
             # update weights
             optimizer.step()
 
-            endTime = time()
-
-            if trainLogger:
-                dataRow = {
-                    self.batchNumKey: '{}/{}'.format(batchNum, nBatches), self.timeKey: (endTime - startTime),
-                    self.trainLossKey: trainStats.batchLoss(), self.trainAccKey: trainStats.prec1()
-                }
-                # apply formats
-                self._applyFormats(dataRow)
-                # add row to data table
-                trainLogger.addDataRow(dataRow)
-
-        epochLossDict = trainStats.epochLoss()
-        epochAccDict = trainStats.top1()
-        # # add epoch data to statistics plots
-        # self.statistics.addBatchData(epochLossDict, epochAccDict)
-        # log accuracy, loss, etc.
-        summaryData = {self.trainLossKey: epochLossDict, self.trainAccKey: epochAccDict, self.batchNumKey: self.summaryKey}
-        # apply formats
-        self._applyFormats(summaryData)
-
-        for logger in loggers.values():
-            if logger:
-                logger.addSummaryDataRow(summaryData)
-
-        # log forward counters. if loggerFuncs==[] then it is just resets counters
-        func = [lambda rows: trainLogger.addInfoTable(title='{} - Training'.format(self.forwardCountersKey), rows=rows)] if trainLogger else []
-        model.logForwardCounters(loggerFuncs=func)
+        tableTitle = 'Epoch:[{}] - Training weights'.format(epoch)
+        forwardCountersTitle = '{} - Training'.format(self.forwardCountersKey)
+        epochAccDict, epochLossDict, summaryData = self._genericEpoch(forwardFunc, self.train_queue, loggers, self.trainLossKey, self.trainAccKey,
+                                                                      tableTitle, self.colsTrainWeights, forwardCountersTitle)
 
         return summaryData
 
@@ -162,26 +177,13 @@ class TrainWeights:
         print('*** inferEpoch() ***')
         model = self.model
         modelParallel = self.modelParallel
-        valid_queue = self.valid_queue
         crit = self.cross_entropy
-        trainStats = TrainingStats(model.baselineWidthKeys())
-
-        trainLogger = loggers.get(self.trainLoggerKey)
-        if trainLogger:
-            trainLogger.createDataTable('Epoch:[{}] - Validation'.format(nEpoch), self.colsValidation)
-
-        nBatches = len(valid_queue)
 
         modelParallel.eval()
         assert (model.training is False)
 
-        with no_grad():
-            for batchNum, (input, target) in enumerate(valid_queue):
-                startTime = time()
-
-                input = tensor(input).cuda()
-                target = tensor(target).cuda(async=True)
-
+        def forwardFunc(input, target, trainStats):
+            with no_grad():
                 # iterate & forward widths
                 for widthRatio, idxList in model.baselineWidth():
                     # set model layers current width index
@@ -193,34 +195,12 @@ class TrainWeights:
                     # update training stats
                     trainStats.update(widthRatio, logits, target, loss)
 
-                endTime = time()
+        tableTitle = 'Epoch:[{}] - Validation'.format(nEpoch)
+        forwardCountersTitle = '{} - Validation'.format(self.forwardCountersKey)
+        epochAccDict, epochLossDict, summaryData = self._genericEpoch(forwardFunc, self.valid_queue, loggers, self.validLossKey, self.validAccKey,
+                                                                      tableTitle, self.colsValidation, forwardCountersTitle)
 
-                if trainLogger:
-                    dataRow = {
-                        self.batchNumKey: '{}/{}'.format(batchNum, nBatches), self.validLossKey: trainStats.batchLoss(),
-                        self.validAccKey: trainStats.prec1(), self.timeKey: endTime - startTime
-                    }
-                    # apply formats
-                    self._applyFormats(dataRow)
-                    # add row to data table
-                    trainLogger.addDataRow(dataRow)
-
-        # create summary row
-        validAcc = trainStats.top1()
-        validLoss = trainStats.epochLoss()
-        summaryRow = {self.batchNumKey: self.summaryKey, self.validLossKey: validLoss, self.validAccKey: validAcc}
-        # apply formats
-        self._applyFormats(summaryRow)
-
-        for logger in loggers.values():
-            if logger:
-                logger.addSummaryDataRow(summaryRow)
-
-        # log forward counters. if loggerFuncs==[] then it is just resets counters
-        func = [lambda rows: trainLogger.addInfoTable(title='{} - Validation'.format(self.forwardCountersKey), rows=rows)] if trainLogger else []
-        model.logForwardCounters(loggerFuncs=func)
-
-        return validAcc, validLoss, summaryRow
+        return epochAccDict, epochLossDict, summaryData
 
     def train(self, trainFolderPath, trainFolderName):
         modelParallel = self.modelParallel
