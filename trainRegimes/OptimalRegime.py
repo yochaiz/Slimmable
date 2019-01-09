@@ -31,7 +31,7 @@ class OptimalTrainWeights(TrainWeights):
         # count how many epochs current optimum hasn't changed
         self.nEpochsOptimum = 0
 
-    def stopCondition(self):
+    def stopCondition(self, epoch):
         return self.nEpochsOptimum > self.args.optimal_epochs
 
     def widthList(self):
