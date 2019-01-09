@@ -7,12 +7,12 @@ from numpy import linspace
 from torch import load, save
 
 from models.BaseNet import BaseNet
-from trainRegimes.regime import TrainRegime
-from utils.statistics import Statistics, FlopsPlot, PlotLabelData, plt
+from utils.trainWeights import TrainWeights
+from utils.flopsPlot import plotFlopsData, FlopsPlot, PlotLabelData, plt
 from utils.checkpoint import checkpointFileType, blocksPartitionKey
 from utils.training import TrainingData
 
-_flopsKey = Statistics.flopsKey()
+_flopsKey = FlopsPlot.flopsKey()
 _partitionKey = BaseNet.partitionKey()
 _avgKey = TrainingData.avgKey()
 _titleKey = FlopsPlot.getTitleKey()
@@ -25,7 +25,7 @@ def getPartitionFlops(checkpoint):
 
 
 def getPartitionValidAcc(checkpoint):
-    validAcc = getattr(checkpoint, TrainRegime.validAccKey)
+    validAcc = getattr(checkpoint, TrainWeights.validAccKey)
     validAcc = validAcc.get(BaseNet.partitionKey())
     return validAcc
 
@@ -142,7 +142,7 @@ def buildCheckpoint(folderPath, checkpointSrcPrefix, nBlocks):
                     # load new checkpoint
                     dstCheckpoint = load(checkpointDstPath)
                     # set attributes in destination checkpoint
-                    attributes = [(TrainRegime.validAccKey, {BaseNet.partitionKey(): acc}), (blocksPartitionKey, [width] * nBlocks),
+                    attributes = [(TrainWeights.validAccKey, {BaseNet.partitionKey(): acc}), (blocksPartitionKey, [width] * nBlocks),
                                   (BaseNet.baselineFlopsKey(), {BaseNet.partitionKey(): flopsDict[width]})]
                     for attrKey, attrValue in attributes:
                         setattr(dstCheckpoint, attrKey, attrValue)
@@ -193,7 +193,7 @@ def fixCheckpointFlops(folderPath):
         checkpointPath = '{}/{}.{}'.format(folderPath, folder, checkpointFileType)
         checkpoint = load(checkpointPath)
         # make sure checkpoint is ready, i.e. we are not in the middle of training
-        if hasattr(checkpoint, TrainRegime.validAccKey):
+        if hasattr(checkpoint, TrainWeights.validAccKey):
             # reset flops dictionary
             setattr(checkpoint, BaseNet.baselineFlopsKey(), None)
             save(checkpoint, checkpointPath)
@@ -229,7 +229,7 @@ def plotFolders(folderPath):
                         # load checkpoint
                         checkpoint = load(filePath)
                         # check accuracy exists in checkpoint
-                        if hasattr(checkpoint, TrainRegime.validAccKey):
+                        if hasattr(checkpoint, TrainWeights.validAccKey):
                             # set title to checkpoint
                             setattr(checkpoint, _titleKey, label)
                             # add checkpoint
@@ -240,7 +240,7 @@ def plotFolders(folderPath):
                 # load checkpoint
                 checkpoint = load(fPath)
                 # check accuracy exists in checkpoint
-                if hasattr(checkpoint, TrainRegime.validAccKey):
+                if hasattr(checkpoint, TrainWeights.validAccKey):
                     # get partition from checkpoint
                     partition = str(getattr(checkpoint, partitionAttrKey))
                     # create partition key in flopsData dict if does not exist
@@ -263,7 +263,7 @@ def plotFolders(folderPath):
                     flopsData[partitionKey].addCheckpoint(checkpoint)
 
         except Exception as e:
-            print('Missing values in {}'.format(file))
+            print('Missing values in {}'.format(folder))
             # remove(fPath)
             continue
 
@@ -276,8 +276,8 @@ def plotFolders(folderPath):
 
     # plot
     partitionFunc = lambda checkpoint: getattr(checkpoint, partitionAttrKey, None)
-    Statistics.plotFlops(flopsData.values(), (getPartitionFlops, getPartitionValidAcc, partitionFunc), [labelsToConnect],
-                         'acc_vs_flops_summary', folderPath)
+    plotFlopsData(flopsData.values(), (getPartitionFlops, getPartitionValidAcc, partitionFunc), [labelsToConnect],
+                             'acc_vs_flops_summary', folderPath)
 
 
 def plotCompareFolders(foldersList):
@@ -318,7 +318,7 @@ def plotCompareFolders(foldersList):
                         # load checkpoint
                         checkpoint = load(filePath)
                         # check accuracy exists in checkpoint
-                        if hasattr(checkpoint, TrainRegime.validAccKey):
+                        if hasattr(checkpoint, TrainWeights.validAccKey):
                             # set label to checkpoint
                             setattr(checkpoint, _titleKey, label)
                             # add checkpoint
@@ -329,7 +329,7 @@ def plotCompareFolders(foldersList):
                 # load checkpoint
                 checkpoint = load(fPath)
                 # check accuracy exists in checkpoint
-                if hasattr(checkpoint, TrainRegime.validAccKey):
+                if hasattr(checkpoint, TrainWeights.validAccKey):
                     # get partition from checkpoint
                     partition = str(getattr(checkpoint, partitionAttrKey))
                     # create partition key in flopsData dict if does not exist
@@ -367,14 +367,14 @@ def plotCompareFolders(foldersList):
 
     # plot
     partitionFunc = lambda checkpoint: getattr(checkpoint, partitionAttrKey, None)
-    Statistics.plotFlops(labelsList, (getPartitionFlops, getPartitionValidAcc, partitionFunc), labelsToConnect,
-                         'acc_vs_flops_folders_summary', folderPath)
+    plotFlopsData(labelsList, (getPartitionFlops, getPartitionValidAcc, partitionFunc), labelsToConnect,
+                             'acc_vs_flops_folders_summary', folderPath)
 
 
 # widthRatio = [0.25, 0.5, 0.75, 1.0]
-dataset = 'cifar10'
-basePath = '/home/vista/Desktop/Architecture_Search/results/{}'.format(dataset)
-folderPath = '{}/individual_training'.format(basePath)
+dataset = 'imagenet'
+basePath = '/home/vista/Desktop/Architecture_Search/results/{}/'.format(dataset)
+folderPath = '{}/checkpoints'.format(basePath)
 
 # buildWidthRatioMissingCheckpoints(widthRatio, nBlocks=3)
 # updateCheckpointBlocksPartition(folderPath)
