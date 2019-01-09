@@ -19,7 +19,6 @@ class SearchRegime(TrainRegime):
     summaryKey = TrainWeights.summaryKey
     # init table columns names
     archLossKey = 'Arch Loss'
-    validFlopsRatioKey = 'Validation flops ratio'
     # get keys from TrainWeights
     batchNumKey = TrainWeights.batchNumKey
     epochNumKey = TrainWeights.epochNumKey
@@ -31,6 +30,7 @@ class SearchRegime(TrainRegime):
     validAccKey = TrainWeights.validAccKey
     widthKey = TrainWeights.widthKey
     lrKey = TrainWeights.lrKey
+    validFlopsRatioKey = TrainWeights.validFlopsRatioKey
 
     # init table columns
     k = 2
@@ -48,8 +48,7 @@ class SearchRegime(TrainRegime):
 
     # init formats for keys
     formats = {
-        archLossKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
-        validFlopsRatioKey: lambda x: '{:.3f}'.format(x)
+        archLossKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1)
     }
 
     def __init__(self, args, logger):
