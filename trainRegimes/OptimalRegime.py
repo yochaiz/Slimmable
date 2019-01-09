@@ -12,11 +12,11 @@ class OptimalTrainWeights(TrainWeights):
     colsMainInitWeightsTrain = [TrainWeights.epochNumKey, TrainWeights.trainLossKey, TrainWeights.trainAccKey,
                                 TrainWeights.validLossKey, TrainWeights.validAccKey, TrainWeights.lrKey]
 
-    def __init__(self, args, model, modelParallel, logger, train_queue, valid_queue):
-        super(OptimalTrainWeights, self).__init__(args, model, modelParallel, logger, train_queue, valid_queue)
+    def __init__(self, regime):
+        super(OptimalTrainWeights, self).__init__(regime)
 
         # init table in main logger
-        self.logger.createDataTable(self.initWeightsTrainTableTitle, self.colsMainInitWeightsTrain)
+        self.getLogger().createDataTable(self.initWeightsTrainTableTitle, self.colsMainInitWeightsTrain)
 
         # # calc alpha trainset loss on baselines
         # self.calcAlphaTrainsetLossOnBaselines(folderPath, self.archLossKey, logger)
@@ -24,7 +24,7 @@ class OptimalTrainWeights(TrainWeights):
         # init optimum info table headers
         optimumTableHeaders = [self.widthKey, self.validAccKey, self.epochNumKey, 'Epochs as optimum']
         # init TrainingOptimum instance
-        self.trainOptimum = TrainingOptimum(self.model.baselineWidthKeys(), optimumTableHeaders, lambda value, optValue: value > optValue)
+        self.trainOptimum = TrainingOptimum(self.getModel().baselineWidthKeys(), optimumTableHeaders, lambda value, optValue: value > optValue)
         # init optimal epoch data, we will display it in summary row
         self.optimalEpochData = None
 
@@ -32,17 +32,17 @@ class OptimalTrainWeights(TrainWeights):
         self.nEpochsOptimum = 0
 
     def stopCondition(self, epoch):
-        return self.nEpochsOptimum > self.args.optimal_epochs
+        return self.nEpochsOptimum > self.getArgs().optimal_epochs
 
     def widthList(self):
-        return self.model.baselineWidth()
+        return self.getModel().baselineWidth()
 
     def schedulerMetric(self, validLoss):
         return self.trainOptimum.dictAvg(validLoss)
 
     def postEpoch(self, epoch, optimizer, trainData, validData, validAcc, validLoss):
-        logger = self.logger
-        model = self.model
+        logger = self.getLogger()
+        model = self.getModel()
         # add epoch number
         trainData[self.epochNumKey] = epoch
         # add learning rate
@@ -71,21 +71,21 @@ class OptimalTrainWeights(TrainWeights):
             self.nEpochsOptimum += 1
 
         # save model checkpoint
-        save_checkpoint(self.trainFolderPath, model, optimizer, validAcc, is_best)
+        save_checkpoint(self.getTrainFolderPath(), model, optimizer, validAcc, is_best)
 
         # add data to main logger table
         logger.addDataRow(trainData)
 
     def postTrain(self):
-        args = self.args
+        args = self.getArgs()
         # add optimal accuracy
         optAcc, optLoss = self.optimalEpochData
         summaryRow = {self.epochNumKey: 'Optimal', self.validAccKey: optAcc, self.validLossKey: optLoss}
         self._applyFormats(summaryRow)
-        self.logger.addSummaryDataRow(summaryRow)
+        self.getLogger().addSummaryDataRow(summaryRow)
 
         # # save pre-trained checkpoint
-        # save_checkpoint(self.trainFolderPath, model, args, epoch, best_prec1, is_best=False, filename='pre_trained')
+        # save_checkpoint(self.getTrainFolderPath(), model, args, epoch, best_prec1, is_best=False, filename='pre_trained')
 
         # save optimal validation values
         setattr(args, self.validAccKey, optAcc)
@@ -100,7 +100,7 @@ class OptimalRegime(TrainRegime):
 
         super(OptimalRegime, self).__init__(args, logger)
 
-        self.trainWeights = OptimalTrainWeights(self.args, self.model, self.modelParallel, self.logger, self.train_queue, self.valid_queue)
+        self.trainWeights = OptimalTrainWeights(self)
 
     def buildStatsContainers(self):
         pass
@@ -109,7 +109,7 @@ class OptimalRegime(TrainRegime):
         args = self.args
         logger = self.logger
         # train model weights
-        self.trainWeights.train(self.trainFolderPath, 'init_weights_train')
+        self.trainWeights.train('init_weights_train')
 
         # init logger data table
         self.logger.createDataTable(self.trainWeights.summaryKey, self.colsMainLogger)

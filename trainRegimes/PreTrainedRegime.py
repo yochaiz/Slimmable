@@ -10,20 +10,20 @@ class PreTrainedTrainWeights(TrainWeights):
     tableCols = [TrainWeights.epochNumKey, TrainWeights.trainLossKey, TrainWeights.trainAccKey,
                  TrainWeights.validLossKey, TrainWeights.validAccKey, TrainWeights.validFlopsRatioKey, TrainWeights.lrKey]
 
-    def __init__(self, args, model, modelParallel, logger, train_queue, valid_queue, trainFolderPath):
-        super(PreTrainedTrainWeights, self).__init__(args, model, modelParallel, logger, train_queue, valid_queue)
+    def __init__(self, regime):
+        super(PreTrainedTrainWeights, self).__init__(regime)
 
-        self.trainFolderPath = trainFolderPath
         # init table in main logger
-        self.logger.createDataTable(self.tableTitle, self.tableCols)
+        self.getLogger().createDataTable(self.tableTitle, self.tableCols)
         # select new path
         self._selectNewPath()
 
     def _selectNewPath(self):
+        model = self.getModel()
         # select new path
-        self.model.choosePathByAlphas()
+        model.choosePathByAlphas()
         # get new path indices
-        self.widthIdxList = self.model.currWidthIdx()
+        self.widthIdxList = model.currWidthIdx()
         print(self.widthIdxList)
 
     def stopCondition(self, epoch):
@@ -36,8 +36,8 @@ class PreTrainedTrainWeights(TrainWeights):
         return validLoss[self.pathKey]
 
     def postEpoch(self, epoch, optimizer, trainData, validData, validAcc, validLoss):
-        logger = self.logger
-        model = self.model
+        logger = self.getLogger()
+        model = self.getModel()
         # add epoch number
         trainData[self.epochNumKey] = epoch
         # add learning rate
@@ -50,7 +50,7 @@ class PreTrainedTrainWeights(TrainWeights):
             trainData[k] = v
 
         # save model checkpoint
-        save_checkpoint(self.trainFolderPath, model, optimizer, validAcc)
+        save_checkpoint(self.getTrainFolderPath(), model, optimizer, validAcc)
 
         # add data to main logger table
         logger.addDataRow(trainData)
@@ -59,18 +59,17 @@ class PreTrainedTrainWeights(TrainWeights):
         self._selectNewPath()
 
     def postTrain(self):
-        self.logger.addInfoToDataTable('Done !')
+        self.getLogger().addInfoToDataTable('Done !')
 
 
 class PreTrainedRegime(TrainRegime):
     def __init__(self, args, logger):
         super(PreTrainedRegime, self).__init__(args, logger)
 
-        self.trainWeights = PreTrainedTrainWeights(self.args, self.model, self.modelParallel, self.logger, self.train_queue, self.valid_queue,
-                                                   self.trainFolderPath)
+        self.trainWeights = PreTrainedTrainWeights(self)
 
     def buildStatsContainers(self):
         pass
 
     def train(self):
-        self.trainWeights.train(self.trainFolderPath, 'init_weights_train')
+        self.trainWeights.train('init_weights_train')

@@ -45,23 +45,34 @@ class TrainWeights:
     colsTrainWeights = [batchNumKey, trainLossKey, trainAccKey, timeKey]
     colsValidation = [batchNumKey, validLossKey, validAccKey, timeKey]
 
-    def __init__(self, args, model, modelParallel, logger, train_queue, valid_queue):
-        self.args = args
-        self.logger = logger
-
-        # save models
-        self.model = model
-        self.modelParallel = modelParallel
-
-        # save datasets
-        self.train_queue = train_queue
-        self.valid_queue = valid_queue
-
+    def __init__(self, regime):
+        self.regime = regime
         # init cross entropy loss
         self.cross_entropy = CrossEntropyLoss().cuda()
 
         # load pre-trained model & optimizer
-        self.optimizerStateDict = self.loadPreTrained(args.pre_trained, logger)
+        self.optimizerStateDict = self.loadPreTrained(regime.args.pre_trained, regime.logger)
+
+    def getModel(self):
+        return self.regime.model
+
+    def getModelParallel(self):
+        return self.regime.modelParallel
+
+    def getArgs(self):
+        return self.regime.args
+
+    def getLogger(self):
+        return self.regime.logger
+
+    def getTrainQueue(self):
+        return self.regime.train_queue
+
+    def getValidQueue(self):
+        return self.regime.valid_queue
+
+    def getTrainFolderPath(self):
+        return self.regime.trainFolderPath
 
     # apply defined format functions on dict values by keys
     def _applyFormats(self, dict):
@@ -141,13 +152,13 @@ class TrainWeights:
         trainLogger = loggers.get(self.trainLoggerKey)
         # log forward counters. if loggerFuncs==[] then it is just resets counters
         func = [lambda rows: trainLogger.addInfoTable(title=forwardCountersTitle, rows=rows)] if trainLogger else []
-        self.model.logForwardCounters(loggerFuncs=func)
+        self.getModel().logForwardCounters(loggerFuncs=func)
 
         return epochAccDict, epochLossDict, summaryData
 
     def _slimForward(self, input, target, trainStats):
-        model = self.model
-        modelParallel = self.modelParallel
+        model = self.getModel()
+        modelParallel = self.getModelParallel()
         crit = self.cross_entropy
         # init loss list
         lossList = []
@@ -169,8 +180,8 @@ class TrainWeights:
     # performs single epoch of model weights training
     def weightsEpoch(self, optimizer, epoch, loggers):
         print('*** weightsEpoch() ***')
-        model = self.model
-        modelParallel = self.modelParallel
+        model = self.getModel()
+        modelParallel = self.getModelParallel()
 
         modelParallel.train()
         assert (model.training is True)
@@ -188,17 +199,16 @@ class TrainWeights:
 
         tableTitle = 'Epoch:[{}] - Training weights'.format(epoch)
         forwardCountersTitle = '{} - Training'.format(self.forwardCountersKey)
-        epochAccDict, epochLossDict, summaryData = self._genericEpoch(forwardFunc, self.train_queue, loggers, self.trainLossKey, self.trainAccKey,
-                                                                      tableTitle, self.colsTrainWeights, forwardCountersTitle)
+        epochAccDict, epochLossDict, summaryData = self._genericEpoch(forwardFunc, self.getTrainQueue(), loggers, self.trainLossKey,
+                                                                      self.trainAccKey, tableTitle, self.colsTrainWeights, forwardCountersTitle)
 
         return summaryData
 
     # performs single epoch of model inference
     def inferEpoch(self, nEpoch, loggers):
         print('*** inferEpoch() ***')
-        model = self.model
-        modelParallel = self.modelParallel
-        crit = self.cross_entropy
+        model = self.getModel()
+        modelParallel = self.getModelParallel()
 
         modelParallel.eval()
         assert (model.training is False)
@@ -209,17 +219,17 @@ class TrainWeights:
 
         tableTitle = 'Epoch:[{}] - Validation'.format(nEpoch)
         forwardCountersTitle = '{} - Validation'.format(self.forwardCountersKey)
-        epochAccDict, epochLossDict, summaryData = self._genericEpoch(forwardFunc, self.valid_queue, loggers, self.validLossKey, self.validAccKey,
-                                                                      tableTitle, self.colsValidation, forwardCountersTitle)
+        epochAccDict, epochLossDict, summaryData = self._genericEpoch(forwardFunc, self.getValidQueue(), loggers, self.validLossKey,
+                                                                      self.validAccKey, tableTitle, self.colsValidation, forwardCountersTitle)
 
         return epochAccDict, epochLossDict, summaryData
 
-    def train(self, trainFolderPath, trainFolderName):
-        modelParallel = self.modelParallel
-        args = self.args
+    def train(self, trainFolderName):
+        modelParallel = self.getModelParallel()
+        args = self.getArgs()
 
         # create train folder
-        folderPath = '{}/{}'.format(trainFolderPath, trainFolderName)
+        folderPath = '{}/{}'.format(self.getTrainFolderPath(), trainFolderName)
         if not exists(folderPath):
             makedirs(folderPath)
 
@@ -271,7 +281,7 @@ class TrainWeights:
                 # load checkpoint
                 checkpoint = loadModel(path, map_location=lambda storage, loc: storage.cuda())
                 # load weights
-                self.model.loadPreTrained(checkpoint['state_dict'])
+                self.getModel().loadPreTrained(checkpoint['state_dict'])
                 # load optimizer state dict
                 optimizerStateDict = checkpoint['optimizer']
                 # add info rows about checkpoint
