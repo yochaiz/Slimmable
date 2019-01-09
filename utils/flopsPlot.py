@@ -69,6 +69,8 @@ class PlotLabelData:
 class FlopsPlot:
     accuracyFormat = '{:.2f}'
     _titleKey = 'title'
+    _flopsKey = 'Flops'
+    _accKey = 'Accuracy'
 
     def __init__(self, xFunc, yFunc):
         self.title = self.setTitle()
@@ -92,8 +94,12 @@ class FlopsPlot:
         self.yFunc = yFunc
 
         # set axes labels
-        self.xLabel = 'Flops'
-        self.yLabel = 'Accuracy'
+        self.xLabel = self._flopsKey
+        self.yLabel = self._accKey
+
+    @staticmethod
+    def flopsKey():
+        return FlopsPlot._flopsKey
 
     def setPlotProperties(self):
         paddingPercentage = 0.02
