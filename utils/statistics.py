@@ -40,10 +40,6 @@ class Statistics:
         # init flopsData, which is a map where keys are labels (pts type) and values are list of tuples (bitwidth, flops, accuracy)
         self.flopsData = {}
 
-    @staticmethod
-    def flopsKey():
-        return Statistics._flopsKey
-
     def addValue(self, getListFunc, value):
         list = getListFunc(self._containers)
         list.append(value)
