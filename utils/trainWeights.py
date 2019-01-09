@@ -22,6 +22,7 @@ class TrainWeights:
     trainAccKey = 'Training acc'
     validLossKey = 'Validation loss'
     validAccKey = 'Validation acc'
+    validFlopsRatioKey = 'Validation flops ratio'
     epochNumKey = 'Epoch #'
     batchNumKey = 'Batch #'
     timeKey = 'Time'
@@ -37,6 +38,7 @@ class TrainWeights:
         trainAccKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
         validLossKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
         validAccKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
+        validFlopsRatioKey: lambda x: '{:.3f}'.format(x)
     }
 
     # init tables columns
@@ -72,7 +74,7 @@ class TrainWeights:
         return TrainWeights.formats
 
     @abstractmethod
-    def stopCondition(self):
+    def stopCondition(self, epoch):
         raise NotImplementedError('subclasses must override stopCondition()!')
 
     @abstractmethod
@@ -94,8 +96,7 @@ class TrainWeights:
 
     # generic epoch flow
     def _genericEpoch(self, forwardFunc, data_queue, loggers, lossKey, accKey, tableTitle, tableCols, forwardCountersTitle):
-        model = self.model
-        trainStats = TrainingStats(model.baselineWidthKeys())
+        trainStats = TrainingStats([k for k, v in self.widthList()])
 
         trainLogger = loggers.get(self.trainLoggerKey)
         if trainLogger:
@@ -234,7 +235,7 @@ class TrainWeights:
         epoch = 0
         trainLoggerFlag = True
 
-        while not self.stopCondition():
+        while not self.stopCondition(epoch):
             # update epoch number
             epoch += 1
             # init train logger
