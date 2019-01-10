@@ -224,8 +224,18 @@ class TrainWeights:
 
         return epochAccDict, epochLossDict, summaryData
 
-    def train(self, trainFolderName):
+    def _initOptimizer(self):
         modelParallel = self.getModelParallel()
+        args = self.getArgs()
+
+        optimizer = SGD(modelParallel.parameters(), args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
+        # load optimizer pre-trained state dict if exists
+        if self.optimizerStateDict:
+            optimizer.load_state_dict(self.optimizerStateDict)
+
+        return optimizer
+
+    def train(self, trainFolderName):
         args = self.getArgs()
 
         # create train folder
@@ -234,11 +244,7 @@ class TrainWeights:
             makedirs(folderPath)
 
         # init optimizer
-        optimizer = SGD(modelParallel.parameters(), args.learning_rate, momentum=args.momentum, weight_decay=args.weight_decay)
-        # load optimizer pre-trained state dict if exists
-        if self.optimizerStateDict:
-            optimizer.load_state_dict(self.optimizerStateDict)
-
+        optimizer = self._initOptimizer()
         # init scheduler
         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=2, min_lr=args.learning_rate_min)
 
