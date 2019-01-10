@@ -1,15 +1,19 @@
 from abc import abstractmethod
+from argparse import Namespace
 
 # from torch.nn.parallel.data_parallel import DataParallel
+from torch.nn.modules.module import Module
 
 import models
+from models.BaseNet import SlimLayer
 from utils.data import load_data
 from utils.args import logParameters
+from utils.HtmlLogger import HtmlLogger
 from utils.statistics import Statistics
 
 
 class TrainRegime:
-    def __init__(self, args, logger):
+    def __init__(self, args: Namespace, logger: HtmlLogger):
         # init model
         model = self.buildModel(args)
         model = model.cuda()
@@ -51,17 +55,17 @@ class TrainRegime:
     def buildStatsContainers(self):
         raise NotImplementedError('subclasses must override buildStatsContainers()!')
 
-    def buildModel(self, args):
+    def buildModel(self, args: Namespace) -> Module:
         # get model constructor
         modelKey = '{}_{}'.format(args.model, args.dataset)
         modelClass = models.__dict__[modelKey]
 
         return modelClass(args)
 
-    def _containerPerAlpha(self, model):
+    def _containerPerAlpha(self, model: Module) -> list:
         return [{self._alphaPlotTitle(layer, idx): [] for idx in range(layer.nWidths())} for layer in model.layersList()]
 
-    def _alphaPlotTitle(self, layer, alphaIdx):
+    def _alphaPlotTitle(self, layer: SlimLayer, alphaIdx: int) -> str:
         return '{} ({})'.format(layer.widthRatioByIdx(alphaIdx), layer.widthByIdx(alphaIdx))
 
     # def initialWeightsTraining(self, trainFolderName, filename=None):
