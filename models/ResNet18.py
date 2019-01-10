@@ -34,7 +34,7 @@ class Downsample(Block):
         # init downsample source, i.e. in case we will need it
         self.downsampleSrc = ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
         # init current downsample
-        self.downsample = self.initCurrentDownsample()
+        self._downsample = [self.initCurrentDownsample()]
         # init residual function
         self.residualFunc = self.initResidual()
 
@@ -53,11 +53,15 @@ class Downsample(Block):
     def update(self):
         raise NotImplementedError('subclasses must override update()!')
 
+    def downsample(self):
+        return self._downsample[0]
+
     def getOptimizationLayers(self):
         return []
 
     def getFlopsLayers(self):
-        return [] if self.downsample is None else [self.downsample]
+        _downsample = self.downsample()
+        return [] if _downsample is None else [_downsample]
 
     def getCountersLayers(self):
         return [self.downsampleSrc]
@@ -74,7 +78,8 @@ class Downsample(Block):
 
     # calc residual with downsample
     def downsampleResidual(self, x):
-        return self.downsample(x)
+        _downsample = self.downsample()
+        return _downsample(x)
 
 
 # downsample for block where downsample is always required, even for the same width
@@ -90,7 +95,7 @@ class PermanentDownsample(Downsample):
 
     def update(self):
         # update downsample width
-        self.downsample.setCurrWidthIdx(self.conv2[0].currWidthIdx())
+        self.downsample().setCurrWidthIdx(self.conv2[0].currWidthIdx())
 
 
 # downsample for block where downsample is required only where following layers have different width
@@ -108,7 +113,7 @@ class TempDownsample(Downsample):
         # set residual function to standard residual
         self.residualFunc = self.initResidual()
         # set downsample to None
-        self.downsample = self.initCurrentDownsample()
+        self._downsample = [self.initCurrentDownsample()]
         # check if widths are different, i.e. we need to use downsample
         prevWidth = self.downsampleSrc.prevLayer[0].currWidth()
         conv2Width = self.conv2[0].currWidth()
@@ -117,9 +122,9 @@ class TempDownsample(Downsample):
             # update residual function
             self.residualFunc = self.downsampleResidual
             # update downsample
-            self.downsample = self.downsampleSrc
+            self._downsample = [self.downsampleSrc]
             # update downsample width
-            self.downsample.setCurrWidthIdx(self.conv2[0].currWidthIdx())
+            self.downsample().setCurrWidthIdx(self.conv2[0].currWidthIdx())
 
 
 class BasicBlock(Block):
