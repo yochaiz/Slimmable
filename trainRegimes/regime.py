@@ -2,10 +2,9 @@ from abc import abstractmethod
 from argparse import Namespace
 
 # from torch.nn.parallel.data_parallel import DataParallel
-from torch.nn.modules.module import Module
 
 import models
-from models.BaseNet import SlimLayer
+from models.BaseNet import BaseNet, SlimLayer
 from utils.data import load_data
 from utils.args import logParameters
 from utils.HtmlLogger import HtmlLogger
@@ -55,14 +54,14 @@ class TrainRegime:
     def buildStatsContainers(self):
         raise NotImplementedError('subclasses must override buildStatsContainers()!')
 
-    def buildModel(self, args: Namespace) -> Module:
+    def buildModel(self, args: Namespace) -> BaseNet:
         # get model constructor
         modelKey = '{}_{}'.format(args.model, args.dataset)
         modelClass = models.__dict__[modelKey]
 
         return modelClass(args)
 
-    def _containerPerAlpha(self, model: Module) -> list:
+    def _containerPerAlpha(self, model: BaseNet) -> list:
         return [{self._alphaPlotTitle(layer, idx): [] for idx in range(layer.nWidths())} for layer in model.layersList()]
 
     def _alphaPlotTitle(self, layer: SlimLayer, alphaIdx: int) -> str:
