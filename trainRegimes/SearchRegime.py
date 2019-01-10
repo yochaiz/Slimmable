@@ -13,12 +13,58 @@ from utils.trainWeights import TrainWeights
 from utils.training import AlphaTrainingStats
 
 
+class TrainPathWeights(TrainWeights):
+    def __init__(self, regime):
+        super(TrainPathWeights, self).__init__(regime)
+
+        # disable args.pre_trained to avoid loading model weights
+        self.getArgs().pre_trained = None
+        # disable optimizer state_dict to avoid loading optimizer state
+        self.optimizerStateDict = None
+        # save model weights
+        self.modelOrgWeights = self.getModel().state_dict()
+        # init layer paths dictionary
+        self.layerPaths = {}
+
+    def stopCondition(self, epoch):
+        return epoch >= 5
+
+    def widthList(self):
+        return self.layerPaths.items()
+
+    def restoreModelOriginalWeights(self):
+        self.getModel().load_state_dict(self.modelOrgWeights)
+
+    def train(self, layer):
+        model = self.getModel()
+        layerPaths = self.layerPaths
+        # restore model original weights
+        self.restoreModelOriginalWeights()
+        # reset layer paths for training
+        layerPaths.clear()
+        # collect layer paths for training
+        for idx in range(layer.nWidths()):
+            # set path to go through width[idx] in current layer
+            layer.setCurrWidthIdx(idx)
+            # add path to dictionary
+            layerPaths[layer.widthRatioByIdx(idx)] = model.currWidthIdx()
+
+        # init optimizer
+        optimizer = self._initOptimizer()
+        # train
+        epoch = 0
+        while not self.stopCondition(epoch):
+            epoch += 1
+            self.weightsEpoch(optimizer, epoch, {})
+
+
 class SearchRegime(TrainRegime):
     # init train logger key
     trainLoggerKey = TrainWeights.trainLoggerKey
     summaryKey = TrainWeights.summaryKey
     # init table columns names
     archLossKey = 'Arch Loss'
+    pathsListKey = 'Paths list'
     # get keys from TrainWeights
     batchNumKey = TrainWeights.batchNumKey
     epochNumKey = TrainWeights.epochNumKey
@@ -36,7 +82,7 @@ class SearchRegime(TrainRegime):
     k = 2
     alphasTableTitle = 'Alphas (top [{}])'.format(k)
     # init table columns names
-    colsTrainAlphas = [batchNumKey, archLossKey, alphasTableTitle, forwardCountersKey, timeKey]
+    colsTrainAlphas = [batchNumKey, archLossKey, alphasTableTitle, pathsListKey, timeKey]
     colsMainLogger = [epochNumKey, archLossKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, widthKey, lrKey]
 
     # init statistics (plots) keys template
@@ -92,7 +138,10 @@ class SearchRegime(TrainRegime):
     def trainAlphas(self, search_queue, optimizer, epoch, loggers):
         print('*** trainAlphas() ***')
         model = self.model
+        # init trainingStats instance
         trainStats = AlphaTrainingStats(self.flopsLoss.lossKeys(), useAvg=False)
+        # init TrainWeights instance
+        trainWeights = TrainPathWeights(self)
 
         trainLogger = loggers.get(self.trainLoggerKey)
         if trainLogger:
@@ -117,7 +166,7 @@ class SearchRegime(TrainRegime):
             # reset optimizer gradients
             optimizer.zero_grad()
             # evaluate on samples and calc alphas gradients
-            lossAvgDict = self._loss(input, target, self._samplesSamePath)
+            lossAvgDict, pathsList = self._loss(input, target, self._samplesSamePath, trainWeights)
             # perform optimizer step
             optimizer.step()
 
@@ -127,15 +176,15 @@ class SearchRegime(TrainRegime):
             for lossName, loss in lossAvgDict.items():
                 trainStats.update(lossName, input, loss)
             # update alphas distribution statistics (after optimizer step)
-            self._calcAlphasDistStats(model)
+            self._calcAlphasDistribStats(model)
             # update statistics plots
             self.statistics.plotData()
 
             if trainLogger:
                 dataRow = {self.batchNumKey: '{}/{}'.format(batchNum, nBatches), self.archLossKey: trainStats.batchLoss(),
-                           self.timeKey: endTime - startTime}
+                           self.pathsListKey: trainLogger.createInfoTable('Show', pathsList), self.timeKey: endTime - startTime}
                 model.logTopAlphas(self.k, [createAlphasTable])
-                model.logForwardCounters([createForwardCountersTable])
+                model.logForwardCounters([])
                 # apply formats
                 self._applyFormats(dataRow)
                 # add row to data table
@@ -151,9 +200,12 @@ class SearchRegime(TrainRegime):
         # add row to data table
         trainLogger.addDataRow(summaryDataRow)
 
+        # restore model original weights
+        trainWeights.restoreModelOriginalWeights()
+
         return epochLossDict
 
-    def _calcAlphasDistStats(self, model):
+    def _calcAlphasDistribStats(self, model):
         stats = self.statistics
         for layerIdx, layer in enumerate(model.layersList()):
             # calc layer alphas distribution
@@ -182,13 +234,13 @@ class SearchRegime(TrainRegime):
     # select paths for each alpha and calc loss
     # add statistics
     # update alphas gradients
-    def _loss(self, input, target, pathSelectionFunc):
+    def _loss(self, input, target, pathSelectionFunc, trainWeights):
         model = self.model
 
         # switch to inference mode
         model.eval()
         # calc paths loss for each alpha
-        lossDictsList = pathSelectionFunc(input, target)
+        lossDictsList = pathSelectionFunc(input, target, trainWeights)
         # switch to train mode
         model.train()
         # update statistics and alphas gradients based on loss
@@ -197,18 +249,21 @@ class SearchRegime(TrainRegime):
         return lossAvgDict
 
     # evaluate alphas on same paths
-    def _samplesSamePath(self, input, target):
+    def _samplesSamePath(self, input, target, trainWeights):
         model = self.model
         modelParallel = self.modelParallel
         nSamples = self.args.nSamplesPerAlpha
         # init samples (paths) history, to make sure we don't select the same sample twice
         pathsHistoryDict = {}
+        # init samples (paths) history list for logging purposes
+        pathsList = []
 
         # init containers to save loss values and variance
         lossDictsList = [[{k: [] for k in self.flopsLoss.lossKeys()} for _ in range(layer.nWidths())] for layer in model.layersList()]
 
-        # iterate over samples. generate a sample (path) and evaluate alphas on sample
-        for _ in range(nSamples):
+        # iterate over samples. generate a sample (path), train it and evaluate alphas on sample
+        for sampleIdx in range(nSamples):
+            print('===== Sample idx:[{}] ====='.format(sampleIdx))
             # select new path based on alphas distribution.
             # check that selected path hasn't been selected before
             pathExists = True
@@ -216,16 +271,21 @@ class SearchRegime(TrainRegime):
                 # select path based on alphas distribution
                 model.choosePathByAlphas()
                 # get selected path indices
-                currWidthIdx = model.currWidthIdx()
+                pathWidthIdx = model.currWidthIdx()
                 # check that selected path hasn't been selected before
-                pathExists = self._doesPathExist(pathsHistoryDict, currWidthIdx)
+                pathExists = self._doesPathExist(pathsHistoryDict, pathWidthIdx)
+            # add path to paths list
+            pathsList.append([layer.widthByIdx(p) for p, layer in zip(pathWidthIdx, model.layersList())])
 
             # iterate over layers. in each layer iterate over alphas
             for layerIdx, layer in enumerate(model.layersList()):
+                print('=== Layer idx:[{}] ==='.format(layerIdx))
                 # init containers to save loss values and variance
                 layerLossDicts = lossDictsList[layerIdx]
                 # save layer current width idx
                 layerCurrWidthIdx = layer.currWidthIdx()
+                # train model on layer path
+                trainWeights.train(layer)
                 # iterate over alphas and calc loss
                 for idx in range(layer.nWidths()):
                     # set path to go through width[idx] in current layer
@@ -243,8 +303,7 @@ class SearchRegime(TrainRegime):
                 # restore layer current width idx
                 layer.setCurrWidthIdx(layerCurrWidthIdx)
 
-        # return lossValues, ceLossValues, flopsLossValues
-        return lossDictsList
+        return lossDictsList, pathsList
 
     # updates alphas gradients
     # update statistics
