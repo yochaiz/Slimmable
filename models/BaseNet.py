@@ -52,7 +52,7 @@ class SlimLayer(Block):
         self._currWidthIdx = 0
 
         # init alphas
-        self._alphas = tensor(zeros(self.nWidths()).cuda(), requires_grad=True)
+        self._alphas = zeros(self.nWidths()).cuda().clone().detach().requires_grad_(True)
 
         # init forward counters
         self._forwardCounters = self._initForwardCounters()
