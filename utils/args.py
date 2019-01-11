@@ -57,7 +57,7 @@ def parseArgs():
     parser.add_argument('--search_weight_decay', type=float, default=4e-5, help='weight decay')
     # GPU params
     parser.add_argument('--gpu', type=str, default='0', help='gpu device id, e.g. 0,1,3')
-    parser.add_argument('--workers', type=int, default=4, choices=range(1, 32), help='num of workers')
+    parser.add_argument('--workers', type=int, default=0, choices=range(0, 32), help='num of workers')
     # logging params
     parser.add_argument('--logInterval', type=int, default=50, choices=range(1, 1000), help='log training once in --logInterval epochs')
     # pre-trained params
