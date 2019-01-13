@@ -2,8 +2,9 @@ from abc import abstractmethod
 from math import floor
 from numpy import argsort
 from functools import reduce
+from pandas import DataFrame
 
-from torch import tensor, zeros
+from torch import zeros
 from torch.nn import Module, ModuleList, Conv2d, BatchNorm2d
 from torch.nn.functional import conv2d, softmax
 from torch.distributions.categorical import Categorical
@@ -231,6 +232,7 @@ class BaseNet(Module):
     _partitionKey = 'Partition'
     _baselineFlopsKey = 'baselineFlops'
     _baselineFlopsRatioKey = 'baselineFlopsRatio'
+    _alphasCsvFileName = 'alphas.csv'
 
     def __init__(self, args, initLayersParams):
         super(BaseNet, self).__init__()
@@ -260,6 +262,10 @@ class BaseNet(Module):
         self.printToFile(saveFolder)
         # calc number of width permutations in model
         self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self._layers.optimization()])
+
+        # init alphas DataFrame
+        self.alphas_df = None
+        self.__initAlphasDataFrame(saveFolder)
 
     @abstractmethod
     def initBlocks(self, params):
@@ -370,6 +376,32 @@ class BaseNet(Module):
 
     def loadPreTrained(self, state_dict):
         self.load_state_dict(state_dict)
+
+    def __initAlphasDataFrame(self, saveFolder):
+        if saveFolder:
+            # update save path if saveFolder exists
+            self._alphasCsvFileName = '{}/{}'.format(saveFolder, self._alphasCsvFileName)
+            # init DataFrame cols
+            cols = ['Epoch', 'Batch']
+            cols += ['Layer_{}'.format(i) for i in range(len(self.layersList()))]
+            self.cols = cols
+            # init DataFrame
+            self.alphas_df = DataFrame([], columns=cols)
+            # set init data
+            data = ['init', 'init']
+            # save alphas data
+            self.saveAlphasCsv(data)
+
+    # save alphas values to csv
+    def saveAlphasCsv(self, data):
+        if self.alphas_df is not None:
+            data += [[round(e.item(), 5) for e in layer.alphas()] for layer in self.layersList()]
+            # create new row
+            d = DataFrame([data], columns=self.cols)
+            # add row
+            self.alphas_df = self.alphas_df.append(d)
+            # save DataFrame
+            self.alphas_df.to_csv(self._alphasCsvFileName)
 
     def _topAlphas(self, k):
         top = []

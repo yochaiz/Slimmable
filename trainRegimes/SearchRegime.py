@@ -228,6 +228,8 @@ class SearchRegime(TrainRegime):
             # update training stats
             for lossName, loss in lossAvgDict.items():
                 trainStats.update(lossName, input, loss)
+            # save alphas to csv
+            model.saveAlphasCsv(data=[epoch, batchNum])
             # update alphas distribution statistics (after optimizer step)
             self._calcAlphasDistribStats(model)
             # update statistics plots
