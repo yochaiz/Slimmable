@@ -2,6 +2,7 @@ from datetime import datetime
 from numpy import random as nprandom
 from sys import exit
 from traceback import format_exc
+from multiprocessing import set_start_method
 
 import torch.backends.cudnn as cudnn
 from torch.cuda import is_available, set_device
@@ -31,10 +32,10 @@ if __name__ == '__main__':
     cudnn.enabled = True
     cuda_manual_seed(args.seed)
 
-    # try:
-    #     set_start_method('spawn', force=True)
-    # except RuntimeError:
-    #     raise ValueError('spawn failed')
+    try:
+        set_start_method('spawn', force=True)
+    except RuntimeError:
+        raise ValueError('spawn failed')
 
     try:
         # build regime for alphas optimization
