@@ -9,7 +9,7 @@ from torch.optim.sgd import SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .regime import TrainRegime
-from .PreTrainedRegime import PreTrainedTrainWeights
+from .PreTrainedRegime import PreTrainedTrainWeights, EpochData
 from models.BaseNet import BaseNet
 from utils.flopsLoss import FlopsLoss
 from utils.HtmlLogger import HtmlLogger
@@ -19,14 +19,64 @@ from utils.training import AlphaTrainingStats
 
 
 class EpochTrainWeights(PreTrainedTrainWeights):
+    _nRoundDigits = AlphaTrainingStats.nRoundDigits
+
     def __init__(self, regime, maxEpoch, currEpoch, logger):
         self.logger = logger
         self.tableTitle = 'Train model weights - Epoch:[{}]'.format(currEpoch)
 
         super(EpochTrainWeights, self).__init__(regime, maxEpoch)
 
+        # init (key, data) mapping
+        self._map = {self.trainLossKey: lambda trainData, validData: trainData.lossDict(),
+                     self.trainAccKey: lambda trainData, validData: trainData.accDict(),
+                     self.validLossKey: lambda trainData, validData: validData.lossDict(),
+                     self.validAccKey: lambda trainData, validData: validData.accDict()
+                     }
+        # init train sums ((train, validation) x (loss, acc)) dictionary
+        self._sumDict = {k: {} for k in self._map.keys()}
+        # init epoch average update function
+        self._epochAvgUpdateFunc = self._initEpochAvgUpdate
+
     def getLogger(self):
         return self.logger
+
+    def _initEpochAvgUpdate(self, trainData: EpochData, validData: EpochData):
+        for k, mapFunc in self._map.items():
+            self._sumDict[k] = mapFunc(trainData, validData)
+
+    def _standardEpochAvgUpdate(self, trainData: EpochData, validData: EpochData):
+        for k, mapFunc in self._map.items():
+            data = mapFunc(trainData, validData)
+            for n, value in data.items():
+                self._sumDict[k][n] += value
+
+    def postEpoch(self, epoch, optimizer, trainData: EpochData, validData: EpochData):
+        # perform base class postEpoch()
+        super(EpochTrainWeights, self).postEpoch(epoch, optimizer, trainData, validData)
+
+        # update averages
+        self._epochAvgUpdateFunc(trainData, validData)
+        # set epoch average update function to standard function
+        self._epochAvgUpdateFunc = self._standardEpochAvgUpdate
+
+    def postTrain(self):
+        avgDict = {}
+        # average sums
+        for k, data in self._sumDict.items():
+            avgDict[k] = {}
+            for n, sum in data.items():
+                avgDict[k][n] = round(sum / self.maxEpoch, self._nRoundDigits)
+
+        # add epoch title
+        avgDict[self.epochNumKey] = 'Average'
+        # sort values formats
+        self._applyFormats(avgDict)
+        # add summary row
+        self.logger.addSummaryDataRow(avgDict)
+
+        # perform base class postTrain()
+        super(EpochTrainWeights, self).postTrain()
 
 
 class SearchRegime(TrainRegime):
