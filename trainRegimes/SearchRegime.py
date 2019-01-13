@@ -27,6 +27,8 @@ class EpochTrainWeights(PreTrainedTrainWeights):
 
         super(EpochTrainWeights, self).__init__(regime, maxEpoch)
 
+        # init average dictionary
+        self._avgDict = None
         # init (key, data) mapping
         self._map = {self.trainLossKey: lambda trainData, validData: trainData.lossDict(),
                      self.trainAccKey: lambda trainData, validData: trainData.accDict(),
@@ -74,9 +76,14 @@ class EpochTrainWeights(PreTrainedTrainWeights):
         self._applyFormats(avgDict)
         # add summary row
         self.logger.addSummaryDataRow(avgDict)
+        # set average dict
+        self._avgDict = avgDict
 
         # perform base class postTrain()
         super(EpochTrainWeights, self).postTrain()
+
+    def avgDictDataRow(self):
+        return self._avgDict
 
 
 class SearchRegime(TrainRegime):
@@ -122,8 +129,17 @@ class SearchRegime(TrainRegime):
         self.lossClass = FlopsLoss
         super(SearchRegime, self).__init__(args, logger)
 
+        # init number of epochs
+        self.nEpochs = 100
+        # init main table
+        logger.createDataTable('Search summary', self.colsMainLogger)
+        # update max table cell length
+        logger.setMaxTableCellLength(30)
+
         # add TrainWeights formats to self.formats
         self.formats.update(TrainWeights.getFormats())
+        # update epoch key format
+        self.formats[self.epochNumKey] = lambda x: '{}/{}'.format(x, self.nEpochs)
 
         # init flops loss
         self.flopsLoss = FlopsLoss(args, getattr(args, self.model.baselineFlopsKey()))
@@ -135,15 +151,6 @@ class SearchRegime(TrainRegime):
         args.pre_trained = None
         # init model replications
         self.replicator = ModelReplicator(self)
-
-        # init number of epochs
-        self.nEpochs = 100
-        # init main table
-        logger.createDataTable('Search summary', self.colsMainLogger)
-        # update max table cell length
-        logger.setMaxTableCellLength(30)
-        # update epoch key format
-        self.formats[self.epochNumKey] = lambda x: '{}/{}'.format(x, self.nEpochs)
 
         # create folder for jobs checkpoints
         self.jobsPath = '{}/jobs'.format(args.save)
@@ -441,10 +448,13 @@ class SearchRegime(TrainRegime):
             # train weights
             wEpochName = '{}_w'.format(epoch)
             weightsLogger = HtmlLogger(self.trainFolderPath, wEpochName)
-            trainWeights = EpochTrainWeights(self, 100, epoch, weightsLogger)
+            trainWeights = EpochTrainWeights(self, 2, epoch, weightsLogger)
             trainWeights.train(wEpochName)
-
             # add data row
+            trainDataRow = trainWeights.avgDictDataRow()
+            trainDataRow[self.epochNumKey] = self.formats[self.epochNumKey](epoch)
+            logger.addDataRow(trainDataRow)
+
             # add epoch data rows
             for jobDataRow in epochDataRows:
                 logger.addDataRow(jobDataRow, trType='<tr bgcolor="#2CBDD6">')
