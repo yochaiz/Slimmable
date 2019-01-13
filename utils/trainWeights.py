@@ -150,7 +150,6 @@ class TrainWeights:
             if logger:
                 logger.addSummaryDataRow(summaryData)
 
-        trainLogger = loggers.get(self.trainLoggerKey)
         # log forward counters. if loggerFuncs==[] then it is just resets counters
         func = [lambda rows: trainLogger.addInfoTable(title=forwardCountersTitle, rows=rows)] if trainLogger else []
         self.getModel().logForwardCounters(loggerFuncs=func)
