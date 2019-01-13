@@ -24,7 +24,7 @@ def save_state(state, is_best, path, filename):
 def save_checkpoint(path, model, optimizer, best_prec1, is_best=False, filename=None):
     print('*** save_checkpoint ***')
     # set state dictionary
-    state = dict(state_dict=model.state_dict(), best_prec1=best_prec1, optimizer=optimizer.state_dict())
+    state = dict(state_dict=model.state_dict(), alphas=model.alphas(), best_prec1=best_prec1, optimizer=optimizer.state_dict())
     # set state filename
     filename = filename or stateFilenameDefault
     # save state to file
