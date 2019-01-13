@@ -2,7 +2,7 @@ from .regime import TrainRegime
 
 from torch import save as saveCheckpoint
 
-from utils.trainWeights import TrainWeights
+from utils.trainWeights import TrainWeights, EpochData
 from utils.training import TrainingOptimum
 from utils.checkpoint import save_checkpoint
 
@@ -40,7 +40,7 @@ class OptimalTrainWeights(TrainWeights):
     def schedulerMetric(self, validLoss):
         return self.trainOptimum.dictAvg(validLoss)
 
-    def postEpoch(self, epoch, optimizer, trainData, validData, validAcc, validLoss):
+    def postEpoch(self, epoch, optimizer, trainData:EpochData, validData:EpochData):
         logger = self.getLogger()
         model = self.getModel()
         # add epoch number
@@ -52,8 +52,11 @@ class OptimalTrainWeights(TrainWeights):
         for k, v in validData.items():
             trainData[k] = v
 
+        # get valid acc dict & loss dict
+        validAccDict = validData.accDict()
+        validLossDict = validData.lossDict()
         # update optimum values according to current epoch values and get optimum table for logger
-        optimumTable = self.trainOptimum.update(validAcc, epoch)
+        optimumTable = self.trainOptimum.update(validAccDict, epoch)
         # add update time to optimum table
         optimumTable.append(['Update time', logger.getTimeStr()])
         # update nEpochsOptimum table
@@ -63,7 +66,7 @@ class OptimalTrainWeights(TrainWeights):
         is_best = self.trainOptimum.is_best(epoch)
         if is_best:
             # update optimal epoch data
-            self.optimalEpochData = (validAcc, validLoss)
+            self.optimalEpochData = (validAccDict, validLossDict)
             # found new optimum, reset nEpochsOptimum
             self.nEpochsOptimum = 0
         else:
@@ -71,7 +74,7 @@ class OptimalTrainWeights(TrainWeights):
             self.nEpochsOptimum += 1
 
         # save model checkpoint
-        save_checkpoint(self.getTrainFolderPath(), model, optimizer, validAcc, is_best)
+        save_checkpoint(self.getTrainFolderPath(), model, optimizer, validAccDict, is_best)
 
         # add data to main logger table
         logger.addDataRow(trainData)
