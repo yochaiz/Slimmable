@@ -1,61 +1,32 @@
+from os import makedirs
 from time import time
 from scipy.stats import entropy
+from argparse import Namespace
 
 from torch import tensor, zeros
+from torch import save as saveCheckpoint
 from torch.optim.sgd import SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .regime import TrainRegime
-
+from .PreTrainedRegime import PreTrainedTrainWeights
+from models.BaseNet import BaseNet
 from utils.flopsLoss import FlopsLoss
 from utils.HtmlLogger import HtmlLogger
 from utils.trainWeights import TrainWeights
+from utils.replicator import ModelReplicator
 from utils.training import AlphaTrainingStats
 
 
-class TrainPathWeights(TrainWeights):
-    def __init__(self, regime):
-        super(TrainPathWeights, self).__init__(regime)
+class EpochTrainWeights(PreTrainedTrainWeights):
+    def __init__(self, regime, maxEpoch, currEpoch, logger):
+        self.logger = logger
+        self.tableTitle = 'Train model weights - Epoch:[{}]'.format(currEpoch)
 
-        # disable args.pre_trained to avoid loading model weights
-        self.getArgs().pre_trained = None
-        # disable optimizer state_dict to avoid loading optimizer state
-        self.optimizerStateDict = None
-        # save model weights
-        self.modelOrgWeights = self.getModel().state_dict()
-        # init layer paths dictionary
-        self.layerPaths = {}
+        super(EpochTrainWeights, self).__init__(regime, maxEpoch)
 
-    def stopCondition(self, epoch):
-        return epoch >= 5
-
-    def widthList(self):
-        return self.layerPaths.items()
-
-    def restoreModelOriginalWeights(self):
-        self.getModel().load_state_dict(self.modelOrgWeights)
-
-    def train(self, layer):
-        model = self.getModel()
-        layerPaths = self.layerPaths
-        # restore model original weights
-        self.restoreModelOriginalWeights()
-        # reset layer paths for training
-        layerPaths.clear()
-        # collect layer paths for training
-        for idx in range(layer.nWidths()):
-            # set path to go through width[idx] in current layer
-            layer.setCurrWidthIdx(idx)
-            # add path to dictionary
-            layerPaths[layer.widthRatioByIdx(idx)] = model.currWidthIdx()
-
-        # init optimizer
-        optimizer = self._initOptimizer()
-        # train
-        epoch = 0
-        while not self.stopCondition(epoch):
-            epoch += 1
-            self.weightsEpoch(optimizer, epoch, {})
+    def getLogger(self):
+        return self.logger
 
 
 class SearchRegime(TrainRegime):
@@ -108,8 +79,27 @@ class SearchRegime(TrainRegime):
         self.flopsLoss = FlopsLoss(args, getattr(args, self.model.baselineFlopsKey()))
         self.flopsLoss = self.flopsLoss.cuda()
 
+        # load model pre-trained weights
+        TrainWeights.loadPreTrained(self.model, args.pre_trained, self.logger)
+        # reset args.pre_trained, we don't want to load these weights anymore
+        args.pre_trained = None
+        # init model replications
+        self.replicator = ModelReplicator(self)
+
+        # init number of epochs
+        self.nEpochs = 100
         # init main table
         logger.createDataTable('Search summary', self.colsMainLogger)
+        # update max table cell length
+        logger.setMaxTableCellLength(30)
+        # update epoch key format
+        self.formats[self.epochNumKey] = lambda x: '{}/{}'.format(x, self.nEpochs)
+
+        # create folder for jobs checkpoints
+        self.jobsPath = '{}/jobs'.format(args.save)
+        makedirs(self.jobsPath)
+        # init data table row keys to replace
+        self.rowKeysToReplace = [self.validLossKey, self.validAccKey]
 
         # init email time
         self.lastMailTime = time()
@@ -138,10 +128,12 @@ class SearchRegime(TrainRegime):
     def trainAlphas(self, search_queue, optimizer, epoch, loggers):
         print('*** trainAlphas() ***')
         model = self.model
+        replicator = self.replicator
+        nSamples = self.args.nSamplesPerAlpha
         # init trainingStats instance
         trainStats = AlphaTrainingStats(self.flopsLoss.lossKeys(), useAvg=False)
-        # init TrainWeights instance
-        trainWeights = TrainPathWeights(self)
+        # init new epoch in replications
+        replicator.initNewEpoch()
 
         trainLogger = loggers.get(self.trainLoggerKey)
         if trainLogger:
@@ -157,16 +149,20 @@ class SearchRegime(TrainRegime):
             createInfoTable(dataRow, self.forwardCountersKey, trainLogger, rows)
 
         nBatches = len(search_queue)
+        # update batch num key format
+        self.formats[self.batchNumKey] = lambda x: '{}/{}'.format(batchNum, nBatches)
+
         for batchNum, (input, target) in enumerate(search_queue):
             startTime = time()
 
-            input = tensor(input, requires_grad=False).cuda()
-            target = tensor(target, requires_grad=False).cuda(async=True)
+            input = input.cuda().clone().detach().requires_grad_(False)
+            target = target.cuda(async=True).clone().detach().requires_grad_(False)
 
             # reset optimizer gradients
             optimizer.zero_grad()
             # evaluate on samples and calc alphas gradients
-            lossAvgDict, pathsList = self._loss(input, target, self._samplesSamePath, trainWeights)
+            # lossAvgDict, pathsList = self._loss(input, target, self._samplesSamePath, trainWeights)
+            lossAvgDict, pathsList = self._loss(input, target, nSamples)
             # perform optimizer step
             optimizer.step()
 
@@ -181,35 +177,35 @@ class SearchRegime(TrainRegime):
             self.statistics.plotData()
 
             if trainLogger:
-                dataRow = {self.batchNumKey: '{}/{}'.format(batchNum, nBatches), self.archLossKey: trainStats.batchLoss(),
+                # add numbering to paths list
+                pathsList = [['#', 'Path']] + [[idx + 1, v] for idx, v in enumerate(pathsList)]
+                # init data row
+                dataRow = {self.batchNumKey: batchNum, self.archLossKey: trainStats.batchLoss(),
                            self.pathsListKey: trainLogger.createInfoTable('Show', pathsList), self.timeKey: endTime - startTime}
+                # add alphas distribution table
                 model.logTopAlphas(self.k, [createAlphasTable])
-                model.logForwardCounters([])
                 # apply formats
                 self._applyFormats(dataRow)
                 # add row to data table
                 trainLogger.addDataRow(dataRow)
 
-            break
-
         epochLossDict = trainStats.epochLoss()
         # log summary row
         summaryDataRow = {self.batchNumKey: self.summaryKey, self.archLossKey: epochLossDict}
+        # delete batch num key format
+        del self.formats[self.batchNumKey]
         # apply formats
         self._applyFormats(summaryDataRow)
         # add row to data table
-        trainLogger.addDataRow(summaryDataRow)
+        trainLogger.addSummaryDataRow(summaryDataRow)
 
-        # restore model original weights
-        trainWeights.restoreModelOriginalWeights()
-
-        return epochLossDict
+        return epochLossDict, summaryDataRow
 
     def _calcAlphasDistribStats(self, model):
         stats = self.statistics
         for layerIdx, layer in enumerate(model.layersList()):
             # calc layer alphas distribution
-            probs = layer.probs().detach()
+            probs = layer.probs().cpu()
             # add entropy to statistics
             stats.addValue(lambda containers: containers[self.entropyKey][0][layerIdx], entropy(probs))
             # add alphas distribution
@@ -217,100 +213,19 @@ class SearchRegime(TrainRegime):
                 alphaTitle = self._alphaPlotTitle(layer, alphaIdx)
                 stats.addValue(lambda containers: containers[self.alphaDistributionKey][layerIdx][alphaTitle], p.item())
 
-    # given paths history dictionary and current path, checks if current path exists in history dictionary
-    def _doesPathExist(self, pathsHistoryDict, currPath):
-        currDict = pathsHistoryDict
-        # init boolean flag
-        pathExists = True
-        for v in currPath:
-            if v not in currDict:
-                pathExists = False
-                currDict[v] = {}
-            # update current dict, we move to next layer
-            currDict = currDict[v]
-
-        return pathExists
-
-    # select paths for each alpha and calc loss
-    # add statistics
-    # update alphas gradients
-    def _loss(self, input, target, pathSelectionFunc, trainWeights):
-        model = self.model
-
-        # switch to inference mode
-        model.eval()
-        # calc paths loss for each alpha
-        lossDictsList = pathSelectionFunc(input, target, trainWeights)
-        # switch to train mode
-        model.train()
+    def _loss(self, input: tensor, target: tensor, nSamples: int) -> (dict, list):
+        # calc paths loss for each alpha using replicator
+        lossDictsList, pathsList = self.replicator.loss(input, target, nSamples)
         # update statistics and alphas gradients based on loss
         lossAvgDict = self._updateAlphasGradients(lossDictsList)
 
-        return lossAvgDict
-
-    # evaluate alphas on same paths
-    def _samplesSamePath(self, input, target, trainWeights):
-        model = self.model
-        modelParallel = self.modelParallel
-        nSamples = self.args.nSamplesPerAlpha
-        # init samples (paths) history, to make sure we don't select the same sample twice
-        pathsHistoryDict = {}
-        # init samples (paths) history list for logging purposes
-        pathsList = []
-
-        # init containers to save loss values and variance
-        lossDictsList = [[{k: [] for k in self.flopsLoss.lossKeys()} for _ in range(layer.nWidths())] for layer in model.layersList()]
-
-        # iterate over samples. generate a sample (path), train it and evaluate alphas on sample
-        for sampleIdx in range(nSamples):
-            print('===== Sample idx:[{}] ====='.format(sampleIdx))
-            # select new path based on alphas distribution.
-            # check that selected path hasn't been selected before
-            pathExists = True
-            while pathExists:
-                # select path based on alphas distribution
-                model.choosePathByAlphas()
-                # get selected path indices
-                pathWidthIdx = model.currWidthIdx()
-                # check that selected path hasn't been selected before
-                pathExists = self._doesPathExist(pathsHistoryDict, pathWidthIdx)
-            # add path to paths list
-            pathsList.append([layer.widthByIdx(p) for p, layer in zip(pathWidthIdx, model.layersList())])
-
-            # iterate over layers. in each layer iterate over alphas
-            for layerIdx, layer in enumerate(model.layersList()):
-                print('=== Layer idx:[{}] ==='.format(layerIdx))
-                # init containers to save loss values and variance
-                layerLossDicts = lossDictsList[layerIdx]
-                # save layer current width idx
-                layerCurrWidthIdx = layer.currWidthIdx()
-                # train model on layer path
-                trainWeights.train(layer)
-                # iterate over alphas and calc loss
-                for idx in range(layer.nWidths()):
-                    # set path to go through width[idx] in current layer
-                    layer.setCurrWidthIdx(idx)
-                    print(model.currWidthIdx())
-                    # forward input in model selected path
-                    logits = modelParallel(input)
-                    # calc loss
-                    lossDict = self.flopsLoss(logits, target, model.countFlops())
-                    # add loss to container
-                    alphaLossDict = layerLossDicts[idx]
-                    for k, loss in lossDict.items():
-                        alphaLossDict[k].append(loss.item())
-
-                # restore layer current width idx
-                layer.setCurrWidthIdx(layerCurrWidthIdx)
-
-        return lossDictsList, pathsList
+        return lossAvgDict, pathsList
 
     # updates alphas gradients
-    # update statistics
+    # updates statistics
     # def _updateAlphasGradients(self, lossValues, ceLossValues, flopsLossValues):
-    def _updateAlphasGradients(self, lossDictsList):
+    def _updateAlphasGradients(self, lossDictsList: list) -> dict:
         model = self.model
-        nSamples = self.args.nSamplesPerAlpha
         totalKey = self.flopsLoss.totalKey()
 
         # init total loss
@@ -337,7 +252,7 @@ class SearchRegime(TrainRegime):
                 alphaLossAvgDict = {}
                 for k, lossList in alphaLossDict.items():
                     # calc loss list average
-                    alphaLossAvgDict[k] = sum(lossList) / nSamples
+                    alphaLossAvgDict[k] = sum(lossList) / len(lossList)
                     # add loss average to total loss average
                     lossAvgDict[k] += alphaLossAvgDict[k]
                 # update number of alphas summed into lossAvgDict
@@ -350,7 +265,7 @@ class SearchRegime(TrainRegime):
                 totalLoss += (alphaLossAvg * layerProbs[idx])
                 # calc alpha loss variance
                 alphaLossVariance = [((x - alphaLossAvg) ** 2) for x in alphaLossDict[totalKey]]
-                alphaLossVariance = sum(alphaLossVariance) / (nSamples - 1)
+                alphaLossVariance = sum(alphaLossVariance) / (len(alphaLossVariance) - 1)
                 # add values to statistics
                 alphaTitle = self._alphaPlotTitle(layer, idx)
                 # init template for get list function based on container key
@@ -381,16 +296,68 @@ class SearchRegime(TrainRegime):
         return lossAvgDict
 
     @staticmethod
-    def __getEpochRange(nEpochs):
+    def _getEpochRange(nEpochs: int) -> range:
         return range(1, nEpochs + 1)
+
+    @staticmethod
+    def _generateTableValue(jobName, key) -> str:
+        return {BaseNet.partitionKey(): '{}_{}'.format(jobName, key)}
+
+    def _createPartitionInfoTable(self, partition):
+        rows = [['Layer #', self.widthKey]] + [[layerIdx, w] for layerIdx, w in enumerate(partition)]
+        table = self.logger.createInfoTable('Show', rows)
+        return table
+
+    def _createJob(self, epoch: int, id: int, choosePathFunc: callable) -> dict:
+        model = self.model
+        args = self.args
+        # clone args
+        job = Namespace(**vars(args))
+        # init job name
+        jobName = '[{}]-[{}]-[{}]'.format(args.time, epoch, id)
+        # create job data row
+        dataRow = {k: self._generateTableValue(jobName, k) for k in self.rowKeysToReplace}
+        # sample path from alphas distribution
+        choosePathFunc()
+        # set attributes
+        job.partition = model.currWidthRatio()
+        job.epoch = epoch
+        job.id = id
+        job.jobName = jobName
+        job.tableKeys = dataRow
+        # save job
+        jobPath = '{}/{}.pth.tar'.format(self.jobsPath, job.jobName)
+        saveCheckpoint(job, jobPath)
+
+        # add flops ratio to data row
+        dataRow[self.validFlopsRatioKey] = model.flopsRatio()
+        # add path width ratio to data row
+        dataRow[self.widthKey] = self._createPartitionInfoTable(job.partition)
+        # add epoch number to data row
+        dataRow[self.epochNumKey] = epoch
+        # apply formats
+        self._applyFormats(dataRow)
+
+        return dataRow
+
+    def _createEpochJobs(self, epoch: int) -> list:
+        # init epoch data rows list
+        epochDataRows = []
+        # init model path chooser function
+        choosePathFunc = self.model.chooseAlphaMax
+        for id in self._getEpochRange(self.args.nJobs):
+            jobDataRow = self._createJob(epoch, id, choosePathFunc)
+            epochDataRows.append(jobDataRow)
+            # only 1st job should be based on alphas max, the rest should sample from alphas distribution
+            choosePathFunc = self.model.choosePathByAlphas
+
+        return epochDataRows
 
     def train(self):
         args = self.args
         model = self.model
         logger = self.logger
-        # init number of epochs
-        nEpochs = 40
-        epochRange = self.__getEpochRange(nEpochs)
+        epochRange = self._getEpochRange(self.nEpochs)
 
         # init optimizer
         optimizer = SGD(model.alphas(), args.search_learning_rate, momentum=args.search_momentum, weight_decay=args.search_weight_decay)
@@ -402,19 +369,79 @@ class SearchRegime(TrainRegime):
             # # calc alpha trainset loss on baselines
             # self.calcAlphaTrainsetLossOnBaselines(self.trainFolderPath, '{}_{}'.format(epoch, self.archLossKey), logger)
 
-            # init main logger data row
-            dataRow = {self.epochNumKey: '{}/{}'.format(epoch, nEpochs), self.lrKey: optimizer.param_groups[0]['lr']}
             # init epoch train logger
             trainLogger = HtmlLogger(self.trainFolderPath, epoch)
             # set loggers dictionary
             loggersDict = {self.trainLoggerKey: trainLogger}
 
             # train alphas
-            epochLossDict = self.trainAlphas(self.search_queue[epoch % args.alphas_data_parts], optimizer, epoch, loggersDict)
+            epochLossDict, alphasDataRow = self.trainAlphas(self.search_queue[epoch % args.alphas_data_parts], optimizer, epoch, loggersDict)
             # update scheduler
             scheduler.step(epochLossDict.get(self.flopsLoss.totalKey()))
 
+            # add values to alphas data row
+            additionalData = {self.epochNumKey: epoch, self.lrKey: optimizer.param_groups[0]['lr']}
+            self._applyFormats(additionalData)
+            alphasDataRow.update(additionalData)
+            logger.addDataRow(alphasDataRow)
+
+            # create epoch jobs
+            epochDataRows = self._createEpochJobs(epoch)
+
             # train weights
+            wEpochName = '{}_w'.format(epoch)
+            weightsLogger = HtmlLogger(self.trainFolderPath, wEpochName)
+            trainWeights = EpochTrainWeights(self, 100, epoch, weightsLogger)
+            trainWeights.train(wEpochName)
+
+            # add data row
+            # add epoch data rows
+            for jobDataRow in epochDataRows:
+                logger.addDataRow(jobDataRow, trType='<tr bgcolor="#2CBDD6">')
+
+# class TrainPathWeights(TrainWeights):
+#     def __init__(self, regime):
+#         super(TrainPathWeights, self).__init__(regime)
+#
+#         # disable args.pre_trained to avoid loading model weights
+#         self.getArgs().pre_trained = None
+#         # disable optimizer state_dict to avoid loading optimizer state
+#         self.optimizerStateDict = None
+#         # save model weights
+#         self.modelOrgWeights = self.getModel().state_dict()
+#         # init layer paths dictionary
+#         self.layerPaths = {}
+#
+#     def stopCondition(self, epoch):
+#         return epoch >= 5
+#
+#     def widthList(self):
+#         return self.layerPaths.items()
+#
+#     def restoreModelOriginalWeights(self):
+#         self.getModel().load_state_dict(self.modelOrgWeights)
+#
+#     def train(self, layer):
+#         model = self.getModel()
+#         layerPaths = self.layerPaths
+#         # restore model original weights
+#         self.restoreModelOriginalWeights()
+#         # reset layer paths for training
+#         layerPaths.clear()
+#         # collect layer paths for training
+#         for idx in range(layer.nWidths()):
+#             # set path to go through width[idx] in current layer
+#             layer.setCurrWidthIdx(idx)
+#             # add path to dictionary
+#             layerPaths[layer.widthRatioByIdx(idx)] = model.currWidthIdx()
+#
+#         # init optimizer
+#         optimizer = self._initOptimizer()
+#         # train
+#         epoch = 0
+#         while not self.stopCondition(epoch):
+#             epoch += 1
+#             self.weightsEpoch(optimizer, epoch, {})
 
 # ======= compare replicator vs. standard model, who is FASTER ===========
 # init model constructor func
