@@ -14,6 +14,22 @@ from utils.training import TrainingStats
 from utils.HtmlLogger import HtmlLogger
 
 
+class EpochData:
+    def __init__(self, lossDict, accDict, summaryDataRow):
+        self._lossDict = lossDict
+        self._accDict = accDict
+        self._summaryDataRow = summaryDataRow
+
+    def lossDict(self):
+        return self._lossDict
+
+    def accDict(self):
+        return self._accDict
+
+    def summaryDataRow(self):
+        return self._summaryDataRow
+
+
 class TrainWeights:
     # init train logger key
     trainLoggerKey = 'train'
@@ -99,7 +115,7 @@ class TrainWeights:
         raise NotImplementedError('subclasses must override schedulerMetric()!')
 
     @abstractmethod
-    def postEpoch(self, epoch, optimizer, trainData, validData, validAcc, validLoss):
+    def postEpoch(self, epoch, optimizer, trainData: EpochData, validData: EpochData):
         raise NotImplementedError('subclasses must override postEpoch()!')
 
     @abstractmethod
@@ -107,7 +123,7 @@ class TrainWeights:
         raise NotImplementedError('subclasses must override postTrain()!')
 
     # generic epoch flow
-    def _genericEpoch(self, forwardFunc, data_queue, loggers, lossKey, accKey, tableTitle, tableCols, forwardCountersTitle):
+    def _genericEpoch(self, forwardFunc, data_queue, loggers, lossKey, accKey, tableTitle, tableCols, forwardCountersTitle) -> EpochData:
         trainStats = TrainingStats([k for k, v in self.widthList()])
 
         trainLogger = loggers.get(self.trainLoggerKey)
@@ -154,7 +170,7 @@ class TrainWeights:
         func = [lambda rows: trainLogger.addInfoTable(title=forwardCountersTitle, rows=rows)] if trainLogger else []
         self.getModel().logForwardCounters(loggerFuncs=func)
 
-        return epochAccDict, epochLossDict, summaryData
+        return EpochData(epochLossDict, epochAccDict, summaryData)
 
     def _slimForward(self, input, target, trainStats):
         model = self.getModel()
@@ -178,7 +194,7 @@ class TrainWeights:
         return lossList
 
     # performs single epoch of model weights training
-    def weightsEpoch(self, optimizer, epoch, loggers):
+    def weightsEpoch(self, optimizer, epoch, loggers) -> EpochData:
         print('*** weightsEpoch() ***')
         model = self.getModel()
         modelParallel = self.getModelParallel()
@@ -199,13 +215,11 @@ class TrainWeights:
 
         tableTitle = 'Epoch:[{}] - Training weights'.format(epoch)
         forwardCountersTitle = '{} - Training'.format(self.forwardCountersKey)
-        epochAccDict, epochLossDict, summaryData = self._genericEpoch(forwardFunc, self.getTrainQueue(), loggers, self.trainLossKey,
-                                                                      self.trainAccKey, tableTitle, self.colsTrainWeights, forwardCountersTitle)
-
-        return summaryData
+        return self._genericEpoch(forwardFunc, self.getTrainQueue(), loggers, self.trainLossKey, self.trainAccKey, tableTitle, self.colsTrainWeights,
+                                  forwardCountersTitle)
 
     # performs single epoch of model inference
-    def inferEpoch(self, nEpoch, loggers):
+    def inferEpoch(self, nEpoch, loggers) -> EpochData:
         print('*** inferEpoch() ***')
         model = self.getModel()
         modelParallel = self.getModelParallel()
@@ -219,10 +233,8 @@ class TrainWeights:
 
         tableTitle = 'Epoch:[{}] - Validation'.format(nEpoch)
         forwardCountersTitle = '{} - Validation'.format(self.forwardCountersKey)
-        epochAccDict, epochLossDict, summaryData = self._genericEpoch(forwardFunc, self.getValidQueue(), loggers, self.validLossKey,
-                                                                      self.validAccKey, tableTitle, self.colsValidation, forwardCountersTitle)
-
-        return epochAccDict, epochLossDict, summaryData
+        return self._genericEpoch(forwardFunc, self.getValidQueue(), loggers, self.validLossKey, self.validAccKey, tableTitle, self.colsValidation,
+                                  forwardCountersTitle)
 
     def _initOptimizer(self):
         modelParallel = self.getModelParallel()
@@ -270,12 +282,12 @@ class TrainWeights:
             # train
             trainData = self.weightsEpoch(optimizer, epoch, loggersDict)
             # validation
-            validAcc, validLoss, validData = self.inferEpoch(epoch, loggersDict)
+            validData = self.inferEpoch(epoch, loggersDict)
 
             # update scheduler
-            scheduler.step(self.schedulerMetric(validLoss))
+            scheduler.step(self.schedulerMetric(validData.lossDict()))
 
-            self.postEpoch(epoch, optimizer, trainData, validData, validAcc, validLoss)
+            self.postEpoch(epoch, optimizer, trainData, validData)
 
         self.postTrain()
 
