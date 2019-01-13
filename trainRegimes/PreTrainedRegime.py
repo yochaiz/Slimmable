@@ -10,13 +10,15 @@ class PreTrainedTrainWeights(TrainWeights):
     tableCols = [TrainWeights.epochNumKey, TrainWeights.trainLossKey, TrainWeights.trainAccKey,
                  TrainWeights.validLossKey, TrainWeights.validAccKey, TrainWeights.validFlopsRatioKey, TrainWeights.lrKey]
 
-    def __init__(self, regime):
+    def __init__(self, regime, maxEpoch):
         super(PreTrainedTrainWeights, self).__init__(regime)
 
         # init table in main logger
         self.getLogger().createDataTable(self.tableTitle, self.tableCols)
         # select new path
         self._selectNewPath()
+        # init max epoch
+        self.maxEpoch = maxEpoch
 
     def _selectNewPath(self):
         model = self.getModel()
@@ -27,7 +29,7 @@ class PreTrainedTrainWeights(TrainWeights):
         print(self.widthIdxList)
 
     def stopCondition(self, epoch):
-        return epoch >= 2000
+        return epoch >= self.maxEpoch
 
     def widthList(self):
         return {self.pathKey: self.widthIdxList}.items()
@@ -66,7 +68,7 @@ class PreTrainedRegime(TrainRegime):
     def __init__(self, args, logger):
         super(PreTrainedRegime, self).__init__(args, logger)
 
-        self.trainWeights = PreTrainedTrainWeights(self)
+        self.trainWeights = PreTrainedTrainWeights(self, 2000)
 
     def buildStatsContainers(self):
         pass
