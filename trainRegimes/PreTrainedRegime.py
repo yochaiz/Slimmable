@@ -1,6 +1,6 @@
 from .regime import TrainRegime
 
-from utils.trainWeights import TrainWeights
+from utils.trainWeights import TrainWeights, EpochData
 from utils.checkpoint import save_checkpoint
 
 
@@ -37,25 +37,29 @@ class PreTrainedTrainWeights(TrainWeights):
     def schedulerMetric(self, validLoss):
         return validLoss[self.pathKey]
 
-    def postEpoch(self, epoch, optimizer, trainData, validData, validAcc, validLoss):
+    def postEpoch(self, epoch, optimizer, trainData: EpochData, validData: EpochData):
         logger = self.getLogger()
         model = self.getModel()
-        # add epoch number
-        trainData[self.epochNumKey] = epoch
-        # add learning rate
-        trainData[self.lrKey] = self.formats[self.lrKey](optimizer.param_groups[0]['lr'])
-        # add flops ratio
-        trainData[self.validFlopsRatioKey] = self.formats[self.validFlopsRatioKey](model.flopsRatio())
 
-        # merge trainData with validData
-        for k, v in validData.items():
-            trainData[k] = v
+        trainDataRow = trainData.summaryDataRow()
+        validDataRow = validData.summaryDataRow()
+
+        # add epoch number
+        trainDataRow[self.epochNumKey] = epoch
+        # add learning rate
+        trainDataRow[self.lrKey] = self.formats[self.lrKey](optimizer.param_groups[0]['lr'])
+        # add flops ratio
+        trainDataRow[self.validFlopsRatioKey] = self.formats[self.validFlopsRatioKey](model.flopsRatio())
+
+        # merge trainDataRow with validDataRow
+        for k, v in validDataRow.items():
+            trainDataRow[k] = v
 
         # save model checkpoint
-        save_checkpoint(self.getTrainFolderPath(), model, optimizer, validAcc)
+        save_checkpoint(self.getTrainFolderPath(), model, optimizer, validData.accDict())
 
         # add data to main logger table
-        logger.addDataRow(trainData)
+        logger.addDataRow(trainDataRow)
 
         # select new path for next epoch
         self._selectNewPath()
