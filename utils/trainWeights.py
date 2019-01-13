@@ -9,6 +9,7 @@ from torch.nn import CrossEntropyLoss
 from torch.optim.sgd import SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
+from models.BaseNet import BaseNet
 from utils.training import TrainingStats
 from utils.HtmlLogger import HtmlLogger
 
@@ -51,7 +52,7 @@ class TrainWeights:
         self.cross_entropy = CrossEntropyLoss().cuda()
 
         # load pre-trained model & optimizer
-        self.optimizerStateDict = self.loadPreTrained(regime.args.pre_trained, regime.logger)
+        self.optimizerStateDict = self.loadPreTrained(self.getModel(), regime.args.pre_trained, regime.logger)
 
     def getModel(self):
         return self.regime.model
@@ -118,8 +119,8 @@ class TrainWeights:
         for batchNum, (input, target) in enumerate(data_queue):
             startTime = time()
 
-            input = tensor(input, requires_grad=False).cuda()
-            target = tensor(target, requires_grad=False).cuda(async=True)
+            input = input.cuda().clone().detach().requires_grad_(False)
+            target = target.cuda(async=True).clone().detach().requires_grad_(False)
 
             # do forward
             forwardFunc(input, target, trainStats)
@@ -279,7 +280,8 @@ class TrainWeights:
 
         self.postTrain()
 
-    def loadPreTrained(self, path, logger):
+    @staticmethod
+    def loadPreTrained(model: BaseNet, path: str, logger: HtmlLogger) -> dict:
         optimizerStateDict = None
 
         if path is not None:
@@ -287,7 +289,7 @@ class TrainWeights:
                 # load checkpoint
                 checkpoint = loadModel(path, map_location=lambda storage, loc: storage.cuda())
                 # load weights
-                self.getModel().loadPreTrained(checkpoint['state_dict'])
+                model.loadPreTrained(checkpoint['state_dict'])
                 # load optimizer state dict
                 optimizerStateDict = checkpoint['optimizer']
                 # add info rows about checkpoint
