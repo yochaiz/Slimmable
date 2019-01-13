@@ -51,7 +51,7 @@ def parseArgs():
     parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
     parser.add_argument('--weight_decay', type=float, default=4e-5, help='weight decay')
     # search optimization params
-    parser.add_argument('--search_learning_rate', type=float, default=0.01, help='init learning rate')
+    parser.add_argument('--search_learning_rate', type=float, default=0.5, help='init learning rate')
     parser.add_argument('--search_learning_rate_min', type=float, default=1E-8, help='min learning rate')
     parser.add_argument('--search_momentum', type=float, default=0.9, help='momentum')
     parser.add_argument('--search_weight_decay', type=float, default=4e-5, help='weight decay')
@@ -66,8 +66,9 @@ def parseArgs():
     parser.add_argument('--optimal_epochs', type=int, default=150, help='stop training weights if there is no new optimum in last optimal_epochs')
     parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
     # parser.add_argument('--train_regime', default='TrainRegime', choices=trainRegimesNames, help='Training regime')
-    parser.add_argument('--alphas_data_parts', type=int, default=4, help='split alphas training data to parts. each loop uses single part')
+    parser.add_argument('--alphas_data_parts', type=int, default=10, help='split alphas training data to parts. each loop uses single part')
     parser.add_argument('--nSamplesPerAlpha', type=int, default=5, help='number of samples (paths) to evaluate on each alpha')
+    parser.add_argument('--nJobs', type=int, default=5, help='number of jobs (checkpoints) to sample from current alphas distribution')
     parser.add_argument('--lmbda', type=float, default=0.0, help='Lambda value for FlopsLoss')
     # # Conv2d params
     # parser.add_argument('--kernel', type=int, default=3, help='conv kernel size, e.g. 1,3,5')
