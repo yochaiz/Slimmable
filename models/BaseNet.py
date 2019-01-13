@@ -86,7 +86,7 @@ class SlimLayer(Block):
 
     # return alphas probabilities
     def probs(self):
-        return softmax(self._alphas, dim=-1)
+        return softmax(self._alphas, dim=-1).detach()
 
     def widthList(self):
         return self._widthList
@@ -140,6 +140,10 @@ class SlimLayer(Block):
         dist = Categorical(logits=self._alphas)
         chosen = dist.sample()
         self._currWidthIdx = chosen.item()
+
+    # select maximal alpha
+    def chooseAlphaMax(self):
+        self._currWidthIdx = self._alphas.argmax().item()
 
 
 class ConvSlimLayer(SlimLayer):
@@ -305,6 +309,9 @@ class BaseNet(Module):
     def currWidthIdx(self):
         return [layer.currWidthIdx() for layer in self._layers.optimization()]
 
+    def currWidthRatio(self):
+        return [layer.currWidthRatio() for layer in self._layers.optimization()]
+
     def setCurrWidthIdx(self, idxList):
         for layer, idx in zip(self._layers.optimization(), idxList):
             layer.setCurrWidthIdx(idx)
@@ -313,6 +320,11 @@ class BaseNet(Module):
     def choosePathByAlphas(self):
         for layer in self._layers.optimization():
             layer.choosePathByAlphas()
+
+    # select maximal alpha in each layer
+    def chooseAlphaMax(self):
+        for layer in self._layers.optimization():
+            layer.chooseAlphaMax()
 
     # build a dictionary where each key is width ratio and each value is the list of layer indices in order to set the key width ratio as current
     # width in each layer
