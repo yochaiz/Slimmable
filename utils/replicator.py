@@ -1,6 +1,6 @@
 from math import floor
 from time import time
-from multiprocessing import Pool
+from multiprocessing.pool import Pool
 
 from torch import tensor, zeros
 from torch.cuda import set_device, current_device
@@ -11,6 +11,27 @@ from models.BaseNet import BaseNet, SlimLayer
 from utils.trainWeights import TrainWeights
 
 
+# from multiprocessing import Process
+# class NoDaemonProcess(Process):
+#     # make 'daemon' attribute always return False
+#     def _get_daemon(self):
+#         return False
+#
+#     def _set_daemon(self, value):
+#         pass
+#
+#     daemon = property(_get_daemon, _set_daemon)
+#
+#
+# # We sub-class multiprocessing.pool.Pool instead of multiprocessing.Pool
+# # because the latter is only a wrapper function, not a proper class.
+# class MyPool(Pool):
+#     Process = NoDaemonProcess
+
+# # usage example
+# with MyPool(processes=nCopies, maxtasksperchild=1) as p:
+
+
 class Replica:
     def __init__(self, regime: TrainRegime, gpu: int):
         # set device to required gpu
@@ -18,8 +39,10 @@ class Replica:
 
         self._regime = regime
         self._gpu = gpu
-        self._cModel = self._replicateModel(regime)
+        # init empty trainWeights instance
         self._trainWeights = None
+        # replicate regime model
+        self._replicateModel(regime)
 
     def gpu(self) -> int:
         return self._gpu
@@ -33,30 +56,61 @@ class Replica:
     def trainQueue(self) -> DataLoader:
         return self._regime.train_queue
 
-    @staticmethod
-    def _updateWeights(srcModel: BaseNet, dstModel: BaseNet):
-        dstModel.load_state_dict(srcModel.state_dict())
+    def _updateWeights(self, srcModel: BaseNet):
+        # copy weights
+        self._cModel.load_state_dict(srcModel.state_dict())
+        # save current cModel weights
+        self._originalWeightsDict = self._cModel.state_dict()
+        # save new original BNs
+        self._saveOriginalBNs()
+
+    # restore cModel weights before training paths
+    def _restoreModelOriginalWeights(self):
+        model = self._cModel
+        # restore cModel original BNs
+        model.restoreOriginalBNs()
+        # load weights
+        model.load_state_dict(self._originalWeightsDict)
+
+    # save cModel layers BNs ModuleList
+    def _saveOriginalBNs(self):
+        self._originalBNs = [(layer.bn, layer.widthList()) for layer in self._cModel.layersList()]
 
     def _replicateModel(self, regime: TrainRegime) -> BaseNet:
         # create model new instance
         cModel = regime.buildModel(regime.args)
         # set model to cuda on specific GPU
         cModel = cModel.cuda()
-        # copy weights from regime model
-        self._updateWeights(regime.model, cModel)
         # set mode to eval mode
         cModel.eval()
-
-        return cModel
+        # set as class member
+        self._cModel = cModel
+        # copy weights from regime model
+        self._updateWeights(regime.model)
 
     def initNewEpoch(self, model: BaseNet):
         # update replica weights
-        self._updateWeights(model, self.cModel())
+        self._updateWeights(model)
         # init new TrainPathWeights instance
         self._trainWeights = TrainPathWeights(self)
 
-    def train(self, layer: SlimLayer):
-        self._trainWeights.train(layer)
+    def train(self, layer: SlimLayer, srcPath: list):
+        model = self._cModel
+        # restore model original weights
+        self._restoreModelOriginalWeights()
+        # generate independent BNs in each layer for each path
+        model.generatePathBNs(layer)
+        # init layer paths for training
+        layerPaths = {}
+        # set layer paths for training
+        for idx in range(layer.nWidths()):
+            # we generated new BNs in other layers, therefore paths have no overlap
+            layerPaths[layer.widthRatioByIdx(idx)] = [idx] * len(srcPath)
+
+        # train
+        self._trainWeights.train(layerPaths)
+
+        return layerPaths
 
 
 class TrainPathWeights(TrainWeights):
@@ -65,8 +119,6 @@ class TrainPathWeights(TrainWeights):
 
         super(TrainPathWeights, self).__init__(replica.regime())
 
-        # save model weights
-        self.modelOrgWeights = self.getModel().state_dict()
         # init layer paths dictionary
         self.layerPaths = {}
 
@@ -85,23 +137,9 @@ class TrainPathWeights(TrainWeights):
     def widthList(self):
         return self.layerPaths.items()
 
-    def restoreModelOriginalWeights(self):
-        self.getModel().load_state_dict(self.modelOrgWeights)
-
-    def train(self, layer: SlimLayer):
-        model = self.getModel()
-        layerPaths = self.layerPaths
-        # restore model original weights
-        self.restoreModelOriginalWeights()
-        # reset layer paths for training
-        layerPaths.clear()
-        # collect layer paths for training
-        for idx in range(layer.nWidths()):
-            # set path to go through width[idx] in current layer
-            layer.setCurrWidthIdx(idx)
-            # add path to dictionary
-            layerPaths[layer.widthRatioByIdx(idx)] = model.currWidthIdx()
-
+    def train(self, paths: dict):
+        # update training paths
+        self.layerPaths = paths
         # init optimizer
         optimizer = self._initOptimizer()
         # train
@@ -110,6 +148,8 @@ class TrainPathWeights(TrainWeights):
         while not self.stopCondition(epoch):
             epoch += 1
             self.weightsEpoch(optimizer, epoch, {})
+
+        # count training time
         endTime = time()
         print('Train time:[{}] - GPU:[{}]'.format(self.formats[self.timeKey](endTime - startTime), self._replica.gpu()))
 
@@ -155,6 +195,21 @@ class ModelReplicator:
 
         return pathExists
 
+    def _generateNewPath(self, cModel: BaseNet, pathsHistoryDict: dict) -> list:
+        # select new path based on alphas distribution.
+        # check that selected path hasn't been selected before
+        pathExists = True
+        while pathExists:
+            # select path based on alphas distribution
+            cModel.choosePathByAlphas()
+            # get selected path indices
+            pathWidthIdx = cModel.currWidthIdx()
+            # check that selected path hasn't been selected before
+            pathExists = self._doesPathExist(pathsHistoryDict, pathWidthIdx)
+
+        print('pathWidthIdx:{}'.format(pathWidthIdx))
+        return pathWidthIdx
+
     def _splitSamples(self, nSamples: int) -> dict:
         nCopies = len(self.gpuIDs)
         # split number of samples between model replications
@@ -193,8 +248,8 @@ class ModelReplicator:
         args = self.buildArgs(dataPerGPU, nSamplesPerModel)
 
         nCopies = len(self.replications)
-        with Pool(processes=nCopies, maxtasksperchild=1) as pool:
-            results = pool.map(self.lossPerReplication, args)
+        with Pool(processes=nCopies, maxtasksperchild=1) as p:
+            results = p.map(self.lossPerReplication, args)
 
         return self.processResults(results)
 
@@ -217,46 +272,34 @@ class ModelReplicator:
         # iterate over samples. generate a sample (path), train it and evaluate alphas on sample
         for sampleIdx in range(nSamples):
             print('===== Sample idx:[{}] - GPU:[{}] ====='.format(sampleIdx, gpu))
-            # select new path based on alphas distribution.
-            # check that selected path hasn't been selected before
-            pathExists = True
-            while pathExists:
-                # select path based on alphas distribution
-                cModel.choosePathByAlphas()
-                # get selected path indices
-                pathWidthIdx = cModel.currWidthIdx()
-                # check that selected path hasn't been selected before
-                pathExists = self._doesPathExist(pathsHistoryDict, pathWidthIdx)
-            # add path to paths list
-            pathsList.append([layer.widthByIdx(p) for p, layer in zip(pathWidthIdx, cModel.layersList())])
-
             # iterate over layers. in each layer iterate over alphas
             for layerIdx, layer in enumerate(cModel.layersList()):
                 print('=== Layer idx:[{}] - GPU:[{}] ==='.format(layerIdx, gpu))
+                # select new path based on alphas distribution.
+                # check that selected path hasn't been selected before
+                pathWidthIdx = self._generateNewPath(cModel, pathsHistoryDict)
+                # add path to paths list
+                pathsList.append([layer.widthByIdx(p) for p, layer in zip(pathWidthIdx, cModel.layersList())])
                 # init containers to save loss values and variance
                 layerLossDicts = lossDictsList[layerIdx]
-                # save layer current width idx
-                layerCurrWidthIdx = layer.currWidthIdx()
-                # train model on layer path
-                replica.train(layer)
+                # train model on layer paths
+                trainedPaths = replica.train(layer, pathWidthIdx)
                 # switch to eval mode
                 cModel.eval()
-                # iterate over alphas and calc loss
-                for idx in range(layer.nWidths()):
-                    # set path to go through width[idx] in current layer
-                    layer.setCurrWidthIdx(idx)
-                    print(cModel.currWidthIdx())
+                # evaluate batch over trained paths
+                for widthRatio, trainedPathIdx in trainedPaths.items():
+                    # set cModel path to trained path
+                    cModel.setCurrWidthIdx(trainedPathIdx)
                     # forward input in model selected path
                     logits = cModel(input)
                     # calc loss
                     lossDict = self._flopsLoss(logits, target, cModel.countFlops())
+                    # get alpha Idx based on widthRatio
+                    alphaIdx = layer.widthRatioIdx(widthRatio)
                     # add loss to container
-                    alphaLossDict = layerLossDicts[idx]
+                    alphaLossDict = layerLossDicts[alphaIdx]
                     for k, loss in lossDict.items():
                         alphaLossDict[k].append(loss.item())
-
-                # restore layer current width idx
-                layer.setCurrWidthIdx(layerCurrWidthIdx)
 
         return lossDictsList, pathsList
 
@@ -316,3 +359,59 @@ class ModelReplicator:
 #         results = pool.map(self.replicationFunc, args)
 #
 #     return results
+
+# # restore cModel original BNs
+# def _restoreOriginalBNs(self):
+#     for layer, (bn, widthList) in zip(self._cModel.layersList(), self._originalBNs):
+#         layer.bn = bn
+#         layer._widthList = widthList
+
+# def _generatePathBNs(self, layerIdx: int):
+#     model = self._cModel
+#     # iterate over layers (except layerIdx) layer and generate new BNs
+#     for idx, layer in enumerate(model.layersList()):
+#         if idx == layerIdx:
+#             continue
+#
+#         # get layer src BN based on currPathIdx
+#         currBN = layer.bn[layer.currWidthIdx()]
+#         bnFeatures = currBN.num_features
+#         # generate layer new BNs ModuleList
+#         newBNs = ModuleList([BatchNorm2d(bnFeatures) for _ in range(layer.nWidths())]).cuda()
+#         # copy weights to new BNs
+#         for bn in newBNs:
+#             bn.load_state_dict(currBN.state_dict())
+#         # set layer BNs
+#         layer.bn = newBNs
+#         # set layer width list to the same width
+#         layer._widthList = [layer.currWidth()] * layer.nWidths()
+
+# def jjj(self, args: tuple):
+#     replica, data, nSamples = args
+#
+#     gpu = replica.gpu()
+#     # switch to process GPU
+#     set_device(gpu)
+#
+#     regime = replica._regime
+#     model = regime.buildModel(regime.args)
+#     model = model.cuda()
+#     model.train()
+#
+#     from trainRegimes.PreTrainedRegime import PreTrainedTrainWeights
+#     class YY(PreTrainedTrainWeights):
+#         def __init__(self, regime, maxEpoch, model):
+#             self._model = model
+#             super(YY, self).__init__(regime, maxEpoch)
+#
+#         def getModel(self):
+#             return self._model
+#
+#         def getModelParallel(self):
+#             return self.getModel()
+#
+#         def widthList(self):
+#             return {k: self.widthIdxList for k in range(4)}.items()
+#
+#     trainWeights = YY(regime, 5, model)
+#     trainWeights.train('fiuiu')
