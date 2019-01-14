@@ -23,7 +23,7 @@ class Statistics:
     nColsMax = 7
     nRowsDefault = 3
 
-    def __init__(self, containers, saveFolder):
+    def __init__(self, containers, rules, saveFolder):
         # create plot folder
         plotFolderPath = '{}/plots'.format(saveFolder)
         if not path.exists(plotFolderPath):
@@ -32,6 +32,8 @@ class Statistics:
         self.saveFolder = plotFolderPath
         # init containers
         self._containers = containers
+        # init rules
+        self._rules = rules
         # init colors map
         self.colormap = plt.cm.hot
         # init plots data dictionary
@@ -43,80 +45,6 @@ class Statistics:
     def addValue(self, getListFunc, value):
         list = getListFunc(self._containers)
         list.append(value)
-
-    # # data is a list of dictionaries
-    # def addBatchData(self, loss, acc):
-    #     # update number of batches
-    #     self.nBatches += 1
-    #     # add data
-    #     data = [(loss, self._weightsLossKey), (acc, self._weightsAccKey)]
-    #     for dataElement, dataKey in data:
-    #         container = self._containers[dataKey]
-    #         for title, value in dataElement.items():
-    #             # init new list to new title
-    #             if title not in container:
-    #                 container[title] = []
-    #             # add value to title list
-    #             container[title].append(value)
-    #
-    #     self.plotData()
-
-    # def addBatchData(self, model):
-    #     # update number of batches
-    #     self.nBatches += 1
-    #     # add data per layer
-    #     for i, layer in enumerate(model.layersList):
-    #         # calc layer alphas distribution
-    #         probs = F.softmax(layer.alphas, dim=-1).detach()
-    #         # save distribution
-    #         for j, p in enumerate(probs):
-    #             self.containers[self._alphaDistributionKey][i][j].append(p.item())
-    #         # calc entropy
-    #         self.containers[self._entropyKey][i].append(entropy(probs))
-    #
-    #     # plot data
-    #     self.plotData()
-
-    def __saveAndPlotFlops(self):
-        # save data to plotData
-        self.plotsData[self._flopsKey] = self.flopsData
-        # save plots data
-        saveFile(self.plotsData, self.plotsDataFilePath)
-        # update plot
-        self.plotFlopsData(self.plotsData[self._flopsKey], self.saveFolder)
-
-    # # flopsData_ is a map where keys are bitwidth and values are flops.
-    # # we need to find the appropriate checkpoint for accuracy values.
-    # def addBaselineFlopsData(self, args, flopsData_):
-    #     label = self.baselineLabel
-    #     # init label list if label doesn't exist
-    #     if label not in self.flopsData.keys():
-    #         self.flopsData[label] = []
-    #
-    #     # add data to list
-    #     for bitwidth, flops in flopsData_.items():
-    #         # load checkpoint
-    #         checkpoint, _ = cnn.utils.loadCheckpoint(args.dataset, args.model, bitwidth)
-    #         if checkpoint is not None:
-    #             accuracy = checkpoint.get('best_prec1')
-    #             if accuracy is not None:
-    #                 self.flopsData[label].append((bitwidth, flops, accuracy))
-    #
-    #     # save & plot flops
-    #     self.__saveAndPlotFlops()
-
-    # # flopsData_ is a dictionary where keys are labels and values are list of tuples of (bitwidth, flops, accuracy)
-    # def addFlopsData(self, flopsData_):
-    #     for label in flopsData_.keys():
-    #         # init label list if label doesn't exist
-    #         if label not in self.flopsData.keys():
-    #             self.flopsData[label] = []
-    #
-    #         # append values to self.flopsData
-    #         self.flopsData[label].extend(flopsData_[label])
-    #
-    #     # save & plot flops
-    #     self.__saveAndPlotFlops()
 
     @staticmethod
     def saveFigPDF(figs, fileName, saveFolder):
@@ -224,10 +152,11 @@ class Statistics:
 
             # don't scale axMerged
             if axMerged:
-                # if yLabel == self._alphaDistributionKey:
-                #     yMax = 1.1
-                #
-                #     axMerged.grid()
+                # apply yMax rule if exists, else retain yMax
+                yMax = self._rules.get(yLabel, yMax)
+                # set grid
+                axMerged.grid()
+                # set ax properties
                 self.__setAxesProperties(axMerged, xLabel, yLabel, yMax, title)
 
             if scale:
@@ -271,14 +200,19 @@ class Statistics:
             nPlots = len(dataList)
             if nPlots > 1:
                 nRows, nCols = self.__findGrid(nPlots)
-                figMerged, axMerged = plt.subplots(nrows=nRows, ncols=nCols)
+                figMerged, axMerged = plt.subplots(nrows=nRows, ncols=nCols, sharey=True)
                 axRow, axCol = 0, 0
                 figs.append(figMerged)
             # iterate over data elements
             for dataIdx, dataDict in enumerate(dataList):
+                # init axMerged sub-plot
                 ax = axMerged[axRow, axCol] if nPlots > 1 else None
-                fig = self.__plotContainer(dataDict, xLabel='Batch #', yLabel=fileName, axMerged=ax,
-                                           title='[{}]-[{}] over epochs'.format(fileName, dataIdx))
+                # init labels
+                xLabel = 'Batch #'
+                yLabel = fileName
+                title = '[{}]-[{}] over epochs'.format(fileName, dataIdx)
+                # plot container
+                fig = self.__plotContainer(dataDict, xLabel, yLabel, title, axMerged=ax)
                 # add fig to figs list
                 figs.append(fig)
                 # update next axes indices
@@ -325,3 +259,77 @@ class Statistics:
 #     self.__setPlotProperties(fig, ax, xLabel='Layer #', yLabel='M-bops', yMax=yMax, title='bops per op in layer')
 #     # save as HTML
 #     self.saveFigPDF([fig], fileName=self.bopsKey)
+
+# # data is a list of dictionaries
+# def addBatchData(self, loss, acc):
+#     # update number of batches
+#     self.nBatches += 1
+#     # add data
+#     data = [(loss, self._weightsLossKey), (acc, self._weightsAccKey)]
+#     for dataElement, dataKey in data:
+#         container = self._containers[dataKey]
+#         for title, value in dataElement.items():
+#             # init new list to new title
+#             if title not in container:
+#                 container[title] = []
+#             # add value to title list
+#             container[title].append(value)
+#
+#     self.plotData()
+
+# def addBatchData(self, model):
+#     # update number of batches
+#     self.nBatches += 1
+#     # add data per layer
+#     for i, layer in enumerate(model.layersList):
+#         # calc layer alphas distribution
+#         probs = F.softmax(layer.alphas, dim=-1).detach()
+#         # save distribution
+#         for j, p in enumerate(probs):
+#             self.containers[self._alphaDistributionKey][i][j].append(p.item())
+#         # calc entropy
+#         self.containers[self._entropyKey][i].append(entropy(probs))
+#
+#     # plot data
+#     self.plotData()
+
+# def __saveAndPlotFlops(self):
+#     # save data to plotData
+#     self.plotsData[self._flopsKey] = self.flopsData
+#     # save plots data
+#     saveFile(self.plotsData, self.plotsDataFilePath)
+#     # update plot
+#     self.plotFlopsData(self.plotsData[self._flopsKey], self.saveFolder)
+
+# # flopsData_ is a map where keys are bitwidth and values are flops.
+# # we need to find the appropriate checkpoint for accuracy values.
+# def addBaselineFlopsData(self, args, flopsData_):
+#     label = self.baselineLabel
+#     # init label list if label doesn't exist
+#     if label not in self.flopsData.keys():
+#         self.flopsData[label] = []
+#
+#     # add data to list
+#     for bitwidth, flops in flopsData_.items():
+#         # load checkpoint
+#         checkpoint, _ = cnn.utils.loadCheckpoint(args.dataset, args.model, bitwidth)
+#         if checkpoint is not None:
+#             accuracy = checkpoint.get('best_prec1')
+#             if accuracy is not None:
+#                 self.flopsData[label].append((bitwidth, flops, accuracy))
+#
+#     # save & plot flops
+#     self.__saveAndPlotFlops()
+
+# # flopsData_ is a dictionary where keys are labels and values are list of tuples of (bitwidth, flops, accuracy)
+# def addFlopsData(self, flopsData_):
+#     for label in flopsData_.keys():
+#         # init label list if label doesn't exist
+#         if label not in self.flopsData.keys():
+#             self.flopsData[label] = []
+#
+#         # append values to self.flopsData
+#         self.flopsData[label].extend(flopsData_[label])
+#
+#     # save & plot flops
+#     self.__saveAndPlotFlops()
