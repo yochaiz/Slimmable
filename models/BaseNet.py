@@ -35,6 +35,11 @@ class Block(Module):
     def countFlops(self):
         raise NotImplementedError('subclasses must override countFlops()!')
 
+    @abstractmethod
+    # make some adjustments in model due to current width selected
+    def updateCurrWidth(self):
+        raise NotImplementedError('subclasses must override updateCurrWidth()!')
+
 
 # abstract class for model layer
 class SlimLayer(Block):
@@ -80,6 +85,9 @@ class SlimLayer(Block):
 
     def countFlops(self):
         return self.flopsDict[(self.prevLayer[0].currWidth(), self.currWidth())]
+
+    def updateCurrWidth(self):
+        pass
 
     # return alphas value
     def alphas(self):
@@ -157,12 +165,40 @@ class ConvSlimLayer(SlimLayer):
         self.getFlopsLayers = self.getLayers
         self.getCountersLayers = self.getLayers
 
+        # init layer original BNs container
+        self._orgBNs = [self.bn]
+        # init layer original width list
+        self._orgWidthList = self.widthList()
+
+    def orgBNs(self):
+        return self._orgBNs[0]
+
     def buildModules(self, params):
         in_planes, out_planes, kernel_size, stride = params
         # init conv2d module
         self.conv = Conv2d(in_planes, out_planes, kernel_size, stride=stride, padding=floor(kernel_size / 2), bias=False).cuda()
         # init independent batchnorm module for number of filters
         self.bn = ModuleList([BatchNorm2d(n) for n in self._widthList]).cuda()
+
+    # generate new BNs based on current width
+    def generatePathBNs(self):
+        # get current BN
+        currBN = self.orgBNs()[self.currWidthIdx()]
+        # get current BN num_features
+        bnFeatures = currBN.num_features
+        # generate new BNs ModuleList
+        newBNs = ModuleList([BatchNorm2d(bnFeatures) for _ in range(self.nWidths())]).cuda()
+        # copy weights to new BNs
+        for bn in newBNs:
+            bn.load_state_dict(currBN.state_dict())
+        # set layer BNs
+        self.bn = newBNs
+        # update width List
+        self._widthList = [self.currWidth()] * self.nWidths()
+
+    def restoreOriginalBNs(self):
+        self.bn = self.orgBNs()
+        self._widthList = self._orgWidthList
 
     def forward(self, x):
         # narrow conv weights (i.e. filters) according to current nFilters
@@ -322,15 +358,27 @@ class BaseNet(Module):
         for layer, idx in zip(self._layers.optimization(), idxList):
             layer.setCurrWidthIdx(idx)
 
+        # update curr width changes in each block
+        for block in self.blocks:
+            block.updateCurrWidth()
+
     # select alpha based on alphas distribution
     def choosePathByAlphas(self):
         for layer in self._layers.optimization():
             layer.choosePathByAlphas()
 
+        # update curr width changes in each block
+        for block in self.blocks:
+            block.updateCurrWidth()
+
     # select maximal alpha in each layer
     def chooseAlphaMax(self):
         for layer in self._layers.optimization():
             layer.chooseAlphaMax()
+
+        # update curr width changes in each block
+        for block in self.blocks:
+            block.updateCurrWidth()
 
     # build a dictionary where each key is width ratio and each value is the list of layer indices in order to set the key width ratio as current
     # width in each layer
