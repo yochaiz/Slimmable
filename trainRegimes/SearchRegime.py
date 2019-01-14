@@ -176,6 +176,9 @@ class SearchRegime(TrainRegime):
 
         return container
 
+    def buildStatsRules(self):
+        return {self.alphaDistributionKey: 1.1}
+
     # apply defined format functions on dict values by keys
     def _applyFormats(self, dict):
         for k in dict.keys():
