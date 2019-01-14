@@ -49,10 +49,6 @@ class Downsample(Block):
     def initResidual(self):
         raise NotImplementedError('subclasses must override initResidual()!')
 
-    @abstractmethod
-    def update(self):
-        raise NotImplementedError('subclasses must override update()!')
-
     def downsample(self):
         return self._downsample[0]
 
@@ -93,9 +89,13 @@ class PermanentDownsample(Downsample):
     def initResidual(self):
         return self.downsampleResidual
 
-    def update(self):
+    def updateCurrWidth(self):
+        _downsample = self.downsample()
+        _conv2 = self.conv2[0]
+        # # update width list
+        # _downsample._widthList = _conv2.widthList()
         # update downsample width
-        self.downsample().setCurrWidthIdx(self.conv2[0].currWidthIdx())
+        _downsample.setCurrWidthIdx(_conv2.currWidthIdx())
 
 
 # downsample for block where downsample is required only where following layers have different width
@@ -109,7 +109,7 @@ class TempDownsample(Downsample):
     def initResidual(self):
         return self.standardResidual
 
-    def update(self):
+    def updateCurrWidth(self):
         # set residual function to standard residual
         self.residualFunc = self.initResidual()
         # set downsample to None
@@ -123,6 +123,8 @@ class TempDownsample(Downsample):
             self.residualFunc = self.downsampleResidual
             # update downsample
             self._downsample = [self.downsampleSrc]
+            # # update width list
+            # self.downsample()._widthList = self.conv2[0].widthList()
             # update downsample width
             self.downsample().setCurrWidthIdx(self.conv2[0].currWidthIdx())
 
@@ -145,12 +147,12 @@ class BasicBlock(Block):
         downsampleClass = TempDownsample if in_planes == out_planes else PermanentDownsample
         self.downsample = downsampleClass(widthRatioList, in_planes, out_planes, stride1, prevLayer, self.conv2)
 
-        # register pre-forward hook
-        self.register_forward_pre_hook(self.preForward)
+        # # register pre-forward hook
+        # self.register_forward_pre_hook(self.preForward)
 
-    @staticmethod
-    def preForward(self, input):
-        self.downsample.update()
+    # @staticmethod
+    # def preForward(self, input):
+    #     self.downsample.update()
 
     def forward(self, x):
         out = self.conv1(x)
@@ -165,7 +167,6 @@ class BasicBlock(Block):
         return [self.conv1, self.conv2]
 
     def getFlopsLayers(self):
-        self.downsample.update()
         return [self.conv1] + self.downsample.getFlopsLayers() + [self.conv2]
 
     def getCountersLayers(self):
@@ -176,6 +177,9 @@ class BasicBlock(Block):
 
     def countFlops(self):
         return sum([layer.countFlops() for layer in self.getFlopsLayers()])
+
+    def updateCurrWidth(self):
+        self.downsample.updateCurrWidth()
 
 
 class ResNet18(BaseNet):
@@ -199,6 +203,17 @@ class ResNet18(BaseNet):
     @abstractmethod
     def forward(self, x):
         raise NotImplementedError('subclasses must override forward()!')
+
+    # generate new BNs for current model path, except for given srcLayer
+    def generatePathBNs(self, srcLayer: ConvSlimLayer):
+        for layer in self._layers.forwardCounters():
+            if layer != srcLayer:
+                layer.generatePathBNs()
+
+    # restore layers original BNs
+    def restoreOriginalBNs(self):
+        for layer in self._layers.forwardCounters():
+            layer.restoreOriginalBNs()
 
 
 class ResNet18_Cifar(ResNet18):
