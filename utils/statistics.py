@@ -158,7 +158,7 @@ class Statistics:
         ax.set_ylim(top=yMax, bottom=yMin)
         ax.set_title(title)
         # put legend in bottom right corner, transparent (framealpha), small font
-        ax.legend(loc='upper center', ncol=6, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 8})
+        ax.legend(loc='upper center', ncol=6, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 5})
 
     @staticmethod
     def __setFigProperties(fig, figSize=(15, 10)):
@@ -188,6 +188,10 @@ class Statistics:
 
         # for i, layerData in enumerate(data):
         for i, (key, keyDataList) in enumerate(data.items()):
+            # move on if there is no data in list
+            if len(keyDataList) == 0:
+                continue
+
             # set arguments
             label = key
             color = colors[i]
