@@ -108,6 +108,9 @@ class OptimalRegime(TrainRegime):
     def buildStatsContainers(self):
         pass
 
+    def buildStatsRules(self):
+        return {}
+
     def train(self):
         args = self.args
         logger = self.logger

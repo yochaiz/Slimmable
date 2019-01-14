@@ -77,5 +77,8 @@ class PreTrainedRegime(TrainRegime):
     def buildStatsContainers(self):
         pass
 
+    def buildStatsRules(self):
+        return {}
+
     def train(self):
         self.trainWeights.train('init_weights_train')

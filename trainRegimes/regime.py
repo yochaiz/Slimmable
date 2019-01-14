@@ -32,16 +32,10 @@ class TrainRegime:
 
         # build statistics containers
         containers = self.buildStatsContainers()
-        # containers = {
-        #     self.lossAvgKey: self._containerPerAlpha(model),
-        #     self.crossEntropyLossAvgKey: self._containerPerAlpha(model),
-        #     self.flopsLossAvgKey: self._containerPerAlpha(model),
-        #     self.lossVarianceKey: self._containerPerAlpha(model),
-        #     self.alphaDistributionKey: self._containerPerAlpha(model),
-        #     self.entropyKey: [{layerIdx: [] for layerIdx in range(len(model.layersList()))}]
-        # }
+        # build statistics rules
+        rules = self.buildStatsRules()
         # init statistics instance
-        self.statistics = Statistics(containers, args.save)
+        self.statistics = Statistics(containers, rules, args.save)
 
         # log parameters
         logParameters(logger, args, model)
@@ -53,6 +47,10 @@ class TrainRegime:
     @abstractmethod
     def buildStatsContainers(self):
         raise NotImplementedError('subclasses must override buildStatsContainers()!')
+
+    @abstractmethod
+    def buildStatsRules(self):
+        raise NotImplementedError('subclasses must override buildStatsRules()!')
 
     def buildModel(self, args: Namespace) -> BaseNet:
         # get model constructor
