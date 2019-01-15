@@ -111,21 +111,23 @@ class TempDownsample(Downsample):
         return self.standardResidual
 
     def updateCurrWidth(self):
+        _prevLayer = self.downsampleSrc.prevLayer[0]
+        _conv2 = self.conv2[0]
+        # update downsampleSrc currWidthIdx according to conv2 currWidthIdx
+        self.downsampleSrc.setCurrWidthIdx(_conv2.currWidthIdx())
         # set residual function to standard residual
         self.residualFunc = self.initResidual()
         # set downsample to None
         self._downsample = [self.initCurrentDownsample()]
         # check if widths are different, i.e. we need to use downsample
-        prevWidth = self.downsampleSrc.prevLayer[0].currWidth()
-        conv2Width = self.conv2[0].currWidth()
+        prevWidth = _prevLayer.currWidth()
+        conv2Width = _conv2.currWidth()
 
         if prevWidth != conv2Width:
             # update residual function
             self.residualFunc = self.downsampleResidual
             # update downsample
             self._downsample = [self.downsampleSrc]
-            # update downsample width
-            self.downsample().setCurrWidthIdx(self.conv2[0].currWidthIdx())
 
 
 class BasicBlock(Block):
