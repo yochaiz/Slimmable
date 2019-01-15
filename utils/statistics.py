@@ -80,10 +80,12 @@ class Statistics:
             f.write(htmlCode)
 
     @staticmethod
-    def __setAxesProperties(ax, xLabel, yLabel, yMax, title, yMin=0.0):
+    def __setAxesProperties(ax, title, xLabel, yLabel, yMax=None, yMin=0.0):
         ax.set_xlabel(xLabel)
         ax.set_ylabel(yLabel)
-        ax.set_ylim(top=yMax, bottom=yMin)
+        ax.set_ylim(bottom=yMin)
+        if yMax:
+            ax.set_ylim(top=yMax)
         ax.set_title(title)
         # put legend in bottom right corner, transparent (framealpha), small font
         ax.legend(loc='upper center', ncol=6, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 5})
@@ -96,8 +98,8 @@ class Statistics:
         plt.close(fig)
 
     @staticmethod
-    def setPlotProperties(fig, ax, xLabel, yLabel, yMax, title, yMin=0.0):
-        Statistics.__setAxesProperties(ax, xLabel, yLabel, yMax, title, yMin)
+    def setPlotProperties(fig, ax, title, xLabel, yLabel, yMax=None, yMin=0.0):
+        Statistics.__setAxesProperties(ax, title, xLabel, yLabel, yMax, yMin)
         Statistics.__setFigProperties(fig)
 
     def __plotContainer(self, data, xLabel, yLabel, title, axMerged=None, scale=True, annotate=None):
@@ -152,17 +154,15 @@ class Statistics:
 
             # don't scale axMerged
             if axMerged:
-                # apply yMax rule if exists, else retain yMax
-                yMax = self._rules.get(yLabel, yMax)
                 # set grid
                 axMerged.grid()
                 # set ax properties
-                self.__setAxesProperties(axMerged, xLabel, yLabel, yMax, title)
+                self.__setAxesProperties(axMerged, title, xLabel, yLabel)
 
             if scale:
                 yMax = min(yMax, (sum(dataSum) / len(dataSum)) * 1.5)
 
-            self.setPlotProperties(fig, ax, xLabel, yLabel, yMax, title)
+            self.setPlotProperties(fig, ax, title, xLabel, yLabel, yMax)
 
         return fig
 
@@ -193,6 +193,9 @@ class Statistics:
         # generate different plots
         # for fileName in self.plotAllLayersKeys:
         for fileName, dataList in self._containers.items():
+            # init labels
+            xLabel = 'Batch #'
+            yLabel = fileName
             # build subplot for all plots
             figs = []
             # init merged plot
@@ -207,9 +210,7 @@ class Statistics:
             for dataIdx, dataDict in enumerate(dataList):
                 # init axMerged sub-plot
                 ax = axMerged[axRow, axCol] if nPlots > 1 else None
-                # init labels
-                xLabel = 'Batch #'
-                yLabel = fileName
+                # init title
                 title = '[{}]-[{}] over epochs'.format(fileName, dataIdx)
                 # plot container
                 fig = self.__plotContainer(dataDict, xLabel, yLabel, title, axMerged=ax)
@@ -220,8 +221,12 @@ class Statistics:
                 if axCol == 0:
                     axRow += 1
 
-            # set merged fig properties
             if figMerged:
+                # apply yMax rule if exists, else retain yMax
+                yMax = self._rules.get(yLabel)
+                if yMax:
+                    axMerged.set_ylim(top=yMax)
+                # set merged fig properties
                 self.__setFigProperties(figMerged, figSize=(40, 20))
             # save as PDF
             self.saveFigPDF(figs, fileName, self.saveFolder)
