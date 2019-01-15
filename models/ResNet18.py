@@ -77,6 +77,9 @@ class Downsample(Block):
         _downsample = self.downsample()
         return _downsample(x)
 
+    def generatePathBNs(self, srcLayer):
+        self.downsampleSrc.generatePathBNs(srcLayer)
+
 
 # downsample for block where downsample is always required, even for the same width
 class PermanentDownsample(Downsample):
@@ -92,8 +95,6 @@ class PermanentDownsample(Downsample):
     def updateCurrWidth(self):
         _downsample = self.downsample()
         _conv2 = self.conv2[0]
-        # # update width list
-        # _downsample._widthList = _conv2.widthList()
         # update downsample width
         _downsample.setCurrWidthIdx(_conv2.currWidthIdx())
 
@@ -123,8 +124,6 @@ class TempDownsample(Downsample):
             self.residualFunc = self.downsampleResidual
             # update downsample
             self._downsample = [self.downsampleSrc]
-            # # update width list
-            # self.downsample()._widthList = self.conv2[0].widthList()
             # update downsample width
             self.downsample().setCurrWidthIdx(self.conv2[0].currWidthIdx())
 
@@ -181,6 +180,12 @@ class BasicBlock(Block):
     def updateCurrWidth(self):
         self.downsample.updateCurrWidth()
 
+    def generatePathBNs(self, srcLayer):
+        self.conv1.generatePathBNs(srcLayer)
+        if srcLayer != self.conv2:
+            self.downsample.generatePathBNs(srcLayer)
+            self.conv2.generatePathBNs(srcLayer)
+
 
 class ResNet18(BaseNet):
     def __init__(self, args):
@@ -206,9 +211,8 @@ class ResNet18(BaseNet):
 
     # generate new BNs for current model path, except for given srcLayer
     def generatePathBNs(self, srcLayer: ConvSlimLayer):
-        for layer in self._layers.forwardCounters():
-            if layer != srcLayer:
-                layer.generatePathBNs()
+        for block in self.blocks:
+            block.generatePathBNs(srcLayer)
 
     # restore layers original BNs
     def restoreOriginalBNs(self):
@@ -261,7 +265,9 @@ class ResNet18_Cifar(ResNet18):
         out = self.avgpool(out)
         out = out.view(out.size(0), -1)
         # narrow linear according to last conv2d layer
-        out = linear(out, self.fc.weight.narrow(1, 0, block.outputLayer().currWidth()), bias=self.fc.bias)
+        in_features = int(self.fc.in_features * block.outputLayer().currWidthRatio())
+        # out = linear(out, self.fc.weight.narrow(1, 0, block.outputLayer().currWidth()), bias=self.fc.bias)
+        out = linear(out, self.fc.weight.narrow(1, 0, in_features), bias=self.fc.bias)
 
         return out
 
