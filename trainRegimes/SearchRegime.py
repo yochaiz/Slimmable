@@ -15,6 +15,7 @@ from utils.flopsLoss import FlopsLoss
 from utils.HtmlLogger import HtmlLogger
 from utils.trainWeights import TrainWeights
 from utils.replicator import ModelReplicator
+from utils.checkpoint import save_checkpoint
 from utils.training import AlphaTrainingStats
 
 
@@ -205,9 +206,6 @@ class SearchRegime(TrainRegime):
         def createAlphasTable(k, rows):
             createInfoTable(dataRow, self.alphasTableTitle, trainLogger, rows)
 
-        def createForwardCountersTable(rows):
-            createInfoTable(dataRow, self.forwardCountersKey, trainLogger, rows)
-
         nBatches = len(search_queue)
         # update batch num key format
         self.formats[self.batchNumKey] = lambda x: '{}/{}'.format(batchNum, nBatches)
@@ -221,7 +219,6 @@ class SearchRegime(TrainRegime):
             # reset optimizer gradients
             optimizer.zero_grad()
             # evaluate on samples and calc alphas gradients
-            # lossAvgDict, pathsList = self._loss(input, target, self._samplesSamePath, trainWeights)
             lossAvgDict, pathsList = self._loss(input, target, nSamples)
             # perform optimizer step
             optimizer.step()
@@ -237,6 +234,8 @@ class SearchRegime(TrainRegime):
             self._calcAlphasDistribStats(model)
             # update statistics plots
             self.statistics.plotData()
+            # save checkpoint
+            save_checkpoint(self.trainFolderPath, model, optimizer, lossAvgDict)
 
             if trainLogger:
                 # add numbering to paths list
@@ -344,12 +343,14 @@ class SearchRegime(TrainRegime):
 
         # average total loss
         totalLoss /= len(model.layersList())
+        print('totalLoss:[{:.5f}]'.format(totalLoss))
         # subtract average total loss from every alpha gradient
-        for layer, layerProbs in zip(model.layersList(), probsList):
+        for layerIdx, (layer, layerProbs) in enumerate(zip(model.layersList(), probsList)):
             layerAlphas = layer.alphas()
             layerAlphas.grad -= totalLoss
             # multiply each grad by its probability
             layerAlphas.grad *= layerProbs
+            print('Layer:[{}] - alphas gradient:{}'.format(layerIdx, layerAlphas.grad))
 
         # average (total loss average) by number of alphas
         for k in lossAvgDict.keys():
@@ -463,6 +464,9 @@ class SearchRegime(TrainRegime):
             # add epoch data rows
             for jobDataRow in epochDataRows:
                 logger.addDataRow(jobDataRow, trType='<tr bgcolor="#2CBDD6">')
+
+            # save checkpoint
+            save_checkpoint(self.trainFolderPath, model, optimizer, {})
 
 # class TrainPathWeights(TrainWeights):
 #     def __init__(self, regime):
