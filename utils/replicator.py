@@ -61,8 +61,6 @@ class Replica:
         self._cModel.load_state_dict(srcModel.state_dict())
         # save current cModel weights
         self._originalWeightsDict = self._cModel.state_dict()
-        # save new original BNs
-        self._saveOriginalBNs()
 
     # restore cModel weights before training paths
     def restoreModelOriginalWeights(self):
@@ -71,10 +69,6 @@ class Replica:
         model.restoreOriginalBNs()
         # load weights
         model.load_state_dict(self._originalWeightsDict)
-
-    # save cModel layers BNs ModuleList
-    def _saveOriginalBNs(self):
-        self._originalBNs = [(layer.bn, layer.widthList()) for layer in self._cModel.layersList()]
 
     def _replicateModel(self, regime: TrainRegime) -> BaseNet:
         # create model new instance
@@ -273,7 +267,7 @@ class ModelReplicator:
 
         # iterate over samples. generate a sample (path), train it and evaluate alphas on sample
         for sampleIdx in range(nSamples):
-            print('===== Sample idx:[{}] - GPU:[{}] ====='.format(sampleIdx, gpu))
+            print('===== Sample idx:[{}/{}] - GPU:[{}] ====='.format(sampleIdx, nSamples, gpu))
             # iterate over layers. in each layer iterate over alphas
             for layerIdx, layer in enumerate(cModel.layersList()):
                 print('=== Layer idx:[{}] - GPU:[{}] ==='.format(layerIdx, gpu))
