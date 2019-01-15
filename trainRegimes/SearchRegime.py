@@ -454,7 +454,7 @@ class SearchRegime(TrainRegime):
             # train weights
             wEpochName = '{}_w'.format(epoch)
             weightsLogger = HtmlLogger(self.trainFolderPath, wEpochName)
-            trainWeights = EpochTrainWeights(self, 2, epoch, weightsLogger)
+            trainWeights = EpochTrainWeights(self, 100, epoch, weightsLogger)
             trainWeights.train(wEpochName)
             # add data row
             trainDataRow = trainWeights.avgDictDataRow()
