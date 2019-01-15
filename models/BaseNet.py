@@ -40,6 +40,11 @@ class Block(Module):
     def updateCurrWidth(self):
         raise NotImplementedError('subclasses must override updateCurrWidth()!')
 
+    @abstractmethod
+    # generate new BNs for current model path, except for given srcLayer
+    def generatePathBNs(self, srcLayer):
+        raise NotImplementedError('subclasses must override generatePathBNs()!')
+
 
 # abstract class for model layer
 class SlimLayer(Block):
@@ -169,6 +174,8 @@ class ConvSlimLayer(SlimLayer):
         self._orgBNs = [self.bn]
         # init layer original width list
         self._orgWidthList = self.widthList()
+        # init layer original width ratio list
+        self._orgWidthRatioList = self._widthRatioList
 
     def orgBNs(self):
         return self._orgBNs[0]
@@ -181,24 +188,28 @@ class ConvSlimLayer(SlimLayer):
         self.bn = ModuleList([BatchNorm2d(n) for n in self._widthList]).cuda()
 
     # generate new BNs based on current width
-    def generatePathBNs(self):
-        # get current BN
-        currBN = self.orgBNs()[self.currWidthIdx()]
-        # get current BN num_features
-        bnFeatures = currBN.num_features
-        # generate new BNs ModuleList
-        newBNs = ModuleList([BatchNorm2d(bnFeatures) for _ in range(self.nWidths())]).cuda()
-        # copy weights to new BNs
-        for bn in newBNs:
-            bn.load_state_dict(currBN.state_dict())
-        # set layer BNs
-        self.bn = newBNs
-        # update width List
-        self._widthList = [self.currWidth()] * self.nWidths()
+    def generatePathBNs(self, srcLayer):
+        if self != srcLayer:
+            # get current BN
+            currBN = self.orgBNs()[self.currWidthIdx()]
+            # get current BN num_features
+            bnFeatures = currBN.num_features
+            # generate new BNs ModuleList
+            newBNs = ModuleList([BatchNorm2d(bnFeatures) for _ in range(self.nWidths())]).cuda()
+            # copy weights to new BNs
+            for bn in newBNs:
+                bn.load_state_dict(currBN.state_dict())
+            # set layer BNs
+            self.bn = newBNs
+            # update width List
+            self._widthList = [self.currWidth()] * self.nWidths()
+            # update width ratio list
+            self._widthRatioList = [self.currWidthRatio()] * self.nWidths()
 
     def restoreOriginalBNs(self):
         self.bn = self.orgBNs()
         self._widthList = self._orgWidthList
+        self._widthRatioList = self._orgWidthRatioList
 
     def forward(self, x):
         # narrow conv weights (i.e. filters) according to current nFilters
