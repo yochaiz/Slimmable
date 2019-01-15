@@ -115,7 +115,7 @@ class FlopsPlot:
         # Set grid to use minor tick locations.
         self.ax.grid(which='minor')
 
-        Statistics.setPlotProperties(self.fig, self.ax, xLabel=self.xLabel, yLabel=self.yLabel, title=self.title, yMin=yMin, yMax=yMax)
+        Statistics.setPlotProperties(self.fig, self.ax, self.title, self.xLabel, self.yLabel, yMax, yMin)
 
     @staticmethod
     def getTitleKey():
@@ -314,7 +314,7 @@ class FlopsAveragePlot3D(FlopsAveragePlot):
         return 'Average accuracy vs. Flops - 3D'
 
     def setPlotProperties(self):
-        Statistics.setPlotProperties(self.fig, self.ax, xLabel='', yLabel='', title=self.title, yMin=0.0, yMax=1.0)
+        Statistics.setPlotProperties(self.fig, self.ax, self.title, xLabel='', yLabel='', yMin=0.0, yMax=1.0)
         self.ax.get_legend().remove()
 
     def valueToColor(self, value):
