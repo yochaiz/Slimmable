@@ -225,7 +225,7 @@ class Statistics:
                 # apply yMax rule if exists, else retain yMax
                 yMax = self._rules.get(yLabel)
                 if yMax:
-                    axMerged.set_ylim(top=yMax)
+                    axMerged[0, 0].set_ylim(top=yMax)
                 # set merged fig properties
                 self.__setFigProperties(figMerged, figSize=(40, 20))
             # save as PDF
