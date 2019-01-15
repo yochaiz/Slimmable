@@ -65,7 +65,7 @@ class Replica:
         self._saveOriginalBNs()
 
     # restore cModel weights before training paths
-    def _restoreModelOriginalWeights(self):
+    def restoreModelOriginalWeights(self):
         model = self._cModel
         # restore cModel original BNs
         model.restoreOriginalBNs()
@@ -94,10 +94,9 @@ class Replica:
         # init new TrainPathWeights instance
         self._trainWeights = TrainPathWeights(self)
 
+    # assumes cModel has original weights + original BNs, i.e. restoreModelOriginalWeights() has been applied
     def train(self, layer: SlimLayer, srcPath: list):
         model = self._cModel
-        # restore model original weights
-        self._restoreModelOriginalWeights()
         # generate independent BNs in each layer for each path
         model.generatePathBNs(layer)
         # init layer paths for training
@@ -195,9 +194,12 @@ class ModelReplicator:
 
         return pathExists
 
-    def _generateNewPath(self, cModel: BaseNet, pathsHistoryDict: dict) -> list:
-        # select new path based on alphas distribution.
-        # check that selected path hasn't been selected before
+    # select new path based on alphas distribution.
+    # check that selected path hasn't been selected before
+    def _generateNewPath(self, replica: Replica, cModel: BaseNet, pathsHistoryDict: dict) -> list:
+        # restore model original weights & BNs
+        replica.restoreModelOriginalWeights()
+        # init does path exist flag
         pathExists = True
         while pathExists:
             # select path based on alphas distribution
@@ -277,7 +279,7 @@ class ModelReplicator:
                 print('=== Layer idx:[{}] - GPU:[{}] ==='.format(layerIdx, gpu))
                 # select new path based on alphas distribution.
                 # check that selected path hasn't been selected before
-                pathWidthIdx = self._generateNewPath(cModel, pathsHistoryDict)
+                pathWidthIdx = self._generateNewPath(replica, cModel, pathsHistoryDict)
                 # add path to paths list
                 pathsList.append([layer.widthByIdx(p) for p, layer in zip(pathWidthIdx, cModel.layersList())])
                 # init containers to save loss values and variance
