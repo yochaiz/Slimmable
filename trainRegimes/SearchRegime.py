@@ -131,7 +131,7 @@ class SearchRegime(TrainRegime):
         super(SearchRegime, self).__init__(args, logger)
 
         # init number of epochs
-        self.nEpochs = 100
+        self.nEpochs = args.search_epochs
         # init main table
         logger.createDataTable('Search summary', self.colsMainLogger)
         # update max table cell length
@@ -454,7 +454,7 @@ class SearchRegime(TrainRegime):
             # train weights
             wEpochName = '{}_w'.format(epoch)
             weightsLogger = HtmlLogger(self.trainFolderPath, wEpochName)
-            trainWeights = EpochTrainWeights(self, 100, epoch, weightsLogger)
+            trainWeights = EpochTrainWeights(self, args.weights_epochs, epoch, weightsLogger)
             trainWeights.train(wEpochName)
             # add data row
             trainDataRow = trainWeights.avgDictDataRow()

@@ -72,7 +72,7 @@ class PreTrainedRegime(TrainRegime):
     def __init__(self, args, logger):
         super(PreTrainedRegime, self).__init__(args, logger)
 
-        self.trainWeights = PreTrainedTrainWeights(self, 2000)
+        self.trainWeights = PreTrainedTrainWeights(self, args.weights_epochs)
 
     def buildStatsContainers(self):
         pass
