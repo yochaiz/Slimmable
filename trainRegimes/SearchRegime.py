@@ -239,10 +239,12 @@ class SearchRegime(TrainRegime):
 
             if trainLogger:
                 # add numbering to paths list
-                pathsList = [['#', 'Path']] + [[idx + 1, v] for idx, v in enumerate(pathsList)]
+                pathsListRows = [['Layer #', 'Paths']]
+                for layerIdx, layerPaths in enumerate(pathsList):
+                    pathsListRows.append([layerIdx, [[idx + 1, v] for idx, v in enumerate(layerPaths)]])
                 # init data row
                 dataRow = {self.batchNumKey: batchNum, self.archLossKey: trainStats.batchLoss(),
-                           self.pathsListKey: trainLogger.createInfoTable('Show', pathsList), self.timeKey: endTime - startTime}
+                           self.pathsListKey: trainLogger.createInfoTable('Show', pathsListRows), self.timeKey: endTime - startTime}
                 # add alphas distribution table
                 model.logTopAlphas(self.k, [createAlphasTable])
                 # apply formats
@@ -350,7 +352,7 @@ class SearchRegime(TrainRegime):
             layerAlphas.grad -= totalLoss
             # multiply each grad by its probability
             layerAlphas.grad *= layerProbs
-            print('Layer:[{}] - alphas gradient:{}'.format(layerIdx, layerAlphas.grad))
+            print('Layer:[{}] - alphas gradient:{}'.format(layerIdx, layerAlphas.grad.data))
 
         # average (total loss average) by number of alphas
         for k in lossAvgDict.keys():
