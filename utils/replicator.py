@@ -57,10 +57,11 @@ class Replica:
         return self._regime.train_queue
 
     def _updateWeights(self, srcModel: BaseNet):
+        model = self._cModel
         # copy weights
-        self._cModel.load_state_dict(srcModel.state_dict())
+        model.load_state_dict(srcModel.state_dict())
         # save current cModel weights
-        self._originalWeightsDict = self._cModel.state_dict()
+        self._originalWeightsDict = model.state_dict()
 
     # restore cModel weights before training paths
     def restoreModelOriginalWeights(self):
