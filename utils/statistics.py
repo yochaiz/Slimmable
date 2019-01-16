@@ -88,7 +88,7 @@ class Statistics:
             ax.set_ylim(top=yMax)
         ax.set_title(title)
         # put legend in bottom right corner, transparent (framealpha), small font
-        ax.legend(loc='upper center', ncol=6, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 5})
+        ax.legend(loc='upper center', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 8})
 
     @staticmethod
     def __setFigProperties(fig, figSize=(15, 10)):
