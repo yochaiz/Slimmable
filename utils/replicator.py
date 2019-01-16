@@ -260,7 +260,7 @@ class ModelReplicator:
         # init samples (paths) history, to make sure we don't select the same sample twice
         pathsHistoryDict = {}
         # init samples (paths) history list for logging purposes
-        pathsList = []
+        pathsList = [[] for _ in cModel.layersList()]
 
         # init containers to save loss values
         lossDictsList = [[{k: [] for k in self._flopsLoss.lossKeys()} for _ in range(layer.nWidths())] for layer in cModel.layersList()]
@@ -275,7 +275,7 @@ class ModelReplicator:
                 # check that selected path hasn't been selected before
                 pathWidthIdx = self._generateNewPath(replica, cModel, pathsHistoryDict)
                 # add path to paths list
-                pathsList.append([layer.widthByIdx(p) for p, layer in zip(pathWidthIdx, cModel.layersList())])
+                pathsList[layerIdx].append([layer.widthByIdx(p) for p, layer in zip(pathWidthIdx, cModel.layersList())])
                 # init containers to save loss values and variance
                 layerLossDicts = lossDictsList[layerIdx]
                 # train model on layer paths
@@ -304,12 +304,12 @@ class ModelReplicator:
 
         # append lists from GPUs
         for gpuLossDictsList, gpuPathsList in results[1:]:
-            # add paths to list
-            pathsList.extend(gpuPathsList)
-            # add loss values to dict
             for layerIdx, layerLossDicts in enumerate(gpuLossDictsList):
+                # add paths to list by layer index
+                pathsList[layerIdx].extend(gpuPathsList[layerIdx])
                 for alphaIdx, alphaLossDict in enumerate(layerLossDicts):
                     for lossName, lossList in alphaLossDict.items():
+                        # add loss values to dict
                         lossDictsList[layerIdx][alphaIdx][lossName].extend(lossList)
 
         return lossDictsList, pathsList
