@@ -37,13 +37,9 @@ def train(scriptArgs):
     torch_manual_seed(args.seed)
     cudnn.enabled = True
     cuda_manual_seed(args.seed)
-    # update values
-    args.gpu = scriptArgs.gpu
-    args.workers = scriptArgs.workers
-    args.data = scriptArgs.data
-    args.pre_trained = scriptArgs.pre_trained
-    args.optimal_epochs = scriptArgs.optimal_epochs
-    args.json = scriptArgs.json
+    # copy scriptArgs values to args
+    for k, v in vars(scriptArgs).items():
+        setattr(args, k, v)
 
     # extract args JSON folder path
     folderName = path.dirname(scriptArgs.json)
@@ -62,7 +58,6 @@ def train(scriptArgs):
         alphasRegime = OptimalRegime(args, logger)
         # train according to chosen regime
         alphasRegime.train()
-
 
 
 if not is_available():
