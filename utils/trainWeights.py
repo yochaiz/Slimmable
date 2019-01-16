@@ -247,7 +247,7 @@ class TrainWeights:
 
         return optimizer
 
-    def train(self, trainFolderName):
+    def train(self, trainFolderName='init_weights_train'):
         args = self.getArgs()
 
         # create train folder

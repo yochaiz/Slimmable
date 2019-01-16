@@ -115,7 +115,7 @@ class OptimalRegime(TrainRegime):
         args = self.args
         logger = self.logger
         # train model weights
-        self.trainWeights.train('init_weights_train')
+        self.trainWeights.train()
 
         # init logger data table
         self.logger.createDataTable(self.trainWeights.summaryKey, self.colsMainLogger)

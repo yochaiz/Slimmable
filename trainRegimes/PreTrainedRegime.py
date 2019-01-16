@@ -81,4 +81,4 @@ class PreTrainedRegime(TrainRegime):
         return {}
 
     def train(self):
-        self.trainWeights.train('init_weights_train')
+        self.trainWeights.train()
