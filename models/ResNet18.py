@@ -4,7 +4,7 @@ from torch.nn import ModuleList, ReLU, Linear, AvgPool2d, MaxPool2d
 from torch.nn.functional import linear
 
 from models.BaseNet import BaseNetSwitcher
-from models.BaseNet.BaseNet import Block, ConvSlimLayer
+from models.modules.block import Block
 
 
 class Input:
@@ -33,7 +33,8 @@ class Downsample(Block):
         kernel_size = 1
 
         # init downsample source, i.e. in case we will need it
-        self.downsampleSrc = ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
+        convSlimLayer = BaseNetSwitcher.convSlimLayer()
+        self.downsampleSrc = convSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
         # init current downsample
         self._downsample = [self.initCurrentDownsample()]
         # init residual function
@@ -134,15 +135,16 @@ class TempDownsample(Downsample):
 class BasicBlock(Block):
     def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
         super(BasicBlock, self).__init__()
+        convSlimLayer = BaseNetSwitcher.convSlimLayer()
 
         stride1 = stride if in_planes == out_planes else (stride + 1)
 
         # build 1st block
-        self.conv1 = ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
+        self.conv1 = convSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
         self.relu1 = ReLU(inplace=True)
 
         # build 2nd block
-        self.conv2 = ConvSlimLayer(widthRatioList, out_planes, out_planes, kernel_size, stride, prevLayer=self.conv1)
+        self.conv2 = convSlimLayer(widthRatioList, out_planes, out_planes, kernel_size, stride, prevLayer=self.conv1)
         self.relu2 = ReLU(inplace=True)
 
         # init downsample
@@ -196,7 +198,7 @@ class ResNet18(BaseNetSwitcher.getClass()):
 
     # init layers (type, out_planes)
     def initBlocksPlanes(self):
-        return [(ConvSlimLayer, 16), (BasicBlock, 16), (BasicBlock, 16), (BasicBlock, 16),
+        return [(self.convSlimLayer(), 16), (BasicBlock, 16), (BasicBlock, 16), (BasicBlock, 16),
                 (BasicBlock, 32), (BasicBlock, 32), (BasicBlock, 32),
                 (BasicBlock, 64), (BasicBlock, 64), (BasicBlock, 64)]
 
@@ -213,7 +215,7 @@ class ResNet18(BaseNetSwitcher.getClass()):
         raise NotImplementedError('subclasses must override forward()!')
 
     # generate new BNs for current model path, except for given srcLayer
-    def generatePathBNs(self, srcLayer: ConvSlimLayer):
+    def generatePathBNs(self, srcLayer: BaseNetSwitcher.convSlimLayer()):
         for block in self.blocks:
             block.generatePathBNs(srcLayer)
 
