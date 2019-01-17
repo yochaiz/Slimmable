@@ -408,7 +408,7 @@ class SearchRegime(TrainRegime):
         # init epoch data rows list
         epochDataRows = []
         # init model path chooser function
-        choosePathFunc = self.model.chooseAlphaMax
+        choosePathFunc = self.model.choosePathAlphasAsPartition
         for id in self._getEpochRange(self.args.nJobs):
             jobDataRow = self._createJob(epoch, id, choosePathFunc)
             epochDataRows.append(jobDataRow)

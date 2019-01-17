@@ -4,7 +4,8 @@ from argparse import Namespace
 # from torch.nn.parallel.data_parallel import DataParallel
 
 from models import getModelDict
-from models.BaseNet.BaseNet import BaseNet, SlimLayer
+from models.BaseNet.BaseNet import BaseNet
+from models.modules.SlimLayer import SlimLayer
 from utils.data import load_data
 from utils.args import logParameters
 from utils.HtmlLogger import HtmlLogger

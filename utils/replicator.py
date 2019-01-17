@@ -7,7 +7,8 @@ from torch.cuda import set_device, current_device
 from torch.utils.data.dataloader import DataLoader
 
 from trainRegimes.regime import TrainRegime
-from models.BaseNet.BaseNet import BaseNet, SlimLayer
+from models.BaseNet.BaseNet import BaseNet
+from models.modules.SlimLayer import SlimLayer
 from utils.trainWeights import TrainWeights
 
 
