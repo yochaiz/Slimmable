@@ -7,7 +7,6 @@ from sys import argv
 from socket import gethostname
 
 import models
-import trainRegimes
 from utils.HtmlLogger import HtmlLogger
 from utils.zip import create_exp_dir
 from utils.checkpoint import generate_partitions
