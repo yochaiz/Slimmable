@@ -2,7 +2,7 @@ from math import floor
 from time import time
 from multiprocessing.pool import Pool
 
-from torch import tensor
+from torch import tensor, no_grad
 from torch.cuda import set_device, current_device
 from torch.utils.data.dataloader import DataLoader
 
@@ -285,19 +285,20 @@ class ModelReplicator:
                 # switch to eval mode
                 cModel.eval()
                 # evaluate batch over trained paths
-                for widthRatio, trainedPathIdx in trainedPaths.items():
-                    # set cModel path to trained path
-                    cModel.setCurrWidthIdx(trainedPathIdx)
-                    # forward input in model selected path
-                    logits = cModel(input)
-                    # calc loss
-                    lossDict = self._flopsLoss(logits, target, cModel.countFlops())
-                    # get alpha Idx based on widthRatio
-                    alphaIdx = layer.widthRatioIdx(widthRatio)
-                    # add loss to container
-                    alphaLossDict = layerLossDicts[alphaIdx]
-                    for k, loss in lossDict.items():
-                        alphaLossDict[k].append(loss.item())
+                with no_grad():
+                    for widthRatio, trainedPathIdx in trainedPaths.items():
+                        # set cModel path to trained path
+                        cModel.setCurrWidthIdx(trainedPathIdx)
+                        # forward input in model selected path
+                        logits = cModel(input)
+                        # calc loss
+                        lossDict = self._flopsLoss(logits, target, cModel.countFlops())
+                        # get alpha Idx based on widthRatio
+                        alphaIdx = layer.widthRatioIdx(widthRatio)
+                        # add loss to container
+                        alphaLossDict = layerLossDicts[alphaIdx]
+                        for k, loss in lossDict.items():
+                            alphaLossDict[k].append(loss.item())
 
         return lossDictsList, pathsList
 
