@@ -1,12 +1,12 @@
 from json import dump
 from argparse import ArgumentParser
-from inspect import isclass
 from time import strftime
 from os import getpid, environ
 from sys import argv
 from socket import gethostname
 
-import models
+from models import getModelNames, getModelDict
+from models.BaseNet import BaseNetSwitcher
 from utils.HtmlLogger import HtmlLogger
 from utils.zip import create_exp_dir
 from utils.checkpoint import generate_partitions
@@ -34,17 +34,21 @@ def saveArgsToJSON(args):
 
 
 def parseArgs():
-    modelNames = [name for (name, obj) in models.__dict__.items() if isclass(obj) and name.islower()]
-    # trainRegimesNames = [name for (name, obj) in trainRegimes.__dict__.items() if isclass(obj) and name.islower()]
+    modelNames = getModelNames()
     # init datasets parameters (nClasses, input_size)
     datasets = dict(cifar10=(10, 32), cifar100=(100, 32), imagenet=(1000, None))
+    # init BaseNet dict
+    baseNetClasses = BaseNetSwitcher.getClassesKeys()
 
     parser = ArgumentParser("Slimmable")
+    # BaseNet type
+    parser.add_argument('--type', type=str, required=True, choices=baseNetClasses, help='BaseNet type')
+    # data params
     parser.add_argument('--data', type=str, required=True, help='location of the data corpus')
     parser.add_argument('--dataset', metavar='DATASET', default='cifar10', choices=datasets.keys(), help='dataset name')
     parser.add_argument('--model', metavar='MODEL', default='resnet18', choices=modelNames)
-    parser.add_argument('--batch_size', type=int, default=250, help='batch size')
     # model weights optimization params
+    parser.add_argument('--batch_size', type=int, default=250, help='batch size')
     parser.add_argument('--learning_rate', type=float, default=0.01, help='init learning rate')
     parser.add_argument('--learning_rate_min', type=float, default=1E-8, help='min learning rate')
     parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
@@ -80,6 +84,9 @@ def parseArgs():
 
     args = parser.parse_args()
 
+    # choose BaseNet class
+    BaseNetSwitcher.choose(args.type)
+
     # update GPUs list
     if type(args.gpu) is str:
         args.gpu = [int(i) for i in args.gpu.split(',')]
@@ -104,7 +111,7 @@ def parseArgs():
         # reset args.generate_partitions, because we want it None in generated checkpoints
         args.generate_partitions = None
         # get model class for number of block & number of layers per block
-        modelClass = models.__dict__[args.model]
+        modelClass = getModelDict()[args.model]
         # generate permutations
         generate_partitions(args, widthRatioList, modelClass.nPartitionBlocks())
         exit(0)
@@ -112,7 +119,7 @@ def parseArgs():
     # create folder
     args.time = strftime("%Y%m%d-%H%M%S")
     args.folderName = '[{}],[{}],[{}],{},[{}]'.format(args.model, args.dataset, args.lmbda, args.width, args.time)
-    args.save = '../results/{}'.format(args.folderName)
+    args.save = '../{}_results/{}'.format(args.type, args.folderName)
     create_exp_dir(args.save)
 
     # init partition
