@@ -3,8 +3,8 @@ from argparse import Namespace
 
 # from torch.nn.parallel.data_parallel import DataParallel
 
-import models
-from models.BaseNet import BaseNet, SlimLayer
+from models import getModelDict
+from models.BaseNet.BaseNet import BaseNet, SlimLayer
 from utils.data import load_data
 from utils.args import logParameters
 from utils.HtmlLogger import HtmlLogger
@@ -53,9 +53,10 @@ class TrainRegime:
         raise NotImplementedError('subclasses must override buildStatsRules()!')
 
     def buildModel(self, args: Namespace) -> BaseNet:
+        modelsDict = getModelDict()
         # get model constructor
         modelKey = '{}_{}'.format(args.model, args.dataset)
-        modelClass = models.__dict__[modelKey]
+        modelClass = modelsDict[modelKey]
 
         return modelClass(args)
 
