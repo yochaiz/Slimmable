@@ -1,255 +1,11 @@
 from abc import abstractmethod
-from math import floor
 from numpy import argsort
 from functools import reduce
-from pandas import DataFrame
 
-from torch import zeros
-from torch.nn import Module, ModuleList, Conv2d, BatchNorm2d
-from torch.nn.functional import conv2d, softmax
-from torch.distributions.categorical import Categorical
+from torch.nn import Module
 
+from models.modules.ConvSlimLayer import ConvSlimLayer
 from utils.HtmlLogger import HtmlLogger
-from utils.flops_benchmark import count_flops
-
-
-# abstract class for model block
-class Block(Module):
-    @abstractmethod
-    def getOptimizationLayers(self):
-        raise NotImplementedError('subclasses must override getOptimizationLayers()!')
-
-    @abstractmethod
-    def getFlopsLayers(self):
-        raise NotImplementedError('subclasses must override getFlopsLayers()!')
-
-    @abstractmethod
-    def getCountersLayers(self):
-        raise NotImplementedError('subclasses must override getCountersLayers()!')
-
-    @abstractmethod
-    def outputLayer(self):
-        raise NotImplementedError('subclasses must override outputLayer()!')
-
-    @abstractmethod
-    def countFlops(self):
-        raise NotImplementedError('subclasses must override countFlops()!')
-
-    @abstractmethod
-    # make some adjustments in model due to current width selected
-    def updateCurrWidth(self):
-        raise NotImplementedError('subclasses must override updateCurrWidth()!')
-
-    @abstractmethod
-    # generate new BNs for current model path, except for given srcLayer
-    def generatePathBNs(self, srcLayer):
-        raise NotImplementedError('subclasses must override generatePathBNs()!')
-
-
-# abstract class for model layer
-class SlimLayer(Block):
-    def __init__(self, buildParams, widthRatioList, widthList, prevLayer):
-        super(SlimLayer, self).__init__()
-
-        assert (len(widthRatioList) == len(widthList))
-        # save previous layer
-        self.prevLayer = [prevLayer]
-
-        # save width ratio list
-        self._widthRatioList = widthRatioList
-        # save list of number of filters
-        self._widthList = widthList
-        # init current number of filters index
-        self._currWidthIdx = 0
-
-        # init alphas
-        self._alphas = zeros(self.nWidths()).cuda().clone().detach().requires_grad_(True)
-
-        # init forward counters
-        self._forwardCounters = self._initForwardCounters()
-
-        # build layer modules
-        self.buildModules(buildParams)
-
-        # count flops for each width
-        self.flopsDict, self.output_size = self.countWidthFlops(self.prevLayer[0].outputSize())
-
-    @abstractmethod
-    def buildModules(self, buildParams):
-        raise NotImplementedError('subclasses must override getAllWidths()!')
-
-    @abstractmethod
-    # number of output channels in layer
-    def outputChannels(self):
-        raise NotImplementedError('subclasses must override outputChannels()!')
-
-    @abstractmethod
-    # count flops for each width
-    def countWidthFlops(self, input_size):
-        raise NotImplementedError('subclasses must override countWidthFlops()!')
-
-    def countFlops(self):
-        return self.flopsDict[(self.prevLayer[0].currWidth(), self.currWidth())]
-
-    def updateCurrWidth(self):
-        pass
-
-    # return alphas value
-    def alphas(self):
-        return self._alphas
-
-    # return alphas probabilities
-    def probs(self):
-        return softmax(self._alphas, dim=-1).detach()
-
-    def widthList(self):
-        return self._widthList
-
-    # current number of filters in layer
-    def currWidth(self):
-        return self._widthList[self._currWidthIdx]
-
-    # current width ratio
-    def currWidthRatio(self):
-        return self._widthRatioList[self._currWidthIdx]
-
-    def forwardCounters(self):
-        return self._forwardCounters
-
-    def widthByIdx(self, idx):
-        return self._widthList[idx]
-
-    def widthRatioByIdx(self, idx):
-        return self._widthRatioList[idx]
-
-    def currWidthIdx(self):
-        return self._currWidthIdx
-
-    def setCurrWidthIdx(self, idx):
-        assert (0 <= idx <= len(self._widthList))
-        self._currWidthIdx = idx
-
-    # returns the index of given width ratio
-    def widthRatioIdx(self, widthRatio):
-        return self._widthRatioList.index(widthRatio)
-
-    def nWidths(self):
-        return len(self._widthList)
-
-    def _initForwardCounters(self):
-        return [0] * self.nWidths()
-
-    def resetForwardCounters(self):
-        self._forwardCounters = self._initForwardCounters()
-
-    def outputLayer(self):
-        return self
-
-    # layer output tensor size, not number of output channels
-    def outputSize(self):
-        return self.output_size
-
-    # select alpha based on alphas distribution
-    def choosePathByAlphas(self):
-        dist = Categorical(logits=self._alphas)
-        chosen = dist.sample()
-        self._currWidthIdx = chosen.item()
-
-    # select maximal alpha
-    def chooseAlphaMax(self):
-        self._currWidthIdx = self._alphas.argmax().item()
-
-
-class ConvSlimLayer(SlimLayer):
-    def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
-        super(ConvSlimLayer, self).__init__((in_planes, out_planes, kernel_size, stride), widthRatioList,
-                                            [int(x * out_planes) for x in widthRatioList], prevLayer)
-
-        # update get layers functions
-        self.getOptimizationLayers = self.getLayers
-        self.getFlopsLayers = self.getLayers
-        self.getCountersLayers = self.getLayers
-
-        # init layer original BNs container
-        self._orgBNs = [self.bn]
-        # init layer original width list
-        self._orgWidthList = self.widthList()
-        # init layer original width ratio list
-        self._orgWidthRatioList = self._widthRatioList
-
-    def orgBNs(self):
-        return self._orgBNs[0]
-
-    def buildModules(self, params):
-        in_planes, out_planes, kernel_size, stride = params
-        # init conv2d module
-        self.conv = Conv2d(in_planes, out_planes, kernel_size, stride=stride, padding=floor(kernel_size / 2), bias=False).cuda()
-        # init independent batchnorm module for number of filters
-        self.bn = ModuleList([BatchNorm2d(n) for n in self._widthList]).cuda()
-
-    # generate new BNs based on current width
-    def generatePathBNs(self, srcLayer):
-        if self != srcLayer:
-            # get current BN
-            currBN = self.orgBNs()[self.currWidthIdx()]
-            # get current BN num_features
-            bnFeatures = currBN.num_features
-            # generate new BNs ModuleList
-            newBNs = ModuleList([BatchNorm2d(bnFeatures) for _ in range(self.nWidths())]).cuda()
-            # copy weights to new BNs
-            for bn in newBNs:
-                bn.load_state_dict(currBN.state_dict())
-            # set layer BNs
-            self.bn = newBNs
-            # update width List
-            self._widthList = [self.currWidth()] * self.nWidths()
-            # update width ratio list
-            self._widthRatioList = [self.currWidthRatio()] * self.nWidths()
-
-    def restoreOriginalBNs(self):
-        self.bn = self.orgBNs()
-        self._widthList = self._orgWidthList
-        self._widthRatioList = self._orgWidthRatioList
-
-    def forward(self, x):
-        # narrow conv weights (i.e. filters) according to current nFilters
-        convWeights = self.conv.weight.narrow(0, 0, self._widthList[self._currWidthIdx])
-        # narrow conv weights (i.e. filters) according to previous layer nFilters
-        convWeights = convWeights.narrow(1, 0, self.prevLayer[0].currWidth())
-
-        # perform forward
-        out = conv2d(x, convWeights, bias=self.conv.bias, stride=self.conv.stride, padding=self.conv.padding, dilation=self.conv.dilation,
-                     groups=self.conv.groups)
-        out = self.bn[self._currWidthIdx](out)
-
-        # update forward counters
-        self._forwardCounters[self._currWidthIdx] += 1
-
-        return out
-
-    def getLayers(self):
-        return [self]
-
-    # number of total output filters in layer
-    def outputChannels(self):
-        return self.conv.out_channels
-
-    # count flops for each width
-    def countWidthFlops(self, input_size):
-        # init flops dictionary, each key is (in_channels, out_channels)
-        # where in_channels is number of filters in previous layer
-        # out_channels in number of filters in current layer
-        flopsDict = {}
-
-        # iterate over current layer widths & previous layer widths
-        for width in self.widthList():
-            for prevWidth in self.prevLayer[0].widthList():
-                conv = Conv2d(prevWidth, width, self.conv.kernel_size, bias=self.conv.bias, stride=self.conv.stride,
-                              padding=self.conv.padding, dilation=self.conv.dilation, groups=self.conv.groups)
-                flops, output_size = count_flops(conv, input_size, prevWidth)
-                flopsDict[(prevWidth, width)] = flops
-
-        return flopsDict, output_size
 
 
 class BaseNet(Module):
@@ -279,7 +35,6 @@ class BaseNet(Module):
     _partitionKey = 'Partition'
     _baselineFlopsKey = 'baselineFlops'
     _baselineFlopsRatioKey = 'baselineFlopsRatio'
-    _alphasCsvFileName = 'alphas.csv'
 
     def __init__(self, args, initLayersParams):
         super(BaseNet, self).__init__()
@@ -289,8 +44,8 @@ class BaseNet(Module):
         self.blocks = self.initBlocks(initLayersParams)
         # init Layers class instance
         self._layers = self.Layers(self.blocks)
-        # build layers alphas list
-        self._alphas = [layer.alphas() for layer in self.layersList()]
+        # init model alphas
+        self._alphas = self.initAlphas(saveFolder)
 
         # init dictionary of layer width indices list per width ratio
         self._baselineWidth = self.buildHomogeneousWidthIdx(args.width)
@@ -310,13 +65,14 @@ class BaseNet(Module):
         # calc number of width permutations in model
         self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self._layers.optimization()])
 
-        # init alphas DataFrame
-        self.alphas_df = None
-        self.__initAlphasDataFrame(saveFolder)
-
     @abstractmethod
     def initBlocks(self, params):
         raise NotImplementedError('subclasses must override initLayers()!')
+
+    @staticmethod
+    @abstractmethod
+    def convSlimLayer() -> ConvSlimLayer:
+        raise NotImplementedError('subclasses must override convSlimLayer()!')
 
     @staticmethod
     @abstractmethod
@@ -328,6 +84,20 @@ class BaseNet(Module):
     @abstractmethod
     def forward(self, x):
         raise NotImplementedError('subclasses must override forward()!')
+
+    # select alpha based on alphas distribution
+    @abstractmethod
+    def choosePathByAlphas(self):
+        raise NotImplementedError('subclasses must override choosePathByAlphas()!')
+
+    # select path based on alphas, without drawing from the distribution
+    @abstractmethod
+    def choosePathAlphasAsPartition(self):
+        raise NotImplementedError('subclasses must override choosePathByAlphas()!')
+
+    @abstractmethod
+    def initAlphas(self, saveFolder: str):
+        raise NotImplementedError('subclasses must override initAlphas()!')
 
     @staticmethod
     def partitionKey():
@@ -349,8 +119,11 @@ class BaseNet(Module):
     def layersList(self):
         return self._layers.optimization()
 
+    def nLayers(self):
+        return len(self.layersList())
+
     def alphas(self):
-        return self._alphas
+        return self._alphas.alphas()
 
     def baselineWidthKeys(self):
         return list(self._baselineWidth.keys())
@@ -365,27 +138,9 @@ class BaseNet(Module):
     def currWidthRatio(self):
         return [layer.currWidthRatio() for layer in self._layers.optimization()]
 
-    def setCurrWidthIdx(self, idxList):
+    def setCurrWidthIdx(self, idxList: list):
         for layer, idx in zip(self._layers.optimization(), idxList):
             layer.setCurrWidthIdx(idx)
-
-        # update curr width changes in each block
-        for block in self.blocks:
-            block.updateCurrWidth()
-
-    # select alpha based on alphas distribution
-    def choosePathByAlphas(self):
-        for layer in self._layers.optimization():
-            layer.choosePathByAlphas()
-
-        # update curr width changes in each block
-        for block in self.blocks:
-            block.updateCurrWidth()
-
-    # select maximal alpha in each layer
-    def chooseAlphaMax(self):
-        for layer in self._layers.optimization():
-            layer.chooseAlphaMax()
 
         # update curr width changes in each block
         for block in self.blocks:
@@ -407,8 +162,8 @@ class BaseNet(Module):
     def calcBaselineFlops(self):
         return self.applyOnBaseline(self.countFlops)
 
-    # apply some function on baseline models
-    # baseline models are per layer width
+    # apply some function on baseline model
+    # baseline model are per layer width
     # this function create a map from baseline width to func() result on baseline model
     # def applyOnBaseline(self, func, applyOnAlphasDistribution=False):
     def applyOnBaseline(self, func):
@@ -436,68 +191,11 @@ class BaseNet(Module):
     def loadPreTrained(self, state_dict):
         self.load_state_dict(state_dict)
 
-    def __initAlphasDataFrame(self, saveFolder):
-        if saveFolder:
-            # update save path if saveFolder exists
-            self._alphasCsvFileName = '{}/{}'.format(saveFolder, self._alphasCsvFileName)
-            # init DataFrame cols
-            cols = ['Epoch', 'Batch']
-            cols += ['Layer_{}'.format(i) for i in range(len(self.layersList()))]
-            self.cols = cols
-            # init DataFrame
-            self.alphas_df = DataFrame([], columns=cols)
-            # set init data
-            data = ['init', 'init']
-            # save alphas data
-            self.saveAlphasCsv(data)
+    def saveAlphasCsv(self, data: list):
+        self._alphas.saveCsv(self, data)
 
-    # save alphas values to csv
-    def saveAlphasCsv(self, data):
-        if self.alphas_df is not None:
-            data += [[round(e.item(), 5) for e in layer.alphas()] for layer in self.layersList()]
-            # create new row
-            d = DataFrame([data], columns=self.cols)
-            # add row
-            self.alphas_df = self.alphas_df.append(d)
-            # save DataFrame
-            self.alphas_df.to_csv(self._alphasCsvFileName)
-
-    def _topAlphas(self, k):
-        top = []
-        for layer in self._layers.optimization():
-            alphas = layer.alphas()
-            # sort alphas probabilities
-            wSorted, wIndices = layer.probs().sort(descending=True)
-            # keep only top-k
-            wSorted = wSorted[:k]
-            wIndices = wIndices[:k]
-            # get layer widths
-            widths = layer.widthList()
-            # add to top
-            top.append([(i, w.item(), alphas[i], widths[i]) for w, i in zip(wSorted, wIndices)])
-
-        return top
-
-    def logTopAlphas(self, k, loggerFuncs=[]):
-        if (not loggerFuncs) or (len(loggerFuncs) == 0):
-            return
-
-        rows = [['Layer #', 'Alphas']]
-        alphaCols = ['Index', 'Ratio', 'Value', 'Width']
-
-        top = self._topAlphas(k=k)
-        for i, layerTop in enumerate(top):
-            layerRow = [alphaCols]
-            for idx, w, alpha, width in layerTop:
-                alphaRow = [idx, '{:.5f}'.format(w), '{:.5f}'.format(alpha), width]
-                # add alpha data row to layer data table
-                layerRow.append(alphaRow)
-            # add layer data table to model table as row
-            rows.append([i, layerRow])
-
-        # apply loggers functions
-        for f in loggerFuncs:
-            f(k, rows)
+    def logTopAlphas(self, k, loggerFuncs):
+        return self._alphas.logTopAlphas(self, k, loggerFuncs)
 
     def printToFile(self, saveFolder):
         logger = HtmlLogger(saveFolder, 'model')
