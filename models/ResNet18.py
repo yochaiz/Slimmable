@@ -3,7 +3,8 @@ from abc import abstractmethod
 from torch.nn import ModuleList, ReLU, Linear, AvgPool2d, MaxPool2d
 from torch.nn.functional import linear
 
-from .BaseNet import BaseNet, Block, ConvSlimLayer
+from models.BaseNet import BaseNetSwitcher
+from models.BaseNet.BaseNet import Block, ConvSlimLayer
 
 
 class Input:
@@ -189,7 +190,7 @@ class BasicBlock(Block):
             self.conv2.generatePathBNs(srcLayer)
 
 
-class ResNet18(BaseNet):
+class ResNet18(BaseNetSwitcher.getClass()):
     def __init__(self, args):
         super(ResNet18, self).__init__(args, initLayersParams=(args.width, args.nClasses, args.input_size, args.partition))
 
