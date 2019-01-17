@@ -1,12 +1,11 @@
 from collections import OrderedDict
-from random import randint
 from json import load as jsonLoad
 
 from torch import load
 from torch.optim.sgd import SGD
 from torch.nn.modules.batchnorm import BatchNorm2d
 
-from models.BaseNet import BaseNet
+from models.BaseNet.BaseNet import BaseNet
 from trainRegimes.OptimalRegime import OptimalRegime
 from utils.HtmlLogger import HtmlLogger
 
