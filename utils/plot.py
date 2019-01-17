@@ -6,7 +6,7 @@ from numpy import linspace
 
 from torch import load, save
 
-from models.BaseNet import BaseNet
+from models.BaseNet.BaseNet import BaseNet
 from utils.trainWeights import TrainWeights
 from utils.flopsPlot import plotFlopsData, FlopsPlot, PlotLabelData, plt
 from utils.checkpoint import checkpointFileType, blocksPartitionKey
