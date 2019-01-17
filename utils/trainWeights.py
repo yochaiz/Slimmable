@@ -3,13 +3,13 @@ from time import time
 from os import makedirs
 from os.path import exists
 
-from torch import tensor, no_grad
+from torch import no_grad
 from torch import load as loadModel
 from torch.nn import CrossEntropyLoss
 from torch.optim.sgd import SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from models.BaseNet import BaseNet
+from models.BaseNet.BaseNet import BaseNet
 from utils.training import TrainingStats
 from utils.HtmlLogger import HtmlLogger
 

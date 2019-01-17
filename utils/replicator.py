@@ -2,12 +2,12 @@ from math import floor
 from time import time
 from multiprocessing.pool import Pool
 
-from torch import tensor, zeros
+from torch import tensor
 from torch.cuda import set_device, current_device
 from torch.utils.data.dataloader import DataLoader
 
 from trainRegimes.regime import TrainRegime
-from models.BaseNet import BaseNet, SlimLayer
+from models.BaseNet.BaseNet import BaseNet, SlimLayer
 from utils.trainWeights import TrainWeights
 
 

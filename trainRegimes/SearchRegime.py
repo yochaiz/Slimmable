@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 from .regime import TrainRegime
 from .PreTrainedRegime import PreTrainedTrainWeights, EpochData
-from models.BaseNet import BaseNet
+from models.BaseNet.BaseNet import BaseNet
 from utils.flopsLoss import FlopsLoss
 from utils.HtmlLogger import HtmlLogger
 from utils.trainWeights import TrainWeights
@@ -286,7 +286,6 @@ class SearchRegime(TrainRegime):
 
     # updates alphas gradients
     # updates statistics
-    # def _updateAlphasGradients(self, lossValues, ceLossValues, flopsLossValues):
     def _updateAlphasGradients(self, lossDictsList: list) -> dict:
         model = self.model
         totalKey = self.flopsLoss.totalKey()
