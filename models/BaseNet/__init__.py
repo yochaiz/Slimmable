@@ -17,3 +17,7 @@ class BaseNetSwitcher:
     @staticmethod
     def getClassesKeys():
         return BaseNetSwitcher._classesDict.keys()
+
+    @staticmethod
+    def convSlimLayer():
+        return BaseNetSwitcher._class.convSlimLayer()
