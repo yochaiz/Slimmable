@@ -143,6 +143,9 @@ class SearchRegime(TrainRegime):
         self.flopsLoss = FlopsLoss(args, getattr(args, self.model.baselineFlopsKey()))
         self.flopsLoss = self.flopsLoss.cuda()
 
+        # create search queue
+        self.search_queue = self.createSearchQueue()
+
         # load model pre-trained weights
         TrainWeights.loadPreTrained(self.model, args.pre_trained, self.logger)
         # reset args.pre_trained, we don't want to load these weights anymore
@@ -193,6 +196,17 @@ class SearchRegime(TrainRegime):
 
     def _alphaPlotTitle(self, layer: SlimLayer, alphaIdx: int) -> str:
         return '{} ({})'.format(layer.widthRatioByIdx(alphaIdx), layer.widthByIdx(alphaIdx))
+
+    def _getNextSearchQueueDataLoader(self):
+        if len(self.search_queue) == 0:
+            # create search queue again, because we iterate over all samples
+            self.search_queue = self.createSearchQueue()
+        # get next DataLoader
+        dataLoader = self.search_queue[0]
+        # remove DataLoader from search_queue list
+        del self.search_queue[0]
+
+        return dataLoader
 
     def trainAlphas(self, search_queue, optimizer, epoch, loggers):
         print('*** trainAlphas() ***')
@@ -363,7 +377,7 @@ class SearchRegime(TrainRegime):
             loggersDict = {self.trainLoggerKey: trainLogger}
 
             # train alphas
-            epochLossDict, alphasDataRow = self.trainAlphas(self.search_queue[epoch % args.alphas_data_parts], optimizer, epoch, loggersDict)
+            epochLossDict, alphasDataRow = self.trainAlphas(self._getNextSearchQueueDataLoader(), optimizer, epoch, loggersDict)
             # update scheduler
             scheduler.step(epochLossDict.get(self.flopsLoss.totalKey()))
 
