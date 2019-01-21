@@ -3,9 +3,8 @@ from argparse import Namespace
 
 # from torch.nn.parallel.data_parallel import DataParallel
 
-from models import getModelDict
+from models import ResNetSwitcher
 from models.BaseNet.BaseNet import BaseNet
-from models.modules.SlimLayer import SlimLayer
 from utils.data import load_data
 from utils.args import logParameters
 from utils.HtmlLogger import HtmlLogger
@@ -46,23 +45,40 @@ class TrainRegime:
         raise NotImplementedError('subclasses must override train()!')
 
     @abstractmethod
-    def buildStatsContainers(self):
+    def buildStatsContainers(self) -> dict:
         raise NotImplementedError('subclasses must override buildStatsContainers()!')
 
     @abstractmethod
     def buildStatsRules(self):
         raise NotImplementedError('subclasses must override buildStatsRules()!')
 
-    def buildModel(self, args: Namespace) -> BaseNet:
-        modelsDict = getModelDict()
+    @staticmethod
+    def buildModel(args: Namespace) -> BaseNet:
+        modelsDict = ResNetSwitcher.getModelDict(args.type)
         # get model constructor
         modelKey = '{}_{}'.format(args.model, args.dataset)
         modelClass = modelsDict[modelKey]
 
         return modelClass(args)
 
-    def _containerPerAlpha(self, model: BaseNet) -> list:
-        return [{self._alphaPlotTitle(layer, idx): [] for idx in range(layer.nWidths())} for layer in model.layersList()]
+    # ==== TrainWeights default functions ====
+    def getModel(self):
+        return self.model
 
-    def _alphaPlotTitle(self, layer: SlimLayer, alphaIdx: int) -> str:
-        return '{} ({})'.format(layer.widthRatioByIdx(alphaIdx), layer.widthByIdx(alphaIdx))
+    def getModelParallel(self):
+        return self.modelParallel
+
+    def getArgs(self):
+        return self.args
+
+    def getLogger(self):
+        return self.logger
+
+    def getTrainQueue(self):
+        return self.train_queue
+
+    def getValidQueue(self):
+        return self.valid_queue
+
+    def getTrainFolderPath(self):
+        return self.trainFolderPath

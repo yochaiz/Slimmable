@@ -35,8 +35,9 @@ class BaseNet_Multinomial(BaseNet):
 
     # select alpha based on alphas distribution
     def choosePathByAlphas(self):
+        alphas = self.alphas()[0]
         # draw partition from multinomial distribution
-        dist = Multinomial(total_count=self.nLayers(), logits=self.alphas())
+        dist = Multinomial(total_count=self.nLayers(), logits=alphas)
         partition = dist.sample().type(int32)
         # set partition as model path
         self._setPartitionPath(partition)
@@ -63,17 +64,17 @@ class AlphasPerModel(Alphas):
 
     def buildAlphas(self, model: BaseNet_Multinomial):
         nWidths = len(model.layersList()[0].widthList())
-        return zeros(nWidths).cuda().clone().detach().requires_grad_(True)
+        return [zeros(nWidths).cuda().clone().detach().requires_grad_(True)]
 
     def initColumns(self, model: BaseNet_Multinomial):
         return [self._alphasKey]
 
     def alphasValues(self, model: BaseNet_Multinomial):
-        return [[round(e.item(), self._roundDigits) for e in self._alphas]]
+        return [[round(e.item(), self._roundDigits) for e in self._alphas[0]]]
 
     def probs(self):
-        return softmax(self._alphas, dim=-1).detach()
+        return softmax(self._alphas[0], dim=-1).detach()
 
     def alphasList(self, model: BaseNet_Multinomial):
         widthList = model.layersList()[0].widthList()
-        return [(self._alphas, self.probs(), widthList)]
+        return [(self._alphas[0], self.probs(), widthList)]

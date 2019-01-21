@@ -135,7 +135,7 @@ class HtmlLogger:
             content = '{}'.format(v)
             # add scroll to cell if content is long
             if (isTable is False) and (len(content) > self._maxTableCellLength):
-                content = '<div style="width: 300px; overflow: auto"> {} </div>'.format(content)
+                content = '<div style="width: 250px; overflow: auto"> {} </div>'.format(content)
             # add content as cell
             res += '<td> {} </td>'.format(content)
         res += '</tr>'

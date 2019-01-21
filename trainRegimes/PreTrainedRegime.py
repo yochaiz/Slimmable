@@ -10,8 +10,8 @@ class PreTrainedTrainWeights(TrainWeights):
     tableCols = [TrainWeights.epochNumKey, TrainWeights.trainLossKey, TrainWeights.trainAccKey,
                  TrainWeights.validLossKey, TrainWeights.validAccKey, TrainWeights.validFlopsRatioKey, TrainWeights.lrKey]
 
-    def __init__(self, regime, maxEpoch):
-        super(PreTrainedTrainWeights, self).__init__(regime)
+    def __init__(self, getModel, getModelParallel, getArgs, getLogger, getTrainQueue, getValidQueue, getTrainFolderPath, maxEpoch):
+        super(PreTrainedTrainWeights, self).__init__(getModel, getModelParallel, getArgs, getLogger, getTrainQueue, getValidQueue, getTrainFolderPath)
 
         # init table in main logger
         self.getLogger().createDataTable(self.tableTitle, self.tableCols)
@@ -72,7 +72,8 @@ class PreTrainedRegime(TrainRegime):
     def __init__(self, args, logger):
         super(PreTrainedRegime, self).__init__(args, logger)
 
-        self.trainWeights = PreTrainedTrainWeights(self, args.weights_epochs)
+        self.trainWeights = PreTrainedTrainWeights(self.getModel, self.getModelParallel, self.getArgs, self.getLogger, self.getTrainQueue,
+                                                   self.getValidQueue, self.getTrainFolderPath, args.weights_epochs)
 
     def buildStatsContainers(self):
         pass

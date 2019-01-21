@@ -1,20 +1,19 @@
 from os import makedirs
 from time import time
-from scipy.stats import entropy
 from argparse import Namespace
 
-from torch import tensor, zeros
+from torch import tensor
 from torch import save as saveCheckpoint
 from torch.optim.sgd import SGD
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 
-from .regime import TrainRegime
+from .regime import TrainRegime, abstractmethod
 from .PreTrainedRegime import PreTrainedTrainWeights, EpochData
 from models.BaseNet.BaseNet import BaseNet
+from models.modules.SlimLayer import SlimLayer
 from utils.flopsLoss import FlopsLoss
 from utils.HtmlLogger import HtmlLogger
 from utils.trainWeights import TrainWeights
-from utils.replicator import ModelReplicator
 from utils.checkpoint import save_checkpoint
 from utils.training import AlphaTrainingStats
 
@@ -22,11 +21,11 @@ from utils.training import AlphaTrainingStats
 class EpochTrainWeights(PreTrainedTrainWeights):
     _nRoundDigits = AlphaTrainingStats.nRoundDigits
 
-    def __init__(self, regime, maxEpoch, currEpoch, logger):
-        self.logger = logger
+    def __init__(self, getModel, getModelParallel, getArgs, getLogger, getTrainQueue, getValidQueue, getTrainFolderPath, maxEpoch, currEpoch):
         self.tableTitle = 'Train model weights - Epoch:[{}]'.format(currEpoch)
 
-        super(EpochTrainWeights, self).__init__(regime, maxEpoch)
+        super(EpochTrainWeights, self).__init__(getModel, getModelParallel, getArgs, getLogger, getTrainQueue, getValidQueue, getTrainFolderPath,
+                                                maxEpoch)
 
         # init average dictionary
         self._avgDict = None
@@ -40,9 +39,6 @@ class EpochTrainWeights(PreTrainedTrainWeights):
         self._sumDict = {k: {} for k in self._map.keys()}
         # init epoch average update function
         self._epochAvgUpdateFunc = self._initEpochAvgUpdate
-
-    def getLogger(self):
-        return self.logger
 
     def _initEpochAvgUpdate(self, trainData: EpochData, validData: EpochData):
         for k, mapFunc in self._map.items():
@@ -76,7 +72,7 @@ class EpochTrainWeights(PreTrainedTrainWeights):
         # sort values formats
         self._applyFormats(avgDict)
         # add summary row
-        self.logger.addSummaryDataRow(avgDict)
+        self.getLogger().addSummaryDataRow(avgDict)
         # set average dict
         self._avgDict = avgDict
 
@@ -151,7 +147,7 @@ class SearchRegime(TrainRegime):
         # reset args.pre_trained, we don't want to load these weights anymore
         args.pre_trained = None
         # init model replications
-        self.replicator = ModelReplicator(self)
+        self.replicator = self.initReplicator()
 
         # create folder for jobs checkpoints
         self.jobsPath = '{}/jobs'.format(args.save)
@@ -163,20 +159,6 @@ class SearchRegime(TrainRegime):
         self.lastMailTime = time()
         self.secondsBetweenMails = 1 * 3600
 
-    def buildStatsContainers(self):
-        model = self.model
-        lossClass = self.lossClass
-
-        container = {self.alphaDistributionKey: self._containerPerAlpha(model),
-                     self.entropyKey: [{layerIdx: [] for layerIdx in range(len(model.layersList()))}]}
-        # add loss average keys
-        for k in lossClass.lossKeys():
-            container[self.lossAvgTemplate.format(k)] = self._containerPerAlpha(model)
-        # add loss variance keys
-        container[self.lossVarianceTemplate.format(lossClass.totalKey())] = self._containerPerAlpha(model)
-
-        return container
-
     def buildStatsRules(self):
         return {self.alphaDistributionKey: 1.1}
 
@@ -186,15 +168,40 @@ class SearchRegime(TrainRegime):
             if k in self.formats:
                 dict[k] = self.formats[k](dict[k])
 
+    @abstractmethod
+    def initReplicator(self):
+        raise NotImplementedError('subclasses must override initReplicator()!')
+
+    @abstractmethod
+    def _pathsListToRows(self, pathsList: list) -> list:
+        raise NotImplementedError('subclasses must override _parsePathsList()!')
+
+    @abstractmethod
+    def _containerPerAlpha(self, model: BaseNet) -> list:
+        raise NotImplementedError('subclasses must override _containerPerAlpha()!')
+
+    @abstractmethod
+    def _calcAlphasDistribStats(self, model: BaseNet):
+        raise NotImplementedError('subclasses must override _calcAlphasDistribStats()!')
+
+    # updates alphas gradients
+    # updates statistics
+    @abstractmethod
+    def _updateAlphasGradients(self, lossDictsList: list) -> dict:
+        raise NotImplementedError('subclasses must override _updateAlphasGradients()!')
+
+    def _alphaPlotTitle(self, layer: SlimLayer, alphaIdx: int) -> str:
+        return '{} ({})'.format(layer.widthRatioByIdx(alphaIdx), layer.widthByIdx(alphaIdx))
+
     def trainAlphas(self, search_queue, optimizer, epoch, loggers):
         print('*** trainAlphas() ***')
         model = self.model
         replicator = self.replicator
-        nSamples = self.args.nSamplesPerAlpha
+        nSamples = self.args.nSamples
         # init trainingStats instance
         trainStats = AlphaTrainingStats(self.flopsLoss.lossKeys(), useAvg=False)
         # init new epoch in replications
-        replicator.initNewEpoch()
+        replicator.initNewEpoch(model)
 
         trainLogger = loggers.get(self.trainLoggerKey)
         if trainLogger:
@@ -238,10 +245,8 @@ class SearchRegime(TrainRegime):
             save_checkpoint(self.trainFolderPath, model, optimizer, lossAvgDict)
 
             if trainLogger:
-                # add numbering to paths list
-                pathsListRows = [['Layer #', 'Paths']]
-                for layerIdx, layerPaths in enumerate(pathsList):
-                    pathsListRows.append([layerIdx, [[idx + 1, v] for idx, v in enumerate(layerPaths)]])
+                # parse pathsList to InfoTable rows
+                pathsListRows = self._pathsListToRows(pathsList)
                 # init data row
                 dataRow = {self.batchNumKey: batchNum, self.archLossKey: trainStats.batchLoss(),
                            self.pathsListKey: trainLogger.createInfoTable('Show', pathsListRows), self.timeKey: endTime - startTime}
@@ -264,18 +269,6 @@ class SearchRegime(TrainRegime):
 
         return epochLossDict, summaryDataRow
 
-    def _calcAlphasDistribStats(self, model):
-        stats = self.statistics
-        for layerIdx, layer in enumerate(model.layersList()):
-            # calc layer alphas distribution
-            probs = layer.probs().cpu()
-            # add entropy to statistics
-            stats.addValue(lambda containers: containers[self.entropyKey][0][layerIdx], entropy(probs))
-            # add alphas distribution
-            for alphaIdx, p in enumerate(probs):
-                alphaTitle = self._alphaPlotTitle(layer, alphaIdx)
-                stats.addValue(lambda containers: containers[self.alphaDistributionKey][layerIdx][alphaTitle], p.item())
-
     def _loss(self, input: tensor, target: tensor, nSamples: int) -> (dict, list):
         # calc paths loss for each alpha using replicator
         lossDictsList, pathsList = self.replicator.loss(input, target, nSamples)
@@ -283,81 +276,6 @@ class SearchRegime(TrainRegime):
         lossAvgDict = self._updateAlphasGradients(lossDictsList)
 
         return lossAvgDict, pathsList
-
-    # updates alphas gradients
-    # updates statistics
-    def _updateAlphasGradients(self, lossDictsList: list) -> dict:
-        model = self.model
-        totalKey = self.flopsLoss.totalKey()
-
-        # init total loss
-        totalLoss = 0.0
-        # init losses averages
-        lossAvgDict = {k: 0.0 for k in self.flopsLoss.lossKeys()}
-        # count how many alphas we have sum their loss average
-        nAlphas = 0
-        # get statistics element with a shorter name
-        stats = self.statistics
-        # init model probs list for gradient calcs
-        probsList = []
-        # after we finished iterating over samples, we can calculate loss average & variance for each alpha
-        for layerIdx, layer in enumerate(model.layersList()):
-            layerLossDicts = lossDictsList[layerIdx]
-            # get layer alphas probabilities
-            layerProbs = layer.probs()
-            # add to model probs list
-            probsList.append(layerProbs)
-            # init layer alphas gradient vector
-            layerAlphasGrad = zeros(layer.nWidths(), requires_grad=True).cuda()
-            # iterate over alphas
-            for idx, alphaLossDict in enumerate(layerLossDicts):
-                alphaLossAvgDict = {}
-                for k, lossList in alphaLossDict.items():
-                    # calc loss list average
-                    alphaLossAvgDict[k] = sum(lossList) / len(lossList)
-                    # add loss average to total loss average
-                    lossAvgDict[k] += alphaLossAvgDict[k]
-                # update number of alphas summed into lossAvgDict
-                nAlphas += 1
-                # set total loss average
-                alphaLossAvg = alphaLossAvgDict[totalKey]
-                # update alpha gradient
-                layerAlphasGrad[idx] = alphaLossAvg
-                # update total loss
-                totalLoss += (alphaLossAvg * layerProbs[idx])
-                # calc alpha loss variance
-                alphaLossVariance = [((x - alphaLossAvg) ** 2) for x in alphaLossDict[totalKey]]
-                alphaLossVariance = sum(alphaLossVariance) / (len(alphaLossVariance) - 1)
-                # add values to statistics
-                alphaTitle = self._alphaPlotTitle(layer, idx)
-                # init template for get list function based on container key
-                getListFunc = lambda key: lambda containers: containers[key][layerIdx][alphaTitle]
-                # add loss average values to statistics
-                for lossKey, lossAvg in alphaLossAvgDict.items():
-                    stats.addValue(getListFunc(self.lossAvgTemplate.format(lossKey)), lossAvg)
-                # add loss variance values to statistics
-                stats.addValue(getListFunc(self.lossVarianceTemplate.format(totalKey)), alphaLossVariance)
-
-            # update layer alphas gradient
-            layerAlphas = layer.alphas()
-            layerAlphas.grad = layerAlphasGrad
-
-        # average total loss
-        totalLoss /= len(model.layersList())
-        print('totalLoss:[{:.5f}]'.format(totalLoss))
-        # subtract average total loss from every alpha gradient
-        for layerIdx, (layer, layerProbs) in enumerate(zip(model.layersList(), probsList)):
-            layerAlphas = layer.alphas()
-            layerAlphas.grad -= totalLoss
-            # multiply each grad by its probability
-            layerAlphas.grad *= layerProbs
-            print('Layer:[{}] - alphas gradient:{}'.format(layerIdx, layerAlphas.grad.data))
-
-        # average (total loss average) by number of alphas
-        for k in lossAvgDict.keys():
-            lossAvgDict[k] /= nAlphas
-
-        return lossAvgDict
 
     @staticmethod
     def _getEpochRange(nEpochs: int) -> range:
@@ -429,7 +347,7 @@ class SearchRegime(TrainRegime):
         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=2, min_lr=args.search_learning_rate_min)
 
         for epoch in epochRange:
-            print('========== Epoch:[{}] =============='.format(epoch))
+            print('========== Epoch:[{}/{}] =============='.format(epoch, self.nEpochs))
             # # calc alpha trainset loss on baselines
             # self.calcAlphaTrainsetLossOnBaselines(self.trainFolderPath, '{}_{}'.format(epoch, self.archLossKey), logger)
 
@@ -455,7 +373,8 @@ class SearchRegime(TrainRegime):
             # train weights
             wEpochName = '{}_w'.format(epoch)
             weightsLogger = HtmlLogger(self.trainFolderPath, wEpochName)
-            trainWeights = EpochTrainWeights(self, args.weights_epochs, epoch, weightsLogger)
+            trainWeights = EpochTrainWeights(self.getModel, self.getModelParallel, self.getArgs, lambda: weightsLogger, self.getTrainQueue,
+                                             self.getValidQueue, self.getTrainFolderPath, args.weights_epochs, epoch)
             trainWeights.train(wEpochName)
             # add data row
             trainDataRow = trainWeights.avgDictDataRow()

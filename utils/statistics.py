@@ -199,17 +199,15 @@ class Statistics:
             # build subplot for all plots
             figs = []
             # init merged plot
-            figMerged, axMerged = None, None
             nPlots = len(dataList)
-            if nPlots > 1:
-                nRows, nCols = self.__findGrid(nPlots)
-                figMerged, axMerged = plt.subplots(nrows=nRows, ncols=nCols, sharey=True)
-                axRow, axCol = 0, 0
-                figs.append(figMerged)
+            nRows, nCols = self.__findGrid(nPlots)
+            figMerged, axMerged = plt.subplots(nrows=nRows, ncols=nCols, sharey=True)
+            axRow, axCol = 0, 0
+            figs.append(figMerged)
             # iterate over data elements
             for dataIdx, dataDict in enumerate(dataList):
                 # init axMerged sub-plot
-                ax = axMerged[axRow, axCol] if nPlots > 1 else None
+                ax = axMerged[axRow, axCol] if nPlots > 1 else axMerged
                 # init title
                 title = '[{}]-[{}] over epochs'.format(fileName, dataIdx)
                 # plot container
@@ -217,15 +215,16 @@ class Statistics:
                 # add fig to figs list
                 figs.append(fig)
                 # update next axes indices
-                axCol = (axCol + 1) % nCols
-                if axCol == 0:
-                    axRow += 1
+                if ax:
+                    axCol = (axCol + 1) % nCols
+                    if axCol == 0:
+                        axRow += 1
 
             if figMerged:
                 # apply yMax rule if exists, else retain yMax
                 yMax = self._rules.get(yLabel)
                 if yMax:
-                    axMerged[0, 0].set_ylim(top=yMax)
+                    ax.set_ylim(top=yMax)
                 # set merged fig properties
                 self.__setFigProperties(figMerged, figSize=(40, 20))
             # save as PDF

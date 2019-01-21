@@ -1,7 +1,7 @@
 from .BaseNet import BaseNet, ConvSlimLayer
 from models.modules.Alphas import Alphas
 
-from torch import zeros
+from torch import tensor, zeros
 from torch.nn.functional import softmax
 from torch.distributions.categorical import Categorical
 
@@ -15,7 +15,7 @@ class ConvSlimLayerWithAlphas(ConvSlimLayer):
 
         # return alphas value
 
-    def alphas(self):
+    def alphas(self) -> tensor:
         return self._alphas
 
     # return alphas probabilities

@@ -3,8 +3,8 @@ from abc import abstractmethod
 from torch.nn import ModuleList, ReLU, Linear, AvgPool2d, MaxPool2d
 from torch.nn.functional import linear
 
-from models.BaseNet import BaseNetSwitcher
 from models.modules.block import Block
+from models.modules.ConvSlimLayer import ConvSlimLayer
 
 
 class Input:
@@ -27,14 +27,13 @@ class Input:
 
 
 class Downsample(Block):
-    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2):
+    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
         super(Downsample, self).__init__()
 
         kernel_size = 1
 
         # init downsample source, i.e. in case we will need it
-        convSlimLayer = BaseNetSwitcher.convSlimLayer()
-        self.downsampleSrc = convSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
+        self.downsampleSrc = _ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
         # init current downsample
         self._downsample = [self.initCurrentDownsample()]
         # init residual function
@@ -85,8 +84,8 @@ class Downsample(Block):
 
 # downsample for block where downsample is always required, even for the same width
 class PermanentDownsample(Downsample):
-    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2):
-        super(PermanentDownsample, self).__init__(widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2)
+    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
+        super(PermanentDownsample, self).__init__(widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer)
 
     def initCurrentDownsample(self):
         return self.downsampleSrc
@@ -103,8 +102,8 @@ class PermanentDownsample(Downsample):
 
 # downsample for block where downsample is required only where following layers have different width
 class TempDownsample(Downsample):
-    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2):
-        super(TempDownsample, self).__init__(widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2)
+    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
+        super(TempDownsample, self).__init__(widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer)
 
     def initCurrentDownsample(self):
         return None
@@ -133,26 +132,32 @@ class TempDownsample(Downsample):
 
 
 class BasicBlock(Block):
+    _ConvSlimLayer = None
+
     def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
         super(BasicBlock, self).__init__()
-        convSlimLayer = BaseNetSwitcher.convSlimLayer()
+        _ConvSlimLayer = BasicBlock._ConvSlimLayer
 
         stride1 = stride if in_planes == out_planes else (stride + 1)
 
         # build 1st block
-        self.conv1 = convSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
+        self.conv1 = _ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
         self.relu1 = ReLU(inplace=True)
 
         # build 2nd block
-        self.conv2 = convSlimLayer(widthRatioList, out_planes, out_planes, kernel_size, stride, prevLayer=self.conv1)
+        self.conv2 = _ConvSlimLayer(widthRatioList, out_planes, out_planes, kernel_size, stride, prevLayer=self.conv1)
         self.relu2 = ReLU(inplace=True)
 
         # init downsample
         downsampleClass = TempDownsample if in_planes == out_planes else PermanentDownsample
-        self.downsample = downsampleClass(widthRatioList, in_planes, out_planes, stride1, prevLayer, self.conv2)
+        self.downsample = downsampleClass(widthRatioList, in_planes, out_planes, stride1, prevLayer, self.conv2, _ConvSlimLayer)
 
         # # register pre-forward hook
         # self.register_forward_pre_hook(self.preForward)
+
+    @staticmethod
+    def setConvSlimLayer(convClass):
+        BasicBlock._ConvSlimLayer = convClass
 
     # @staticmethod
     # def preForward(self, input):
@@ -192,151 +197,163 @@ class BasicBlock(Block):
             self.conv2.generatePathBNs(srcLayer)
 
 
-class ResNet18(BaseNetSwitcher.getClass()):
-    def __init__(self, args):
-        super(ResNet18, self).__init__(args, initLayersParams=(args.width, args.nClasses, args.input_size, args.partition))
+def ResNet18(BaseNet):
+    class ResNet18(BaseNet):
+        def __init__(self, args):
+            super(ResNet18, self).__init__(args, initLayersParams=(args.width, args.nClasses, args.input_size, args.partition))
 
-    # init layers (type, out_planes)
-    def initBlocksPlanes(self):
-        return [(self.convSlimLayer(), 16), (BasicBlock, 16), (BasicBlock, 16), (BasicBlock, 16),
-                (BasicBlock, 32), (BasicBlock, 32), (BasicBlock, 32),
-                (BasicBlock, 64), (BasicBlock, 64), (BasicBlock, 64)]
+        # init layers (type, out_planes)
+        def initBlocksPlanes(self):
+            # set BasicBlock ConvSlimLayer class
+            BasicBlock.setConvSlimLayer(self.convSlimLayer())
+            # return blocks
+            return [(self.convSlimLayer(), 16), (BasicBlock, 16), (BasicBlock, 16), (BasicBlock, 16),
+                    (BasicBlock, 32), (BasicBlock, 32), (BasicBlock, 32),
+                    (BasicBlock, 64), (BasicBlock, 64), (BasicBlock, 64)]
 
-    @staticmethod
-    def nPartitionBlocks():
-        return 3, [4, 3, 3]
+        @staticmethod
+        def nPartitionBlocks():
+            return 3, [4, 3, 3]
 
-    @abstractmethod
-    def initBlocks(self, params):
-        raise NotImplementedError('subclasses must override initBlocks()!')
+        @abstractmethod
+        def initBlocks(self, params):
+            raise NotImplementedError('subclasses must override initBlocks()!')
 
-    @abstractmethod
-    def forward(self, x):
-        raise NotImplementedError('subclasses must override forward()!')
+        @abstractmethod
+        def forward(self, x):
+            raise NotImplementedError('subclasses must override forward()!')
 
-    # generate new BNs for current model path, except for given srcLayer
-    def generatePathBNs(self, srcLayer: BaseNetSwitcher.convSlimLayer()):
-        for block in self.blocks:
-            block.generatePathBNs(srcLayer)
+        # generate new BNs for current model path, except for given srcLayer
+        def generatePathBNs(self, srcLayer: ConvSlimLayer):
+            for block in self.blocks:
+                block.generatePathBNs(srcLayer)
 
-    # restore layers original BNs
-    def restoreOriginalBNs(self):
-        for layer in self._layers.forwardCounters():
-            layer.restoreOriginalBNs()
+        # restore layers original BNs
+        def restoreOriginalBNs(self):
+            for layer in self._layers.forwardCounters():
+                layer.restoreOriginalBNs()
 
-
-class ResNet18_Cifar(ResNet18):
-    def __init__(self, args):
-        super(ResNet18_Cifar, self).__init__(args)
-
-    def initBlocks(self, params):
-        widthRatioList, nClasses, input_size, partition = params
-
-        blocksPlanes = self.initBlocksPlanes()
-
-        # init parameters
-        kernel_size = 3
-        stride = 1
-
-        # create list of blocks from blocksPlanes
-        blocks = ModuleList()
-        prevLayer = Input(3, input_size)
-
-        for i, (blockType, out_planes) in enumerate(blocksPlanes):
-            layerWidthRatioList = widthRatioList.copy()
-            # add partition ratio if exists
-            if partition:
-                layerWidthRatioList += [partition[i]]
-            # build layer
-            l = blockType(layerWidthRatioList, prevLayer.outputChannels(), out_planes, kernel_size, stride, prevLayer)
-            # add layer to blocks list
-            blocks.append(l)
-            # update previous layer
-            prevLayer = l.outputLayer()
-
-        self.avgpool = AvgPool2d(8)
-        self.fc = Linear(64, nClasses).cuda()
-
-        return blocks
-
-    def additionalLayersToLog(self):
-        return [self.avgpool, self.fc]
-
-    def forward(self, x):
-        out = x
-        for block in self.blocks:
-            out = block(out)
-
-        out = self.avgpool(out)
-        out = out.view(out.size(0), -1)
-        # narrow linear according to last conv2d layer
-        in_features = int(self.fc.in_features * block.outputLayer().currWidthRatio())
-        # out = linear(out, self.fc.weight.narrow(1, 0, block.outputLayer().currWidth()), bias=self.fc.bias)
-        out = linear(out, self.fc.weight.narrow(1, 0, in_features), bias=self.fc.bias)
-
-        return out
+    return ResNet18
 
 
-class ResNet18_Imagenet(ResNet18):
-    def __init__(self, args):
-        super(ResNet18_Imagenet, self).__init__(args)
+def ResNet18_Cifar(BaseClass):
+    class ResNet18_Cifar(BaseClass):
+        def __init__(self, args):
+            super(ResNet18_Cifar, self).__init__(args)
 
-    def initBlocks(self, params):
-        widthRatioList, nClasses, input_size, partition = params
+        def initBlocks(self, params):
+            widthRatioList, nClasses, input_size, partition = params
 
-        blocksPlanes = self.initBlocksPlanes()
+            blocksPlanes = self.initBlocksPlanes()
 
-        # init parameters
-        kernel_size = 7
-        stride = 2
-
-        # create list of blocks from blocksPlanes
-        blocks = ModuleList()
-        # output size is divided by 2 due to maxpool after 1st conv layer
-        prevLayer = Input(3, int(input_size / 2))
-
-        for i, (blockType, out_planes) in enumerate(blocksPlanes):
-            # increase number of out_planes
-            out_planes *= 4
-            # copy width ratio list
-            layerWidthRatioList = widthRatioList.copy()
-            # add partition ratio if exists
-            if partition:
-                layerWidthRatioList += [partition[i]]
-            # build layer
-            l = blockType(layerWidthRatioList, prevLayer.outputChannels(), out_planes, kernel_size, stride, prevLayer)
-            # update kernel size
+            # init parameters
             kernel_size = 3
-            # update stride
             stride = 1
-            # add layer to blocks list
-            blocks.append(l)
-            # update previous layer
-            prevLayer = l.outputLayer()
 
-        self.maxpool = MaxPool2d(kernel_size=kernel_size, stride=2, padding=1)
-        self.avgpool = AvgPool2d(7)
-        self.fc = Linear(1024, nClasses).cuda()
+            # create list of blocks from blocksPlanes
+            blocks = ModuleList()
+            prevLayer = Input(3, input_size)
 
-        return blocks
+            for i, (blockType, out_planes) in enumerate(blocksPlanes):
+                layerWidthRatioList = widthRatioList.copy()
+                # add partition ratio if exists
+                if partition:
+                    layerWidthRatioList += [partition[i]]
+                # build layer
+                l = blockType(layerWidthRatioList, prevLayer.outputChannels(), out_planes, kernel_size, stride, prevLayer)
+                # add layer to blocks list
+                blocks.append(l)
+                # update previous layer
+                prevLayer = l.outputLayer()
 
-    def additionalLayersToLog(self):
-        return [self.maxpool, self.avgpool, self.fc]
+            self.avgpool = AvgPool2d(8)
+            self.fc = Linear(64, nClasses).cuda()
 
-    def forward(self, x):
-        out = x
+            return blocks
 
-        block = self.blocks[0]
-        out = block(out)
-        out = self.maxpool(out)
+        def additionalLayersToLog(self):
+            return [self.avgpool, self.fc]
 
-        for block in self.blocks[1:]:
+        def forward(self, x):
+            out = x
+            for block in self.blocks:
+                out = block(out)
+
+            out = self.avgpool(out)
+            out = out.view(out.size(0), -1)
+            # narrow linear according to last conv2d layer
+            in_features = int(self.fc.in_features * block.outputLayer().currWidthRatio())
+            # out = linear(out, self.fc.weight.narrow(1, 0, block.outputLayer().currWidth()), bias=self.fc.bias)
+            out = linear(out, self.fc.weight.narrow(1, 0, in_features), bias=self.fc.bias)
+
+            return out
+
+    return ResNet18_Cifar
+
+
+def ResNet18_Imagenet(BaseClass):
+    class ResNet18_Imagenet(BaseClass):
+        def __init__(self, args):
+            super(ResNet18_Imagenet, self).__init__(args)
+
+        def initBlocks(self, params):
+            widthRatioList, nClasses, input_size, partition = params
+
+            blocksPlanes = self.initBlocksPlanes()
+
+            # init parameters
+            kernel_size = 7
+            stride = 2
+
+            # create list of blocks from blocksPlanes
+            blocks = ModuleList()
+            # output size is divided by 2 due to maxpool after 1st conv layer
+            prevLayer = Input(3, int(input_size / 2))
+
+            for i, (blockType, out_planes) in enumerate(blocksPlanes):
+                # increase number of out_planes
+                out_planes *= 4
+                # copy width ratio list
+                layerWidthRatioList = widthRatioList.copy()
+                # add partition ratio if exists
+                if partition:
+                    layerWidthRatioList += [partition[i]]
+                # build layer
+                l = blockType(layerWidthRatioList, prevLayer.outputChannels(), out_planes, kernel_size, stride, prevLayer)
+                # update kernel size
+                kernel_size = 3
+                # update stride
+                stride = 1
+                # add layer to blocks list
+                blocks.append(l)
+                # update previous layer
+                prevLayer = l.outputLayer()
+
+            self.maxpool = MaxPool2d(kernel_size=kernel_size, stride=2, padding=1)
+            self.avgpool = AvgPool2d(7)
+            self.fc = Linear(1024, nClasses).cuda()
+
+            return blocks
+
+        def additionalLayersToLog(self):
+            return [self.maxpool, self.avgpool, self.fc]
+
+        def forward(self, x):
+            out = x
+
+            block = self.blocks[0]
             out = block(out)
+            out = self.maxpool(out)
 
-        out = self.avgpool(out)
-        out = out.view(out.size(0), -1)
-        # narrow linear according to last conv2d layer
-        in_features = int(self.fc.in_features * block.outputLayer().currWidthRatio())
-        out = linear(out, self.fc.weight.narrow(1, 0, in_features), bias=self.fc.bias)
+            for block in self.blocks[1:]:
+                out = block(out)
 
-        return out
+            out = self.avgpool(out)
+            out = out.view(out.size(0), -1)
+            # narrow linear according to last conv2d layer
+            in_features = int(self.fc.in_features * block.outputLayer().currWidthRatio())
+            out = linear(out, self.fc.weight.narrow(1, 0, in_features), bias=self.fc.bias)
+
+            return out
+
+    return ResNet18_Imagenet

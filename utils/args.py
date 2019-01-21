@@ -5,11 +5,26 @@ from os import getpid, environ
 from sys import argv
 from socket import gethostname
 
-from models import getModelNames, getModelDict
-from models.BaseNet import BaseNetSwitcher
 from utils.HtmlLogger import HtmlLogger
 from utils.zip import create_exp_dir
 from utils.checkpoint import generate_partitions
+
+
+class Switcher:
+    _categoricalKey = 'categorical'
+    _multinomialKey = 'multinomial'
+
+    @staticmethod
+    def categoricalKey():
+        return Switcher._categoricalKey
+
+    @staticmethod
+    def multinomialKey():
+        return Switcher._multinomialKey
+
+    @staticmethod
+    def getClassesKeys():
+        return [Switcher.categoricalKey(), Switcher.multinomialKey()]
 
 
 def saveArgsToJSON(args):
@@ -34,11 +49,12 @@ def saveArgsToJSON(args):
 
 
 def parseArgs():
-    modelNames = getModelNames()
+    from models import ResNetSwitcher
+    modelNames = ResNetSwitcher.getModelNames()
     # init datasets parameters (nClasses, input_size)
     datasets = dict(cifar10=(10, 32), cifar100=(100, 32), imagenet=(1000, None))
     # init BaseNet dict
-    baseNetClasses = BaseNetSwitcher.getClassesKeys()
+    baseNetClasses = Switcher.getClassesKeys()
 
     parser = ArgumentParser("Slimmable")
     # BaseNet type
@@ -71,7 +87,7 @@ def parseArgs():
     parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
     # parser.add_argument('--train_regime', default='TrainRegime', choices=trainRegimesNames, help='Training regime')
     parser.add_argument('--alphas_data_parts', type=int, default=10, help='split alphas training data to parts. each loop uses single part')
-    parser.add_argument('--nSamplesPerAlpha', type=int, default=5, help='number of samples (paths) to evaluate on each alpha')
+    parser.add_argument('--nSamples', type=int, default=5, help='number of samples (paths) to evaluate on each alpha')
     parser.add_argument('--nJobs', type=int, default=5, help='number of jobs (checkpoints) to sample from current alphas distribution')
     parser.add_argument('--lmbda', type=float, default=0.0, help='Lambda value for FlopsLoss')
     # # Conv2d params
@@ -83,9 +99,6 @@ def parseArgs():
     parser.add_argument('--generate_partitions', type=str, default=None)
 
     args = parser.parse_args()
-
-    # choose BaseNet class
-    BaseNetSwitcher.choose(args.type)
 
     # update GPUs list
     if type(args.gpu) is str:
@@ -111,7 +124,7 @@ def parseArgs():
         # reset args.generate_partitions, because we want it None in generated checkpoints
         args.generate_partitions = None
         # get model class for number of block & number of layers per block
-        modelClass = getModelDict()[args.model]
+        modelClass = ResNetSwitcher.getModelDict(args.type)[args.model]
         # generate permutations
         generate_partitions(args, widthRatioList, modelClass.nPartitionBlocks())
         exit(0)
@@ -119,7 +132,7 @@ def parseArgs():
     # create folder
     args.time = strftime("%Y%m%d-%H%M%S")
     args.folderName = '[{}],[{}],[{}],{},[{}]'.format(args.model, args.dataset, args.lmbda, args.width, args.time)
-    args.save = '../{}_results/{}'.format(args.type, args.folderName)
+    args.save = '../results_{}/{}'.format(args.type, args.folderName)
     create_exp_dir(args.save)
 
     # init partition

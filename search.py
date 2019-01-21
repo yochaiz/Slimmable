@@ -9,7 +9,7 @@ from torch.cuda import is_available, set_device
 from torch.cuda import manual_seed as cuda_manual_seed
 from torch import manual_seed as torch_manual_seed
 
-from trainRegimes.SearchRegime import SearchRegime
+from trainRegimes import SearchRegimeSwitcher
 from utils.HtmlLogger import HtmlLogger
 from utils.emails import sendEmail
 from utils.args import parseArgs
@@ -38,6 +38,8 @@ if __name__ == '__main__':
         raise ValueError('spawn failed')
 
     try:
+        # get SearchRegime class by type
+        SearchRegime = SearchRegimeSwitcher.getSearchRegimeClass(args.type)
         # build regime for alphas optimization
         alphasRegime = SearchRegime(args, logger)
         # # train according to chosen regime

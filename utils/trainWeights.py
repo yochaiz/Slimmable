@@ -62,34 +62,44 @@ class TrainWeights:
     colsTrainWeights = [batchNumKey, trainLossKey, trainAccKey, timeKey]
     colsValidation = [batchNumKey, validLossKey, validAccKey, timeKey]
 
-    def __init__(self, regime):
-        self.regime = regime
+    # def __init__(self, regime):
+    def __init__(self, getModel, getModelParallel, getArgs, getLogger, getTrainQueue, getValidQueue, getTrainFolderPath):
+        # init functions
+        self.getModel = getModel
+        self.getModelParallel = getModelParallel
+        self.getArgs = getArgs
+        self.getLogger = getLogger
+        self.getTrainQueue = getTrainQueue
+        self.getValidQueue = getValidQueue
+        self.getTrainFolderPath = getTrainFolderPath
+
+        # self.regime = regime
         # init cross entropy loss
         self.cross_entropy = CrossEntropyLoss().cuda()
 
         # load pre-trained model & optimizer
-        self.optimizerStateDict = self.loadPreTrained(self.getModel(), regime.args.pre_trained, regime.logger)
+        self.optimizerStateDict = self.loadPreTrained(self.getModel(), self.getArgs().pre_trained, self.getLogger())
 
-    def getModel(self):
-        return self.regime.model
-
-    def getModelParallel(self):
-        return self.regime.modelParallel
-
-    def getArgs(self):
-        return self.regime.args
-
-    def getLogger(self):
-        return self.regime.logger
-
-    def getTrainQueue(self):
-        return self.regime.train_queue
-
-    def getValidQueue(self):
-        return self.regime.valid_queue
-
-    def getTrainFolderPath(self):
-        return self.regime.trainFolderPath
+    # def getModel(self):
+    #     return self.regime.model
+    #
+    # def getModelParallel(self):
+    #     return self.regime.modelParallel
+    #
+    # def getArgs(self):
+    #     return self.regime.args
+    #
+    # def getLogger(self):
+    #     return self.regime.logger
+    #
+    # def getTrainQueue(self):
+    #     return self.regime.train_queue
+    #
+    # def getValidQueue(self):
+    #     return self.regime.valid_queue
+    #
+    # def getTrainFolderPath(self):
+    #     return self.regime.trainFolderPath
 
     # apply defined format functions on dict values by keys
     def _applyFormats(self, dict):

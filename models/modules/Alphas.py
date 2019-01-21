@@ -31,8 +31,12 @@ class Alphas:
     def alphasList(self, model):
         raise NotImplementedError('subclasses must override alphasList()!')
 
-    def alphas(self):
+    def alphas(self) -> list:
         return self._alphas
+
+    def update(self, srcModelAlphasList: list):
+        for dstAlphas, srcAlphas in zip(self.alphas(), srcModelAlphasList):
+            dstAlphas.data.copy_(srcAlphas.data)
 
     def _initAlphasDataFrame(self, model, saveFolder):
         if saveFolder:

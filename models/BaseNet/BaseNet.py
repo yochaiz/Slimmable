@@ -122,8 +122,11 @@ class BaseNet(Module):
     def nLayers(self):
         return len(self.layersList())
 
-    def alphas(self):
+    def alphas(self) -> list:
         return self._alphas.alphas()
+
+    def updateAlphas(self, srcModelAlphas):
+        self._alphas.update(srcModelAlphas)
 
     def baselineWidthKeys(self):
         return list(self._baselineWidth.keys())

@@ -12,8 +12,8 @@ class OptimalTrainWeights(TrainWeights):
     colsMainInitWeightsTrain = [TrainWeights.epochNumKey, TrainWeights.trainLossKey, TrainWeights.trainAccKey,
                                 TrainWeights.validLossKey, TrainWeights.validAccKey, TrainWeights.lrKey]
 
-    def __init__(self, regime):
-        super(OptimalTrainWeights, self).__init__(regime)
+    def __init__(self, getModel, getModelParallel, getArgs, getLogger, getTrainQueue, getValidQueue, getTrainFolderPath):
+        super(OptimalTrainWeights, self).__init__(getModel, getModelParallel, getArgs, getLogger, getTrainQueue, getValidQueue, getTrainFolderPath)
 
         # init table in main logger
         self.getLogger().createDataTable(self.initWeightsTrainTableTitle, self.colsMainInitWeightsTrain)
@@ -40,7 +40,7 @@ class OptimalTrainWeights(TrainWeights):
     def schedulerMetric(self, validLoss):
         return self.trainOptimum.dictAvg(validLoss)
 
-    def postEpoch(self, epoch, optimizer, trainData:EpochData, validData:EpochData):
+    def postEpoch(self, epoch, optimizer, trainData: EpochData, validData: EpochData):
         logger = self.getLogger()
         model = self.getModel()
         # add epoch number
@@ -103,7 +103,8 @@ class OptimalRegime(TrainRegime):
 
         super(OptimalRegime, self).__init__(args, logger)
 
-        self.trainWeights = OptimalTrainWeights(self)
+        self.trainWeights = OptimalTrainWeights(self.getModel, self.getModelParallel, self.getArgs, self.getLogger, self.getTrainQueue,
+                                                self.getValidQueue, self.getTrainFolderPath)
 
     def buildStatsContainers(self):
         pass
