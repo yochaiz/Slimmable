@@ -11,15 +11,6 @@ class TrainPathWeights(TrainWeights):
         # save GPU device number
         self._gpu = gpu
 
-    # def getModel(self):
-    #     return self._replica.cModel()
-    #
-    # def getModelParallel(self):
-    #     return self.getModel()
-    #
-    # def getTrainQueue(self):
-    #     return self._replica.trainQueue()
-
     def stopCondition(self, epoch):
         return epoch >= 5
 
@@ -41,3 +32,12 @@ class TrainPathWeights(TrainWeights):
         # count training time
         endTime = time()
         print('Train time:[{}] - GPU:[{}]'.format(self.formats[self.timeKey](endTime - startTime), self._gpu))
+
+# def getModel(self):
+#     return self._replica.cModel()
+#
+# def getModelParallel(self):
+#     return self.getModel()
+#
+# def getTrainQueue(self):
+#     return self._replica.trainQueue()

@@ -5,14 +5,9 @@ from .TrainPathWeights import TrainPathWeights
 
 class Replica:
     def __init__(self, buildModelFunc: callable, modelStateDict: dict, modelAlphas: list, gpu: int, trainWeightsElements: tuple):
-        # # set device to required gpu
-        # set_device(gpu)
-        # self._regime = regime
-
         # can't pass regime class functions, therefore passing functions return value
         args, logger, trainQueue, validQueue, trainFolderPath = trainWeightsElements
 
-        # self._gpu = gpu
         # replicate regime model
         self._replicateModel(buildModelFunc, args, modelStateDict, modelAlphas)
         # init trainWeights instance
@@ -32,18 +27,6 @@ class Replica:
 
     def getModel(self):
         return self._cModel
-
-    # def gpu(self) -> int:
-    #     return self._gpu
-
-    # def cModel(self) -> BaseNet:
-    #     return self._cModel
-
-    # def regime(self) -> TrainRegime:
-    #     return self._regime
-
-    # def trainQueue(self) -> DataLoader:
-    #     return self._regime.train_queue
 
     def _updateWeights(self, srcModelStateDict: dict):
         model = self._cModel
@@ -71,18 +54,12 @@ class Replica:
         # copy alphas
         self._updateAlphas(modelAlphas)
 
-    # def initNewEpoch(self, modelStateDict: dict):
-    #     # update replica weights
-    #     self._updateWeights(modelStateDict)
-    #     # init new TrainPathWeights instance
-    #     self._trainWeights = TrainPathWeights(self)
-
     # assumes cModel has original weights + original BNs, i.e. restoreModelOriginalWeights() has been applied
     def train(self, params: tuple):
         # init training paths
         layerPaths = self.initTrainPaths(params)
-        # # train
-        # self._trainWeights.train(layerPaths)
+        # train
+        self._trainWeights.train(layerPaths)
 
         return layerPaths
 
@@ -128,3 +105,21 @@ class CategoricalReplica(Replica):
             layerPaths[layer.widthRatioByIdx(idx)] = [idx] * len(srcPath)
 
         return layerPaths
+
+# def gpu(self) -> int:
+#     return self._gpu
+
+# def cModel(self) -> BaseNet:
+#     return self._cModel
+
+# def regime(self) -> TrainRegime:
+#     return self._regime
+
+# def trainQueue(self) -> DataLoader:
+#     return self._regime.train_queue
+
+# def initNewEpoch(self, modelStateDict: dict):
+#     # update replica weights
+#     self._updateWeights(modelStateDict)
+#     # init new TrainPathWeights instance
+#     self._trainWeights = TrainPathWeights(self)

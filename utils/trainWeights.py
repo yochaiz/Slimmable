@@ -80,27 +80,6 @@ class TrainWeights:
         # load pre-trained model & optimizer
         self.optimizerStateDict = self.loadPreTrained(self.getModel(), self.getArgs().pre_trained, self.getLogger())
 
-    # def getModel(self):
-    #     return self.regime.model
-    #
-    # def getModelParallel(self):
-    #     return self.regime.modelParallel
-    #
-    # def getArgs(self):
-    #     return self.regime.args
-    #
-    # def getLogger(self):
-    #     return self.regime.logger
-    #
-    # def getTrainQueue(self):
-    #     return self.regime.train_queue
-    #
-    # def getValidQueue(self):
-    #     return self.regime.valid_queue
-    #
-    # def getTrainFolderPath(self):
-    #     return self.regime.trainFolderPath
-
     # apply defined format functions on dict values by keys
     def _applyFormats(self, dict):
         for k in dict.keys():
@@ -324,3 +303,24 @@ class TrainWeights:
                 raise ValueError('Failed to load pre-trained from [{}], path does not exists'.format(path))
 
         return optimizerStateDict
+
+# def getModel(self):
+#     return self.regime.model
+#
+# def getModelParallel(self):
+#     return self.regime.modelParallel
+#
+# def getArgs(self):
+#     return self.regime.args
+#
+# def getLogger(self):
+#     return self.regime.logger
+#
+# def getTrainQueue(self):
+#     return self.regime.train_queue
+#
+# def getValidQueue(self):
+#     return self.regime.valid_queue
+#
+# def getTrainFolderPath(self):
+#     return self.regime.trainFolderPath

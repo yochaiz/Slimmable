@@ -38,18 +38,7 @@ class ModelReplicator:
         self._regime = regime
         self._model = regime.model
         self.gpuIDs = regime.args.gpu
-        # self._modelStateDict = regime.model.state_dict()
-        # self._modelAlphas = regime.model.alphas()
         self._modelStateDict = self._cloneModelStateDict(self._model.state_dict())
-        # self._modelAlphas = self._cloneModelAlphas(regime.model.alphas())
-
-        # # save current device
-        # currDevice = current_device()
-        # # create replications
-        # self.replications = [Replica(regime, gpu) for gpu in self.gpuIDs]
-        # # reset device back to current device
-        # set_device(currDevice)
-
         # create info table
         regime.logger.addInfoTable(self.title, [['#', len(self.gpuIDs)]])
 
@@ -80,15 +69,8 @@ class ModelReplicator:
 
         return gpuAlphasClones
 
-    # def initNewEpoch(self):
-    #     for replica in self.replications:
-    #         replica.initNewEpoch(self._modelStateDict)
-
     # update source model weights & alphas values
     def initNewEpoch(self, srcModel: BaseNet):
-        # self._modelStateDict = srcModel.state_dict()
-        # self._modelAlphas = srcModel.alphas()
-        # self._modelAlphas = self._cloneModelAlphas(srcModel.alphas())
         # update replications weights source
         self._modelStateDict = self._cloneModelStateDict(srcModel.state_dict())
 
@@ -171,7 +153,6 @@ class ModelReplicator:
         return self.processResults(results)
 
     def buildArgs(self, dataPerGPU: dict, modelAlphas: dict, nSamplesPerCopy: int):
-        # args = ((self._regime, dataPerGPU[gpu], nSamplesPerCopy[gpu], gpu) for gpu in self.gpuIDs)
         regime = self._regime
         args = ((regime.buildModel, regime.flopsLoss, self._modelStateDict[gpu], modelAlphas[gpu], self.initPathsList(), self.initLossDictsList(),
                  (regime.getArgs(), regime.getLogger(), regime.getTrainQueue(), regime.getValidQueue(), regime.getTrainFolderPath()),
@@ -207,7 +188,6 @@ class ModelReplicator:
         # add path to paths list
         pathsList.append([layer.widthRatioByIdx(p) for p, layer in zip(pathWidthIdx, cModel.layersList())])
         # train model on path
-        # trainedPaths = replica.train(pathWidthIdx)
         trainParams = generateTrainParams(pathWidthIdx)
         trainedPaths = replica.train(trainParams)
         # switch to eval mode
@@ -242,6 +222,14 @@ class ModelReplicator:
             iterateOverSamples(replica, lossFunc, data, pathsHistoryDict, pathsList, lossDictsList, gpu)
 
         return lossDictsList, pathsList
+
+# # update source model weights & alphas values
+#     def initNewEpoch(self, srcModel: BaseNet):
+#         # self._modelStateDict = srcModel.state_dict()
+#         # self._modelAlphas = srcModel.alphas()
+#         # self._modelAlphas = self._cloneModelAlphas(srcModel.alphas())
+#         # update replications weights source
+#         self._modelStateDict = self._cloneModelStateDict(srcModel.state_dict())
 
 # def lossPerReplication(self, args: tuple) -> (list, list):
 #     # replica, data, nSamples = args
