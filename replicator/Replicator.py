@@ -122,11 +122,6 @@ class ModelReplicator:
         assert (sum(nSamplesPerCopy.values()) == nSamples)
         return nSamplesPerCopy
 
-    def _updateReplicationsAlphas(self):
-        for replica in self.replications:
-            cModel = replica.cModel()
-            cModel.updateAlphas(self._modelAlphas)
-
     def _cloneTensors(self, tensorsList: list) -> dict:
         dataPerGPU = {}
         for gpu in self.gpuIDs:
@@ -222,6 +217,11 @@ class ModelReplicator:
             iterateOverSamples(replica, lossFunc, data, pathsHistoryDict, pathsList, lossDictsList, gpu)
 
         return lossDictsList, pathsList
+
+# def _updateReplicationsAlphas(self):
+#     for replica in self.replications:
+#         cModel = replica.cModel()
+#         cModel.updateAlphas(self._modelAlphas)
 
 # # update source model weights & alphas values
 #     def initNewEpoch(self, srcModel: BaseNet):
