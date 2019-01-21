@@ -142,7 +142,6 @@ class ModelReplicator:
 
         nCopies = len(self.gpuIDs)
         with Pool(processes=nCopies, maxtasksperchild=1) as p:
-            # results = p.map(self.lossPerReplication, args)
             results = p.map(self.lossPerReplication, args)
 
         return self.processResults(results)

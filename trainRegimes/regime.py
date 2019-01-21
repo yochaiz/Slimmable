@@ -26,7 +26,7 @@ class TrainRegime:
         self.logger = logger
 
         # load data
-        self.train_queue, self.search_queue, self.valid_queue = load_data(args)
+        self.train_queue, self.valid_queue, self.createSearchQueue = load_data(args)
         # init train folder path, where to save loggers, checkpoints, etc.
         self.trainFolderPath = '{}/{}'.format(args.save, args.trainFolder)
 
