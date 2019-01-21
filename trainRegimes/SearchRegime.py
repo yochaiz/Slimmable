@@ -90,6 +90,7 @@ class SearchRegime(TrainRegime):
     # init table columns names
     archLossKey = 'Arch Loss'
     pathsListKey = 'Paths list'
+    gradientsKey = 'Gradients'
     # get keys from TrainWeights
     batchNumKey = TrainWeights.batchNumKey
     epochNumKey = TrainWeights.epochNumKey
@@ -107,7 +108,7 @@ class SearchRegime(TrainRegime):
     k = 2
     alphasTableTitle = 'Alphas (top [{}])'.format(k)
     # init table columns names
-    colsTrainAlphas = [batchNumKey, archLossKey, alphasTableTitle, pathsListKey, timeKey]
+    colsTrainAlphas = [batchNumKey, archLossKey, alphasTableTitle, pathsListKey, gradientsKey, timeKey]
     colsMainLogger = [epochNumKey, archLossKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, widthKey, lrKey]
 
     # init statistics (plots) keys template
@@ -247,9 +248,14 @@ class SearchRegime(TrainRegime):
             if trainLogger:
                 # parse pathsList to InfoTable rows
                 pathsListRows = self._pathsListToRows(pathsList)
+                # parse alphas gradients to InfoTable rows
+                gradientRows = [['Layer #', self.gradientsKey]]
+                for layerIdx, (layer, alphas) in enumerate(zip(model.layersList(), model.alphas())):
+                    gradientRows.append([layerIdx, [[layer.widthRatioByIdx(idx), '{:.5f}'.format(alphas.grad[idx])] for idx in range(len(alphas))]])
                 # init data row
                 dataRow = {self.batchNumKey: batchNum, self.archLossKey: trainStats.batchLoss(),
-                           self.pathsListKey: trainLogger.createInfoTable('Show', pathsListRows), self.timeKey: endTime - startTime}
+                           self.pathsListKey: trainLogger.createInfoTable('Show', pathsListRows), self.timeKey: endTime - startTime,
+                           self.gradientsKey: trainLogger.createInfoTable('Show', gradientRows)}
                 # add alphas distribution table
                 model.logTopAlphas(self.k, [createAlphasTable])
                 # apply formats
