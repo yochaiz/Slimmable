@@ -20,6 +20,7 @@ from utils.training import AlphaTrainingStats
 
 class EpochTrainWeights(PreTrainedTrainWeights):
     _nRoundDigits = AlphaTrainingStats.nRoundDigits
+    k = 2
 
     def __init__(self, getModel, getModelParallel, getArgs, getLogger, getTrainQueue, getValidQueue, getTrainFolderPath, maxEpoch, currEpoch):
         self.tableTitle = 'Train model weights - Epoch:[{}]'.format(currEpoch)
@@ -39,6 +40,11 @@ class EpochTrainWeights(PreTrainedTrainWeights):
         self._sumDict = {k: {} for k in self._map.keys()}
         # init epoch average update function
         self._epochAvgUpdateFunc = self._initEpochAvgUpdate
+
+        # add alphas distribution InfoTable
+        model = getModel()
+        logger = getLogger()
+        model.logTopAlphas(self.k, loggerFuncs=[lambda k, rows: logger.addInfoTable(model.alphasDistributionKey(), rows)])
 
     def _initEpochAvgUpdate(self, trainData: EpochData, validData: EpochData):
         for k, mapFunc in self._map.items():
