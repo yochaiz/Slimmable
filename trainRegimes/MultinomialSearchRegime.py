@@ -63,11 +63,16 @@ class MultinomialSearchRegime(SearchRegime):
 
         # init loss dicts list
         lossDictsList = []
+        # init losses averages
+        lossAvgDict = {k: 0.0 for k in self.flopsLoss.lossKeys()}
         # calc v2
         v2 = zeros(nAlphas, requires_grad=True).cuda()
         for lossDict, partition in lossDictsPartitionList:
             # add lossDict to loss dicts list
             lossDictsList.append(lossDict)
+            # sum loss by keys
+            for k, v in lossDict.items():
+                lossAvgDict[k] += v.item()
             # group alphas indices from partition
             groups = groupby(partition, key=lambda x: x)
             # sort groups size in a tensor
@@ -78,18 +83,9 @@ class MultinomialSearchRegime(SearchRegime):
                     partitionGroupsSize[group[0]] = len(group)
             # add weighted loss sum to v2
             v2 += (lossDict[totalKey] * partitionGroupsSize).cuda()
+
         # average weighted loss sum
         v2 /= nSamples
-
-        # init losses averages
-        lossAvgDict = {k: 0.0 for k in self.flopsLoss.lossKeys()}
-        # get statistics element with a shorter name
-        stats = self.statistics
-
-        # sum losses
-        for lossDict in lossDictsList:
-            for k, v in lossDict.items():
-                lossAvgDict[k] += v.item()
         # average losses
         for k in lossAvgDict.keys():
             lossAvgDict[k] /= nSamples
@@ -105,6 +101,8 @@ class MultinomialSearchRegime(SearchRegime):
         lossVariance = [((x[totalKey].item() - lossAvg) ** 2) for x in lossDictsList]
         lossVariance = sum(lossVariance) / (nSamples - 1)
 
+        # get statistics element with a shorter name
+        stats = self.statistics
         # add values to statistics
         # init template for get list function based on container key
         getListFunc = lambda key: lambda containers: containers[key][0][0]
