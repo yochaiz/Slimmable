@@ -2,6 +2,7 @@ from .SearchRegime import SearchRegime
 from models.BaseNet.BaseNet_multinomial import BaseNet_Multinomial
 from replicator.MultinomialReplicator import MultinomialReplicator
 from scipy.stats import entropy
+from itertools import groupby
 from torch import zeros
 
 
@@ -50,11 +51,35 @@ class MultinomialSearchRegime(SearchRegime):
 
     # updates alphas gradients
     # updates statistics
-    def _updateAlphasGradients(self, lossDictsList: list) -> dict:
+    def _updateAlphasGradients(self, lossDictsPartitionList: list) -> dict:
         model = self.model
         nSamples = self.args.nSamples
         totalKey = self.flopsLoss.totalKey()
-        assert (len(lossDictsList) == nSamples)
+        assert (len(lossDictsPartitionList) == nSamples)
+
+        alphas = model.alphas()[0]
+        probs = model.probs()
+        nAlphas = len(alphas)
+
+        # init loss dicts list
+        lossDictsList = []
+        # calc v2
+        v2 = zeros(nAlphas, requires_grad=True).cuda()
+        for lossDict, partition in lossDictsPartitionList:
+            # add lossDict to loss dicts list
+            lossDictsList.append(lossDict)
+            # group alphas indices from partition
+            groups = groupby(partition, key=lambda x: x)
+            # sort groups size in a tensor
+            partitionGroupsSize = zeros(nAlphas)
+            for _, group in groups:
+                group = list(group)
+                if len(group) > 0:
+                    partitionGroupsSize[group[0]] = len(group)
+            # add weighted loss sum to v2
+            v2 += (lossDict[totalKey] * partitionGroupsSize).cuda()
+        # average weighted loss sum
+        v2 /= nSamples
 
         # init losses averages
         lossAvgDict = {k: 0.0 for k in self.flopsLoss.lossKeys()}
@@ -62,7 +87,7 @@ class MultinomialSearchRegime(SearchRegime):
         stats = self.statistics
 
         # sum losses
-        for lossDict, _ in lossDictsList:
+        for lossDict in lossDictsList:
             for k, v in lossDict.items():
                 lossAvgDict[k] += v.item()
         # average losses
@@ -71,28 +96,13 @@ class MultinomialSearchRegime(SearchRegime):
 
         # init total loss average
         lossAvg = lossAvgDict[totalKey]
-
-        alphas = model.alphas()[0]
-        probs = model.probs()
-        nAlphas = len(alphas)
         # calc v1
         v1 = lossAvg * model.nLayers() * probs
-        # calc v2
-        v2 = zeros(nAlphas, requires_grad=True).cuda()
-        for alphaIdx in range(nAlphas):
-            # calc weighted loss average
-            weightedLossAvg = 0.0
-            for l, p in lossDictsList:
-                weightedLossAvg += l[totalKey].item() * sum(1 for layerWidthIdx in p if layerWidthIdx == alphaIdx)
-            weightedLossAvg /= nSamples
-            v2[alphaIdx] = weightedLossAvg
-
         # update alphas grad = E[I_ni*Loss] - E[I_ni]*E[Loss] = v2 - v1
         alphas.grad = v2 - v1
-        print('alphas gradient:{}'.format(alphas.grad.data))
 
         # calc loss variance
-        lossVariance = [((x[totalKey].item() - lossAvg) ** 2) for x, _ in lossDictsList]
+        lossVariance = [((x[totalKey].item() - lossAvg) ** 2) for x in lossDictsList]
         lossVariance = sum(lossVariance) / (nSamples - 1)
 
         # add values to statistics
