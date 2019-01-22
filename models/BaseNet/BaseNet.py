@@ -35,6 +35,7 @@ class BaseNet(Module):
     _partitionKey = 'Partition'
     _baselineFlopsKey = 'baselineFlops'
     _baselineFlopsRatioKey = 'baselineFlopsRatio'
+    _alphasDistributionKey = 'Alphas distribution'
 
     def __init__(self, args, initLayersParams):
         super(BaseNet, self).__init__()
@@ -106,6 +107,10 @@ class BaseNet(Module):
     @staticmethod
     def baselineFlopsKey():
         return BaseNet._baselineFlopsKey
+
+    @staticmethod
+    def alphasDistributionKey():
+        return BaseNet._alphasDistributionKey
 
     def additionalLayersToLog(self):
         return []
@@ -208,7 +213,6 @@ class BaseNet(Module):
         nFiltersKey = 'Filters#'
         widthsKey = 'Width'
         layerArchKey = 'Layer Architecture'
-        alphasKey = 'Alphas distribution'
 
         logger.createDataTable('Model architecture', [layerIdxKey, nFiltersKey, widthsKey, layerArchKey])
         for layerIdx, layer in enumerate(self._layers.flops()):
@@ -225,7 +229,7 @@ class BaseNet(Module):
             layerIdx += 1
 
         # log layers alphas distribution
-        self.logTopAlphas(len(widths), loggerFuncs=[lambda k, rows: logger.addInfoTable(alphasKey, rows)])
+        self.logTopAlphas(len(widths), loggerFuncs=[lambda k, rows: logger.addInfoTable(self._alphasDistributionKey, rows)])
 
     def _resetForwardCounters(self):
         for layer in self._layers.forwardCounters():
