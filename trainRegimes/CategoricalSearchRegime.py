@@ -109,14 +109,12 @@ class CategoricalSearchRegime(SearchRegime):
 
         # average total loss
         totalLoss /= len(model.layersList())
-        print('totalLoss:[{:.5f}]'.format(totalLoss))
         # subtract average total loss from every alpha gradient
         for layerIdx, (layer, layerProbs) in enumerate(zip(model.layersList(), probsList)):
             layerAlphas = layer.alphas()
             layerAlphas.grad -= totalLoss
             # multiply each grad by its probability
             layerAlphas.grad *= layerProbs
-            print('Layer:[{}] - alphas gradient:{}'.format(layerIdx, layerAlphas.grad.data))
 
         # average (total loss average) by number of alphas
         for k in lossAvgDict.keys():
