@@ -76,13 +76,13 @@ class MultinomialSearchRegime(SearchRegime):
             # group alphas indices from partition
             groups = groupby(partition, key=lambda x: x)
             # sort groups size in a tensor
-            partitionGroupsSize = zeros(nAlphas)
+            partitionGroupsSize = zeros(nAlphas).cuda()
             for _, group in groups:
                 group = list(group)
                 if len(group) > 0:
                     partitionGroupsSize[group[0]] = len(group)
             # add weighted loss sum to v2
-            v2 += (lossDict[totalKey] * partitionGroupsSize).cuda()
+            v2 += (lossDict[totalKey].item() * partitionGroupsSize)
 
         # average weighted loss sum
         v2 /= nSamples
