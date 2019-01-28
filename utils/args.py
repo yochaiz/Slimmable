@@ -5,6 +5,7 @@ from os import getpid, environ
 from sys import argv
 from socket import gethostname
 
+from models.BaseNet.BaseNet import BaseNet
 from utils.HtmlLogger import HtmlLogger
 from utils.zip import create_exp_dir
 from utils.checkpoint import generate_partitions
@@ -164,7 +165,8 @@ def logParameters(logger, args, model):
             'Permutations': permutationStr
         }, nElementPerRow=2))
     # log args
-    logger.addInfoTable('args', HtmlLogger.dictToRows(vars(args), nElementPerRow=3, dictSortFunc=[None, lambda kv: kv[-1]]))
+    sortFuncsDict = {k: lambda kv: kv[-1] for k in BaseNet.keysToSortByValue()}
+    logger.addInfoTable('args', HtmlLogger.dictToRows(vars(args), 3, lambda kv: kv[0], sortFuncsDict))
     # print args
     print(args)
     # save to json
