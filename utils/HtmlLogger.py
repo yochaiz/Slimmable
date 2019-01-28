@@ -14,11 +14,12 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 
 class HtmlLogger:
     timestampColumnName = 'Timestamp'
+    _maxTableCellLengthDefault = 50
 
     def __init__(self, save_path, filename, overwrite=False):
         self.save_path = save_path
         self.fullPath = '{}/{}.html'.format(save_path, filename)
-        self._maxTableCellLength = 50
+        self._maxTableCellLength = self._maxTableCellLengthDefault
 
         if not path.exists(save_path):
             makedirs(save_path)
@@ -58,29 +59,19 @@ class HtmlLogger:
 
     # converts dictionary to rows with nElementPerRow (k,v) elements at most in each row
     @staticmethod
-    def dictToRows(_dict, nElementPerRow, dictSortFunc=[None]):
+    def dictToRows(_dict, nElementPerRow, currSortFunc=(lambda kv: kv[0]), sortFuncsDict={}):
         rows = []
         row = []
         counter = 0
-        orgDictSortFunc = dictSortFunc
-        # init default dictionary sort function, based on keys
-        if dictSortFunc[0] is None:
-            # count how many keys types exist in dict
-            keysTypes = set([type(x) for x in _dict.keys()])
-            # set keys sorting function according to number of keys types
-            keySortFunc = (lambda x: x) if len(keysTypes) == 1 else (lambda x: 10 if isinstance(x, str) else x)
-            # set dict sorting function
-            dictSortFunc = [lambda kv: keySortFunc(kv[0])]
         # sort elements by keys name
-        for k, v in sorted(_dict.items(), key=dictSortFunc[0]):
+        for k, v in sorted(_dict.items(), key=currSortFunc):
             value = v
             # recursively transform dictionaries to rows
             if isinstance(v, dict):
-                # drop 1st sort function from sort functions list
-                if len(orgDictSortFunc) > 1:
-                    orgDictSortFunc = orgDictSortFunc[1:]
-
-                value = HtmlLogger.dictToRows(v, nElementPerRow=1, dictSortFunc=orgDictSortFunc)
+                # set dict sort function
+                sortFunc = sortFuncsDict[k] if k in sortFuncsDict else lambda kv: kv[0]
+                # build table rows from dict
+                value = HtmlLogger.dictToRows(v, 1, sortFunc, sortFuncsDict)
 
             row.append(k)
             row.append(value)
@@ -100,6 +91,9 @@ class HtmlLogger:
     def setMaxTableCellLength(self, length):
         if length > 0:
             self._maxTableCellLength = length
+
+    def resetMaxTableCellLength(self):
+        self._maxTableCellLength = self._maxTableCellLengthDefault
 
     def __writeToFile(self):
         # concat info tables to single string
