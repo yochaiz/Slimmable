@@ -36,6 +36,8 @@ class BaseNet(Module):
     _baselineFlopsKey = 'baselineFlops'
     _baselineFlopsRatioKey = 'baselineFlopsRatio'
     _alphasDistributionKey = 'Alphas distribution'
+    # init args dict we have to sort by their values
+    _keysToSortByValue = [_baselineFlopsRatioKey, _baselineFlopsKey]
 
     def __init__(self, args, initLayersParams):
         super(BaseNet, self).__init__()
@@ -111,6 +113,10 @@ class BaseNet(Module):
     @staticmethod
     def alphasDistributionKey():
         return BaseNet._alphasDistributionKey
+
+    @staticmethod
+    def keysToSortByValue():
+        return BaseNet._keysToSortByValue
 
     def additionalLayersToLog(self):
         return []
@@ -230,6 +236,8 @@ class BaseNet(Module):
 
         # log layers alphas distribution
         self.logTopAlphas(len(widths), loggerFuncs=[lambda k, rows: logger.addInfoTable(self._alphasDistributionKey, rows)])
+        # reset table max cell length
+        logger.resetMaxTableCellLength()
 
     def _resetForwardCounters(self):
         for layer in self._layers.forwardCounters():
