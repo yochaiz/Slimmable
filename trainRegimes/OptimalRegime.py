@@ -43,14 +43,16 @@ class OptimalTrainWeights(TrainWeights):
     def postEpoch(self, epoch, optimizer, trainData: EpochData, validData: EpochData):
         logger = self.getLogger()
         model = self.getModel()
+        # init data row
+        dataRow = trainData.summaryDataRow()
         # add epoch number
-        trainData[self.epochNumKey] = epoch
+        dataRow[self.epochNumKey] = epoch
         # add learning rate
-        trainData[self.lrKey] = self.formats[self.lrKey](optimizer.param_groups[0]['lr'])
+        dataRow[self.lrKey] = self.formats[self.lrKey](optimizer.param_groups[0]['lr'])
 
         # merge trainData with validData
-        for k, v in validData.items():
-            trainData[k] = v
+        for k, v in validData.summaryDataRow().items():
+            dataRow[k] = v
 
         # get valid acc dict & loss dict
         validAccDict = validData.accDict()
@@ -77,7 +79,7 @@ class OptimalTrainWeights(TrainWeights):
         save_checkpoint(self.getTrainFolderPath(), model, optimizer, validAccDict, is_best)
 
         # add data to main logger table
-        logger.addDataRow(trainData)
+        logger.addDataRow(dataRow)
 
     def postTrain(self):
         args = self.getArgs()
@@ -113,13 +115,11 @@ class OptimalRegime(TrainRegime):
         return {}
 
     def train(self):
-        args = self.args
-        logger = self.logger
         # train model weights
         self.trainWeights.train()
 
-        # init logger data table
-        self.logger.createDataTable(self.trainWeights.summaryKey, self.colsMainLogger)
+        args = self.args
+        logger = self.logger
         # set save target path
         targetPath = args.json
         # best_prec1, best_valid_loss are now part of args, therefore we have to save args again
