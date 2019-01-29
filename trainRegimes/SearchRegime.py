@@ -322,7 +322,9 @@ class SearchRegime(TrainRegime):
         # clone args
         job = Namespace(**vars(args))
         # init job name
-        jobName = '[{}]-[{}]-[{}]'.format(args.time, epoch, id)
+        epochStr = epoch if epoch >= 10 else '0{}'.format(epoch)
+        idStr = id if id >= 10 else '0{}'.format(id)
+        jobName = '[{}]-[{}]-[{}]'.format(args.time, epochStr, idStr)
         # create job data row
         dataRow = {k: self._generateTableValue(jobName, k) for k in self.rowKeysToReplace}
         # sample path from alphas distribution
