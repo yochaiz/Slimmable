@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from collections import defaultdict
 from .block import Block
 
 
@@ -82,7 +83,8 @@ class SlimLayer(Block):
         return len(self._widthList)
 
     def _initForwardCounters(self):
-        return [0] * self.nWidths()
+        return defaultdict(int)
+        # return [0] * self.nWidths()
 
     def resetForwardCounters(self):
         self._forwardCounters = self._initForwardCounters()

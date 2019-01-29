@@ -70,7 +70,8 @@ class ConvSlimLayer(SlimLayer):
         out = self.bn[self._currWidthIdx](out)
 
         # update forward counters
-        self._forwardCounters[self._currWidthIdx] += 1
+        _currWidth = self.currWidth()
+        self._forwardCounters[_currWidth] += 1
 
         return out
 

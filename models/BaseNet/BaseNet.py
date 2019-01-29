@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from numpy import argsort
 from functools import reduce
 
 from torch.nn import Module
@@ -251,12 +250,11 @@ class BaseNet(Module):
 
             for layerIdx, layer in enumerate(self._layers.forwardCounters()):
                 layerForwardCounters = layer.forwardCounters()
-                # sort layer forward counters indices in descending order, [::-1] changes to descending order
-                indices = argsort(layerForwardCounters)[::-1]
                 # build layer data row
                 layerRows = [[layer], counterCols]
-                for idx in indices:
-                    layerRows.append([layer.widthByIdx(idx), layerForwardCounters[idx]])
+                # add layer forward counters in descending order to table rows
+                for width, counter in sorted(layerForwardCounters.items(), key=lambda kv: (kv[-1], kv[0]), reverse=True):
+                    layerRows.append([width, counter])
                 # add summary row
                 layerRows.append(['Total', sum(layerForwardCounters)])
 
