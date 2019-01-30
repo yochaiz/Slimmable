@@ -20,13 +20,13 @@ _titleKey = FlopsPlot.getTitleKey()
 
 def getPartitionFlops(checkpoint):
     baselineFlops = getattr(checkpoint, BaseNet.baselineFlopsKey())
-    flops = baselineFlops.get(BaseNet.partitionKey())
+    flops = baselineFlops[BaseNet.partitionKey()]
     return flops
 
 
 def getPartitionValidAcc(checkpoint):
     validAcc = getattr(checkpoint, TrainWeights.validAccKey)
-    validAcc = validAcc.get(BaseNet.partitionKey())
+    validAcc = validAcc[BaseNet.partitionKey()]
     return validAcc
 
 
@@ -208,6 +208,13 @@ def plotFolders(folderPath):
     labelsToConnect = []
     # Map each partition to index, for easier mapping in plot
     partitionIdxMap = {}
+    # init colors
+    colormap = plt.cm.hot
+    colors = [colormap(i) for i in linspace(0.7, 0.0, len(listdir(folderPath)))]
+    # set folders color index
+    folderColorIdx = 0
+    # set next color index
+    nextColorIdx = 1
     # iterate over folders
     for folder in sorted(listdir(folderPath)):
         fPath = '{}/{}'.format(folderPath, folder)
@@ -216,7 +223,7 @@ def plotFolders(folderPath):
                 # set label
                 label = folder
                 # create PlotLabelData instance
-                labelData = PlotLabelData(label, label)
+                labelData = PlotLabelData(label, label, colors[folderColorIdx])
                 # add PlotLabelData instance to folder FlopsData dictionary
                 flopsData[label] = labelData
                 # add to labelsToConnect list
@@ -235,8 +242,8 @@ def plotFolders(folderPath):
                             # add checkpoint
                             labelData.addCheckpoint(checkpoint)
             elif isfile(fPath):
-                # partitionAttrKey = 'partition'
-                partitionAttrKey = blocksPartitionKey
+                partitionAttrKey = 'partition'
+                # partitionAttrKey = blocksPartitionKey
                 # load checkpoint
                 checkpoint = load(fPath)
                 # check accuracy exists in checkpoint
@@ -250,15 +257,18 @@ def plotFolders(folderPath):
                     else:
                         idx = partitionIdxMap[partition]
                     # set partition key
-                    partitionKey = '{}-[{}]'.format(partition, idx)
+                    # partitionKey = '{}-[{}]'.format(partition, idx)
+                    partitionKey = '[{}]-[{}]'.format(checkpoint.epoch, checkpoint.id)
                     # set label
-                    label = '[{}]'.format(idx)
+                    # label = '[{}]'.format(idx)
+                    label = partitionKey
                     # set label to checkpoint
                     setattr(checkpoint, _titleKey, label)
                     # check if partitionKey exits under folderName
                     if partitionKey not in flopsData:
                         # add PlotLabelData instance to folder FlopsData dictionary
-                        flopsData[partitionKey] = PlotLabelData(partitionKey, label)
+                        flopsData[partitionKey] = PlotLabelData(partitionKey, label, colors[nextColorIdx])
+                        nextColorIdx += 1
                     # add checkpoint
                     flopsData[partitionKey].addCheckpoint(checkpoint)
 
@@ -267,17 +277,17 @@ def plotFolders(folderPath):
             # remove(fPath)
             continue
 
-    # init colors
-    colormap = plt.cm.hot
-    colors = [colormap(i) for i in linspace(0.7, 0.0, len(flopsData.keys()))]
-    # set color to each key
-    for idx, v in enumerate(flopsData.values()):
-        v.setColor(colors[idx])
+    # # init colors
+    # colormap = plt.cm.hot
+    # colors = [colormap(i) for i in linspace(0.7, 0.0, len(flopsData.keys()))]
+    # # set color to each key
+    # for idx, v in enumerate(flopsData.values()):
+    #     v.setColor(colors[idx])
 
     # plot
     partitionFunc = lambda checkpoint: getattr(checkpoint, partitionAttrKey, None)
     plotFlopsData(flopsData.values(), (getPartitionFlops, getPartitionValidAcc, partitionFunc), [labelsToConnect],
-                             'acc_vs_flops_summary', folderPath)
+                  'acc_vs_flops_summary', folderPath)
 
 
 def plotCompareFolders(foldersList):
@@ -368,13 +378,17 @@ def plotCompareFolders(foldersList):
     # plot
     partitionFunc = lambda checkpoint: getattr(checkpoint, partitionAttrKey, None)
     plotFlopsData(labelsList, (getPartitionFlops, getPartitionValidAcc, partitionFunc), labelsToConnect,
-                             'acc_vs_flops_folders_summary', folderPath)
+                  'acc_vs_flops_folders_summary', folderPath)
 
 
 # widthRatio = [0.25, 0.5, 0.75, 1.0]
-dataset = 'imagenet'
-basePath = '/home/vista/Desktop/Architecture_Search/results/{}/'.format(dataset)
-folderPath = '{}/checkpoints'.format(basePath)
+# dataset = 'imagenet'
+# basePath = '/home/vista/Desktop/Architecture_Search/results/{}/'.format(dataset)
+basePath = '/home/vista/Desktop/Architecture_Search/results_categorical/' + \
+           '[resnet18],[cifar10],[0.001],[0.25, 0.375, 0.5, 0.625, 0.75, 1.0],[20190122-123654]'
+folderPath = '{}/jobs/Done/checkpoints'.format(basePath)
+
+folderPath = '/home/vista/Desktop/Architecture_Search/results_categorical/checkpoints'
 
 # buildWidthRatioMissingCheckpoints(widthRatio, nBlocks=3)
 # updateCheckpointBlocksPartition(folderPath)
