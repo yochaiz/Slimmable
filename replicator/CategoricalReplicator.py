@@ -1,11 +1,9 @@
 from .Replicator import ModelReplicator
 from .Replica import CategoricalReplica
 
-from trainRegimes.SearchRegime import SearchRegime
-
 
 class CategoricalReplicator(ModelReplicator):
-    def __init__(self, regime: SearchRegime):
+    def __init__(self, regime):
         super(CategoricalReplicator, self).__init__(regime)
 
     def initPathsList(self) -> list:
