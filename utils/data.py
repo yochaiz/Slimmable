@@ -54,9 +54,9 @@ def load_data(args):
 
     num_train = len(train_data)
     indices = list(range(num_train))
-    split = int(floor(args.train_portion * num_train))
+    # split = int(floor(args.train_portion * num_train))
 
-    train_queue = DataLoader(train_data, batch_size=args.batch_size, sampler=SubsetRandomSampler(indices[:split]),
+    train_queue = DataLoader(train_data, batch_size=args.batch_size, sampler=SubsetRandomSampler(indices),
                              pin_memory=True, num_workers=args.workers)
 
     valid_queue = DataLoader(valid_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=args.workers)
@@ -65,7 +65,7 @@ def load_data(args):
     createDataLoader = lambda data, _indices: DataLoader(data, batch_size=args.batch_size, sampler=SubsetRandomSampler(_indices),
                                                          pin_memory=True, num_workers=args.workers)
     # build search_queue as list of DataLoaders
-    create_search_queue = lambda: splitDataToParts(train_data, indices[split:], args.alphas_data_parts, createDataLoader)
+    create_search_queue = lambda: splitDataToParts(train_data, indices, args.alphas_data_parts, createDataLoader)
 
     return train_queue, valid_queue, create_search_queue
 
