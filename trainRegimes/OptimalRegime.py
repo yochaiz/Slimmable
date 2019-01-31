@@ -18,9 +18,6 @@ class OptimalTrainWeights(TrainWeights):
         # init table in main logger
         self.getLogger().createDataTable(self.initWeightsTrainTableTitle, self.colsMainInitWeightsTrain)
 
-        # # calc alpha trainset loss on baselines
-        # self.calcAlphaTrainsetLossOnBaselines(folderPath, self.archLossKey, logger)
-
         # init optimum info table headers
         optimumTableHeaders = [self.widthKey, self.validAccKey, self.epochNumKey, 'Epochs as optimum']
         # init TrainingOptimum instance
