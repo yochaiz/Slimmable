@@ -13,9 +13,9 @@ class SlimLayer(Block):
         self.prevLayer = [prevLayer]
 
         # save width ratio list
-        self._widthRatioList = widthRatioList
+        self._widthRatioList = widthRatioList.copy()
         # save list of number of filters
-        self._widthList = widthList
+        self._widthList = widthList.copy()
         # init current number of filters index
         self._currWidthIdx = 0
 
@@ -72,7 +72,7 @@ class SlimLayer(Block):
         return self._currWidthIdx
 
     def setCurrWidthIdx(self, idx):
-        assert (0 <= idx <= len(self._widthList))
+        assert (0 <= idx < len(self._widthList))
         self._currWidthIdx = idx
 
     # returns the index of given width ratio
