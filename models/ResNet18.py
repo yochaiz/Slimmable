@@ -19,7 +19,7 @@ class Input:
     def outputChannels(self):
         return self.channels
 
-    def widthList(self):
+    def flopsWidthList(self):
         return [self.channels]
 
     def outputSize(self):

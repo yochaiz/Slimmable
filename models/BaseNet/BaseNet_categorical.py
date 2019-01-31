@@ -14,6 +14,9 @@ class ConvSlimLayerWithAlphas(ConvSlimLayer):
         # init alphas
         self._alphas = zeros(self.nWidths()).cuda().clone().detach().requires_grad_(True)
 
+    def flopsWidthList(self):
+        return self.widthList()
+
     # returns alphas value
     def alphas(self) -> tensor:
         return self._alphas

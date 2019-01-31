@@ -1,4 +1,4 @@
-from .SlimLayer import SlimLayer
+from .SlimLayer import SlimLayer, abstractmethod
 from math import floor
 
 from torch.nn import ModuleList, Conv2d, BatchNorm2d
@@ -82,6 +82,11 @@ class ConvSlimLayer(SlimLayer):
     def outputChannels(self):
         return self.conv.out_channels
 
+    @abstractmethod
+    # returns list of widths we want to calc flops for
+    def flopsWidthList(self):
+        raise NotImplementedError('subclasses must override flopsWidthList()!')
+
     # count flops for each width
     def countWidthFlops(self, input_size):
         # init flops dictionary, each key is (in_channels, out_channels)
@@ -90,11 +95,8 @@ class ConvSlimLayer(SlimLayer):
         flopsDict = {}
 
         # iterate over current layer widths & previous layer widths
-        for width in self.widthList():
-            for prevWidth in self.prevLayer[0].widthList():
-                if prevWidth is None:
-                    continue
-
+        for width in self.flopsWidthList():
+            for prevWidth in self.prevLayer[0].flopsWidthList():
                 conv = Conv2d(prevWidth, width, self.conv.kernel_size, bias=self.conv.bias, stride=self.conv.stride,
                               padding=self.conv.padding, dilation=self.conv.dilation, groups=self.conv.groups)
                 flops, output_size = count_flops(conv, input_size, prevWidth)

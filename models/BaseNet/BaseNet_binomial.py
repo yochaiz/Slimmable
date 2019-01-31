@@ -20,6 +20,9 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
         self._widthList.append(None)
         self._widthRatioList.append(None)
 
+    def flopsWidthList(self):
+        return list(range(1, self.outputChannels() + 1))
+
     # returns alphas value
     def alphas(self) -> tensor:
         return self._alphas
@@ -32,7 +35,7 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
     def generateWidthBN(self, width):
         self.bn[-1] = BatchNorm2d(width).cuda()
         self._widthList[-1] = width
-        self._widthRatioList[-1] = width / self.conv.out_channels
+        self._widthRatioList[-1] = width / self.outputChannels()
 
     # set newWidth as new current layer width
     def _setCurrWidth(self, newWidth):
@@ -43,11 +46,11 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
 
     def _sampleWidthByAlphas(self):
         # define Binomial distribution
-        dist = Binomial(self.conv.out_channels, logits=self._alphas)
+        dist = Binomial(self.outputChannels(), logits=self._alphas)
         return dist.sample().type(int32).item()
 
     def alphaWidthMean(self):
-        return roundTensor(self.probs() * self.conv.out_channels).type(int32).item()
+        return roundTensor(self.probs() * self.outputChannels()).type(int32).item()
 
     # choose alpha based on alphas distribution
     def choosePathByAlphas(self):
@@ -115,6 +118,9 @@ class AlphaPerLayer(Alphas):
 
     def alphasValues(self, model: BaseNet_Binomial):
         return [[round(e.item(), self._roundDigits) for e in layer.alphas()] for layer in model.layersList()]
+
+    def probs(self):
+        return softmax(self._alphas[0], dim=-1).detach()
 
     def alphasList(self, model: BaseNet_Binomial):
         return [(layer.alphas(), layer.probs(), ['{:.3f}'.format(layer.alphaWidthMean())]) for layer in model.layersList()]
