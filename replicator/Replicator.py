@@ -33,6 +33,7 @@ from .Replica import Replica
 
 class ModelReplicator:
     title = 'Replications'
+    _formatLoss = lambda x: '{:.3f}'.format(x)
 
     def __init__(self, regime: TrainRegime):
         self._regime = regime
@@ -179,13 +180,13 @@ class ModelReplicator:
         # select new path based on alphas distribution.
         # check that selected path hasn't been selected before
         pathWidthIdx = ModelReplicator._generateNewPath(replica, pathsHistoryDict)
-        # add path to paths list
-        pathsList.append([layer.widthRatioByIdx(p) for p, layer in zip(pathWidthIdx, cModel.layersList())])
         # train model on path
         trainParams = generateTrainParams(pathWidthIdx)
         trainedPaths = replica.train(trainParams)
         # switch to eval mode
         cModel.eval()
+        # init path losses dict
+        pathLossDict = {}
         # evaluate batch over trained paths
         with no_grad():
             for widthRatio, trainedPathIdx in trainedPaths.items():
@@ -197,6 +198,12 @@ class ModelReplicator:
                 lossDict = lossFunc(logits, target, cModel.countFlops())
                 # add loss to container
                 addLossDict(lossDict, lossDictsList, widthRatio, trainedPathIdx)
+                # add loss to path losses dict
+                pathLossDict[widthRatio] = {k: ModelReplicator._formatLoss(v) for k, v in lossDict.items()}
+
+        # add path and its losses dict to paths list
+        pathWidthRatio = [layer.widthRatioByIdx(p) for p, layer in zip(pathWidthIdx, cModel.layersList())]
+        pathsList.append((pathWidthRatio, pathLossDict))
 
     @staticmethod
     def lossPerReplication(params):
