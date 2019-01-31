@@ -1,12 +1,15 @@
-from .BaseNet.BaseNet_categorical import BaseNet_Categorical
-from .BaseNet.BaseNet_multinomial import BaseNet_Multinomial
+from .BaseNet.BaseNet_categorical import BaseNet_Categorical, BasicBlock_Categorical
+from .BaseNet.BaseNet_multinomial import BaseNet_Multinomial, BasicBlock_Multinomial
+from .BaseNet.BaseNet_binomial import BaseNet_Binomial, BasicBlock_Binomial
 from utils.args import Switcher
 
 
 class ResNetSwitcher:
     _categoricalKey = Switcher.categoricalKey()
     _multinomialKey = Switcher.multinomialKey()
-    _BaseNetDict = {_categoricalKey: BaseNet_Categorical, _multinomialKey: BaseNet_Multinomial}
+    _binomialKey = Switcher.binomialKey()
+    _BaseNetDict = {_categoricalKey: BaseNet_Categorical, _multinomialKey: BaseNet_Multinomial, _binomialKey: BaseNet_Binomial}
+    _BasicBlockDict = {_categoricalKey: BasicBlock_Categorical, _multinomialKey: BasicBlock_Multinomial, _binomialKey: BasicBlock_Binomial}
     _ResNetModels = ['resnet18_cifar10', 'resnet18_cifar100', 'resnet18_imagenet']
 
     @staticmethod
@@ -17,9 +20,11 @@ class ResNetSwitcher:
     def getModelDict(classKey):
         # get BaseNet class
         BaseNetClass = ResNetSwitcher._BaseNetDict[classKey]
+        # get BasicBlock class
+        BasicBlockClass = ResNetSwitcher._BasicBlockDict[classKey]
         # create ResNet18 class
         from .ResNet18 import ResNet18
-        resnet18 = ResNet18(BaseNetClass)
+        resnet18 = ResNet18(BaseNetClass, BasicBlockClass)
 
         # import models functions
         from .ResNet18 import ResNet18_Cifar as resnet18_cifar10
