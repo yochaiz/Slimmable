@@ -92,6 +92,9 @@ class ConvSlimLayer(SlimLayer):
         # iterate over current layer widths & previous layer widths
         for width in self.widthList():
             for prevWidth in self.prevLayer[0].widthList():
+                if prevWidth is None:
+                    continue
+
                 conv = Conv2d(prevWidth, width, self.conv.kernel_size, bias=self.conv.bias, stride=self.conv.stride,
                               padding=self.conv.padding, dilation=self.conv.dilation, groups=self.conv.groups)
                 flops, output_size = count_flops(conv, input_size, prevWidth)
