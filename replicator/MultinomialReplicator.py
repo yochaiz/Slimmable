@@ -1,11 +1,11 @@
 from .Replicator import ModelReplicator
 from .Replica import MultinomialReplica
 
-from trainRegimes.SearchRegime import SearchRegime
+from trainRegimes.MultinomialSearchRegime import MultinomialSearchRegime
 
 
 class MultinomialReplicator(ModelReplicator):
-    def __init__(self, regime: SearchRegime):
+    def __init__(self, regime: MultinomialSearchRegime):
         super(MultinomialReplicator, self).__init__(regime)
 
     def initPathsList(self) -> list:
@@ -31,7 +31,7 @@ class MultinomialReplicator(ModelReplicator):
         addLossDict = MultinomialReplicator.addLossDict
 
         ModelReplicator.evaluateSample(replica, lossFunc, data, pathsHistoryDict, pathsList, lossDictsList,
-                                             generateTrainParams, addLossDict)
+                                       generateTrainParams, addLossDict)
 
     def processResults(self, results: list) -> (list, list):
         lossDictsList, pathsList = results[0]
