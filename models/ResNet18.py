@@ -33,7 +33,7 @@ class Downsample(Block):
         kernel_size = 1
 
         # init downsample source, i.e. in case we will need it
-        self.downsampleSrc = _ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
+        self._downsampleSrc = _ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
         # init current downsample
         self._downsample = [self.initCurrentDownsample()]
         # init residual function
@@ -61,7 +61,7 @@ class Downsample(Block):
         return [] if _downsample is None else [_downsample]
 
     def getCountersLayers(self):
-        return [self.downsampleSrc]
+        return [self._downsampleSrc]
 
     def outputLayer(self):
         return self
@@ -79,7 +79,7 @@ class Downsample(Block):
         return _downsample(x)
 
     def generatePathBNs(self, srcLayer):
-        self.downsampleSrc.generatePathBNs(srcLayer)
+        self._downsampleSrc.generatePathBNs(srcLayer)
 
 
 # downsample for block where downsample is always required, even for the same width
@@ -88,7 +88,7 @@ class PermanentDownsample(Downsample):
         super(PermanentDownsample, self).__init__(widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer)
 
     def initCurrentDownsample(self):
-        return self.downsampleSrc
+        return self._downsampleSrc
 
     def initResidual(self):
         return self.downsampleResidual
@@ -112,10 +112,10 @@ class TempDownsample(Downsample):
         return self.standardResidual
 
     def updateCurrWidth(self):
-        _prevLayer = self.downsampleSrc.prevLayer[0]
+        _prevLayer = self._downsampleSrc.prevLayer[0]
         _conv2 = self.conv2[0]
         # update downsampleSrc currWidthIdx according to conv2 currWidthIdx
-        self.downsampleSrc.setCurrWidthIdx(_conv2.currWidthIdx())
+        self._downsampleSrc.setCurrWidthIdx(_conv2.currWidthIdx())
         # set residual function to standard residual
         self.residualFunc = self.initResidual()
         # set downsample to None
@@ -128,7 +128,7 @@ class TempDownsample(Downsample):
             # update residual function
             self.residualFunc = self.downsampleResidual
             # update downsample
-            self._downsample = [self.downsampleSrc]
+            self._downsample = [self._downsampleSrc]
 
 
 class BasicBlock(Block):
@@ -136,7 +136,7 @@ class BasicBlock(Block):
 
     def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
         super(BasicBlock, self).__init__()
-        _ConvSlimLayer = BasicBlock._ConvSlimLayer
+        _ConvSlimLayer = self.ConvSlimLayer()
 
         stride1 = stride if in_planes == out_planes else (stride + 1)
 
@@ -156,8 +156,16 @@ class BasicBlock(Block):
         # self.register_forward_pre_hook(self.preForward)
 
     @staticmethod
-    def setConvSlimLayer(convClass):
-        BasicBlock._ConvSlimLayer = convClass
+    @abstractmethod
+    def ConvSlimLayer() -> ConvSlimLayer:
+        raise NotImplementedError('subclasses must override ConvSlimLayer()!')
+
+    @abstractmethod
+    def updateCurrWidth(self):
+        raise NotImplementedError('subclasses must override updateCurrWidth()!')
+
+    # def updateCurrWidth(self):
+    #     self.downsample.updateCurrWidth()
 
     # @staticmethod
     # def preForward(self, input):
@@ -187,9 +195,6 @@ class BasicBlock(Block):
     def countFlops(self):
         return sum([layer.countFlops() for layer in self.getFlopsLayers()])
 
-    def updateCurrWidth(self):
-        self.downsample.updateCurrWidth()
-
     def generatePathBNs(self, srcLayer):
         self.conv1.generatePathBNs(srcLayer)
         if srcLayer != self.conv2:
@@ -197,19 +202,17 @@ class BasicBlock(Block):
             self.conv2.generatePathBNs(srcLayer)
 
 
-def ResNet18(BaseNet):
+def ResNet18(BaseNet, BasicBlockClass):
     class ResNet18(BaseNet):
         def __init__(self, args):
             super(ResNet18, self).__init__(args, initLayersParams=(args.width, args.nClasses, args.input_size, args.partition))
 
         # init layers (type, out_planes)
         def initBlocksPlanes(self):
-            # set BasicBlock ConvSlimLayer class
-            BasicBlock.setConvSlimLayer(self.convSlimLayer())
             # return blocks
-            return [(self.convSlimLayer(), 16), (BasicBlock, 16), (BasicBlock, 16), (BasicBlock, 16),
-                    (BasicBlock, 32), (BasicBlock, 32), (BasicBlock, 32),
-                    (BasicBlock, 64), (BasicBlock, 64), (BasicBlock, 64)]
+            return [(BasicBlockClass.ConvSlimLayer(), 16), (BasicBlockClass, 16), (BasicBlockClass, 16), (BasicBlockClass, 16),
+                    (BasicBlockClass, 32), (BasicBlockClass, 32), (BasicBlockClass, 32),
+                    (BasicBlockClass, 64), (BasicBlockClass, 64), (BasicBlockClass, 64)]
 
         @staticmethod
         def nPartitionBlocks():
