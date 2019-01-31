@@ -4,6 +4,8 @@ from replicator.CategoricalReplicator import CategoricalReplicator
 from scipy.stats import entropy
 from torch import zeros
 
+from utils.HtmlLogger import HtmlLogger
+
 
 class CategoricalSearchRegime(SearchRegime):
     def __init__(self, args, logger):
@@ -30,7 +32,11 @@ class CategoricalSearchRegime(SearchRegime):
         # add numbering to paths list
         pathsListRows = [['Layer #', 'Paths']]
         for layerIdx, layerPaths in enumerate(pathsList):
-            pathsListRows.append([layerIdx, [[idx + 1, v] for idx, v in enumerate(layerPaths)]])
+            layerRows = []
+            for pathIdx, (path, lossDict) in enumerate(layerPaths):
+                layerRows.append([pathIdx + 1, [['Path', path], ['Loss', HtmlLogger.dictToRows(lossDict, nElementPerRow=2)]]])
+            # add layer paths to table
+            pathsListRows.append([layerIdx, layerRows])
 
         return pathsListRows
 
