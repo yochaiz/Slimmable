@@ -1,4 +1,5 @@
-from .BaseNet import BaseNet, ConvSlimLayer
+from .BaseNet import BaseNet
+from ..ResNet18 import BasicBlock, ConvSlimLayer
 from models.modules.Alphas import Alphas
 
 from torch import tensor, zeros, int32
@@ -11,13 +12,21 @@ class ConvSlimLayerNoAlphas(ConvSlimLayer):
         super(ConvSlimLayerNoAlphas, self).__init__(widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer)
 
 
+class BasicBlock_Multinomial(BasicBlock):
+    def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
+        super(BasicBlock_Multinomial, self).__init__(widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer)
+
+    @staticmethod
+    def ConvSlimLayer() -> ConvSlimLayer:
+        return ConvSlimLayerNoAlphas
+
+    def updateCurrWidth(self):
+        self.downsample.updateCurrWidth()
+
+
 class BaseNet_Multinomial(BaseNet):
     def __init__(self, args, initLayersParams):
         super(BaseNet_Multinomial, self).__init__(args, initLayersParams)
-
-    @staticmethod
-    def convSlimLayer() -> ConvSlimLayer:
-        return ConvSlimLayerNoAlphas
 
     # return alphas probabilities
     def probs(self):
@@ -33,7 +42,7 @@ class BaseNet_Multinomial(BaseNet):
         # set model path
         self.setCurrWidthIdx(idxList)
 
-    # select alpha based on alphas distribution
+    # choose alpha based on alphas distribution
     def choosePathByAlphas(self):
         alphas = self.alphas()[0]
         # draw partition from multinomial distribution

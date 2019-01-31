@@ -1,4 +1,5 @@
-from .BaseNet import BaseNet, ConvSlimLayer
+from .BaseNet import BaseNet
+from ..ResNet18 import BasicBlock, ConvSlimLayer
 from models.modules.Alphas import Alphas
 
 from torch import tensor, zeros
@@ -21,26 +22,34 @@ class ConvSlimLayerWithAlphas(ConvSlimLayer):
     def probs(self):
         return softmax(self._alphas, dim=-1).detach()
 
-    # select alpha based on alphas distribution
+    # choose alpha based on alphas distribution
     def choosePathByAlphas(self):
         dist = Categorical(logits=self._alphas)
         chosen = dist.sample()
         self._currWidthIdx = chosen.item()
 
-    # select maximal alpha
+    # choose maximal alpha
     def chooseAlphaMax(self):
         self._currWidthIdx = self._alphas.argmax().item()
+
+
+class BasicBlock_Categorical(BasicBlock):
+    def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
+        super(BasicBlock_Categorical, self).__init__(widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer)
+
+    @staticmethod
+    def ConvSlimLayer() -> ConvSlimLayer:
+        return ConvSlimLayerWithAlphas
+
+    def updateCurrWidth(self):
+        self.downsample.updateCurrWidth()
 
 
 class BaseNet_Categorical(BaseNet):
     def __init__(self, args, initLayersParams):
         super(BaseNet_Categorical, self).__init__(args, initLayersParams)
 
-    @staticmethod
-    def convSlimLayer() -> ConvSlimLayer:
-        return ConvSlimLayerWithAlphas
-
-    # select alpha based on alphas distribution
+    # choose alpha based on alphas distribution
     def choosePathByAlphas(self):
         for layer in self._layers.optimization():
             layer.choosePathByAlphas()

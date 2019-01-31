@@ -3,7 +3,6 @@ from functools import reduce
 
 from torch.nn import Module
 
-from models.modules.ConvSlimLayer import ConvSlimLayer
 from utils.HtmlLogger import HtmlLogger
 
 
@@ -73,11 +72,6 @@ class BaseNet(Module):
 
     @staticmethod
     @abstractmethod
-    def convSlimLayer() -> ConvSlimLayer:
-        raise NotImplementedError('subclasses must override convSlimLayer()!')
-
-    @staticmethod
-    @abstractmethod
     # number of model blocks for partition, in order to generate different width for each block
     # returns tuple (number of blocks as int, list of number of layer in each block)
     def nPartitionBlocks():
@@ -87,12 +81,12 @@ class BaseNet(Module):
     def forward(self, x):
         raise NotImplementedError('subclasses must override forward()!')
 
-    # select alpha based on alphas distribution
+    # choose alpha based on alphas distribution
     @abstractmethod
     def choosePathByAlphas(self):
         raise NotImplementedError('subclasses must override choosePathByAlphas()!')
 
-    # select path based on alphas, without drawing from the distribution
+    # choose path based on alphas, without drawing from the distribution
     @abstractmethod
     def choosePathAlphasAsPartition(self):
         raise NotImplementedError('subclasses must override choosePathByAlphas()!')
@@ -256,7 +250,7 @@ class BaseNet(Module):
                 for width, counter in sorted(layerForwardCounters.items(), key=lambda kv: (kv[-1], kv[0]), reverse=True):
                     layerRows.append([width, counter])
                 # add summary row
-                layerRows.append(['Total', sum(layerForwardCounters)])
+                layerRows.append(['Total', sum(layerForwardCounters.values())])
 
                 # add layer row to model table
                 rows.append([layerIdx, layerRows])
