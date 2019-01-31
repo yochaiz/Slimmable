@@ -214,6 +214,9 @@ class SearchRegime(TrainRegime):
 
         return dataLoader
 
+    def TrainWeightsClass(self):
+        return EpochTrainWeights
+
     def trainAlphas(self, search_queue, optimizer, epoch, loggers):
         print('*** trainAlphas() ***')
         model = self.model
@@ -377,9 +380,6 @@ class SearchRegime(TrainRegime):
 
         for epoch in epochRange:
             print('========== Epoch:[{}/{}] =============='.format(epoch, self.nEpochs))
-            # # calc alpha trainset loss on baselines
-            # self.calcAlphaTrainsetLossOnBaselines(self.trainFolderPath, '{}_{}'.format(epoch, self.archLossKey), logger)
-
             # init epoch train logger
             trainLogger = HtmlLogger(self.trainFolderPath, epoch)
             # set loggers dictionary
@@ -399,17 +399,20 @@ class SearchRegime(TrainRegime):
             # create epoch jobs
             epochDataRows = self._createEpochJobs(epoch)
 
-            # train weights
+            # init train weights logger
             wEpochName = '{}_w'.format(epoch)
             weightsLogger = HtmlLogger(self.trainFolderPath, wEpochName)
-            trainWeights = EpochTrainWeights(self.getModel, self.getModelParallel, self.getArgs, lambda: weightsLogger, self.getTrainQueue,
-                                             self.getValidQueue, self.getTrainFolderPath, args.weights_epochs, epoch)
+            # init train weights instance
+            _TrainWeightsClass = self.TrainWeightsClass()
+            trainWeights = _TrainWeightsClass(self.getModel, self.getModelParallel, self.getArgs, lambda: weightsLogger, self.getTrainQueue,
+                                              self.getValidQueue, self.getTrainFolderPath, args.weights_epochs, epoch)
+            # train weights
             trainWeights.train(wEpochName)
+
             # add data row
             trainDataRow = trainWeights.avgDictDataRow()
             trainDataRow[self.epochNumKey] = self.formats[self.epochNumKey](epoch)
             logger.addDataRow(trainDataRow)
-
             # add epoch data rows
             for jobDataRow in epochDataRows:
                 logger.addDataRow(jobDataRow, trType='<tr bgcolor="#2CBDD6">')
