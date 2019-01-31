@@ -1,10 +1,8 @@
-from .SearchRegime import SearchRegime
+from .SearchRegime import SearchRegime, HtmlLogger
 from models.BaseNet.BaseNet_categorical import BaseNet_Categorical
 from replicator.CategoricalReplicator import CategoricalReplicator
 from scipy.stats import entropy
 from torch import zeros
-
-from utils.HtmlLogger import HtmlLogger
 
 
 class CategoricalSearchRegime(SearchRegime):
