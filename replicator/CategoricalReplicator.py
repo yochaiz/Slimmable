@@ -25,6 +25,7 @@ class CategoricalReplicator(ModelReplicator):
             generateTrainParams = lambda pathWidthIdx: (layer, pathWidthIdx)
 
             def addLossDict(lossDict: dict, lossDictsList: list, widthRatio: float, trainedPathIdx: list):
+                print('widthRatio:[{}] - trainedPathIdx:{}'.format(widthRatio, trainedPathIdx))
                 # get alpha index based on widthRatio
                 alphaIdx = layer.widthRatioIdx(widthRatio)
                 # add loss to container
