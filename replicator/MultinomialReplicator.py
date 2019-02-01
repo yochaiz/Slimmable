@@ -1,11 +1,9 @@
 from .Replicator import ModelReplicator
 from .Replica import MultinomialReplica
 
-from trainRegimes.MultinomialSearchRegime import MultinomialSearchRegime
-
 
 class MultinomialReplicator(ModelReplicator):
-    def __init__(self, regime: MultinomialSearchRegime):
+    def __init__(self, regime):
         super(MultinomialReplicator, self).__init__(regime)
 
     def initPathsList(self) -> list:
@@ -23,6 +21,7 @@ class MultinomialReplicator(ModelReplicator):
 
     @staticmethod
     def addLossDict(lossDict: dict, lossDictsList: list, widthRatio: float, trainedPathIdx: list):
+        print('widthRatio:[{}] - trainedPathIdx:{}'.format(widthRatio, trainedPathIdx))
         lossDictsList.append((lossDict, trainedPathIdx))
 
     @staticmethod
