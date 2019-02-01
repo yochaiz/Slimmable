@@ -65,6 +65,9 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
     # choose layer width based on alpha mean value
     def chooseAlphaMean(self):
         newWidth = roundTensor(self.alphaWidthMean()).type(int32).item()
+        # make sure we don't select 0 filters
+        newWidth = max(newWidth, 1)
+        # set new width
         self._setCurrWidth(newWidth)
 
 
