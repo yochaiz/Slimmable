@@ -143,6 +143,9 @@ class BaseNet(Module):
         for v in self._baselineWidth.items():
             yield v
 
+    def currWidth(self):
+        return [layer.currWidth() for layer in self._layers.optimization()]
+
     def currWidthIdx(self):
         return [layer.currWidthIdx() for layer in self._layers.optimization()]
 
