@@ -1,4 +1,4 @@
-from .SearchRegime import SearchRegime
+from .SearchRegime import SearchRegime, HtmlLogger
 from models.BaseNet.BaseNet_multinomial import BaseNet_Multinomial
 from replicator.MultinomialReplicator import MultinomialReplicator
 from scipy.stats import entropy
@@ -12,6 +12,10 @@ class MultinomialSearchRegime(SearchRegime):
 
     def initReplicator(self) -> MultinomialReplicator:
         return MultinomialReplicator(self)
+
+    def _containerPerAlpha(self, model: BaseNet_Multinomial) -> list:
+        layer = model.layersList()[0]
+        return [{self._alphaPlotTitle(layer, idx): [] for idx in range(len(alphas))} for alphas in model.alphas()]
 
     def buildStatsContainers(self) -> dict:
         model = self.model
@@ -28,14 +32,11 @@ class MultinomialSearchRegime(SearchRegime):
         return container
 
     def _pathsListToRows(self, pathsList: list) -> list:
-        # add numbering to paths list
-        pathsListRows = [['#', 'Path']] + [[idx + 1, v] for idx, v in enumerate(pathsList)]
+        pathsListRows = [['#', 'Paths']]
+        for pathIdx, (path, lossDict) in enumerate(pathsList):
+            pathsListRows.append([pathIdx + 1, [['Path', path], ['Loss', HtmlLogger.dictToRows(lossDict, nElementPerRow=2)]]])
 
         return pathsListRows
-
-    def _containerPerAlpha(self, model: BaseNet_Multinomial) -> list:
-        layer = model.layersList()[0]
-        return [{self._alphaPlotTitle(layer, idx): [] for idx in range(len(alphas))} for alphas in model.alphas()]
 
     def _calcAlphasDistribStats(self, model: BaseNet_Multinomial):
         stats = self.statistics
