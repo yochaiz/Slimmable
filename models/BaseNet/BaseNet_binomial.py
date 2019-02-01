@@ -21,7 +21,7 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
         self._widthRatioList.append(None)
 
     def restoreOriginalStateDictStructure(self):
-        self.bn[-1] = None
+        self.bn[len(self.bn) - 1] = None
         self._widthList[-1] = None
         self._widthRatioList[-1] = None
 
@@ -38,7 +38,7 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
 
     # generate new BN for current width
     def generateWidthBN(self, width):
-        self.bn[-1] = BatchNorm2d(width).cuda()
+        self.bn[len(self.bn) - 1] = BatchNorm2d(width).cuda()
         self._widthList[-1] = width
         self._widthRatioList[-1] = width / self.outputChannels()
 
