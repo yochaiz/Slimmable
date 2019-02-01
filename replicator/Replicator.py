@@ -107,7 +107,6 @@ class ModelReplicator:
             # check that selected path hasn't been selected before
             pathExists = ModelReplicator._doesPathExist(pathsHistoryDict, pathWidthIdx)
 
-        print('pathWidthIdx:{}'.format(pathWidthIdx))
         return pathWidthIdx
 
     def _splitSamples(self, nSamples: int) -> dict:
