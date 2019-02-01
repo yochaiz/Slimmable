@@ -30,6 +30,7 @@ class BaseNet(Module):
         def forwardCounters(self):
             return self._forwardCounters
 
+    _printToFileKey = 'printToFile'
     _partitionKey = 'Partition'
     _baselineFlopsKey = 'baselineFlops'
     _baselineFlopsRatioKey = 'baselineFlopsRatio'
@@ -62,7 +63,10 @@ class BaseNet(Module):
         setattr(args, self._baselineFlopsKey, baselineFlops)
         # add baseline models widths flops ratio to args
         setattr(args, self._baselineFlopsRatioKey, {k: (v / self.baselineFlops) for k, v in baselineFlops.items()})
-        self.printToFile(saveFolder)
+        # print model to file
+        if getattr(args, self._printToFileKey, False) is False:
+            self.printToFile(saveFolder)
+            setattr(args, self._printToFileKey, True)
         # calc number of width permutations in model
         self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self._layers.optimization()])
 
