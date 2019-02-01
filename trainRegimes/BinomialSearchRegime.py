@@ -41,6 +41,9 @@ class BinomialSearchRegime(SearchRegime):
     def _containerPerAlpha(self, model: BaseNet_Binomial) -> list:
         return [{self._alphaPlotTitle(layerIdx): [] for layerIdx in range(len(model.alphas()))}]
 
+    def _alphaGradTitle(self, layer, alphaIdx: int):
+        return alphaIdx
+
     def buildStatsContainers(self) -> dict:
         model = self.model
         lossClass = self.lossClass

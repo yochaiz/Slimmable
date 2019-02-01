@@ -41,6 +41,9 @@ class CategoricalSearchRegime(SearchRegime):
     def _containerPerAlpha(self, model: BaseNet_Categorical) -> list:
         return [{self._alphaPlotTitle(layer, idx): [] for idx in range(layer.nWidths())} for layer in model.layersList()]
 
+    def _alphaGradTitle(self, layer, alphaIdx: int):
+        return layer.widthRatioByIdx(alphaIdx)
+
     def _calcAlphasDistribStats(self, model: BaseNet_Categorical):
         stats = self.statistics
         for layerIdx, layer in enumerate(model.layersList()):

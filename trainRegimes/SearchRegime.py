@@ -191,6 +191,10 @@ class SearchRegime(TrainRegime):
         raise NotImplementedError('subclasses must override _containerPerAlpha()!')
 
     @abstractmethod
+    def _alphaGradTitle(self, layer: SlimLayer, alphaIdx: int):
+        raise NotImplementedError('subclasses must override _alphaGradTitle()!')
+
+    @abstractmethod
     def _calcAlphasDistribStats(self, model: BaseNet):
         raise NotImplementedError('subclasses must override _calcAlphasDistribStats()!')
 
@@ -274,7 +278,9 @@ class SearchRegime(TrainRegime):
                 # parse alphas gradients to InfoTable rows
                 gradientRows = [['Layer #', self.gradientsKey]]
                 for layerIdx, (layer, alphas) in enumerate(zip(model.layersList(), model.alphas())):
-                    gradientRows.append([layerIdx, [[layer.widthRatioByIdx(idx), '{:.5f}'.format(alphas.grad[idx])] for idx in range(len(alphas))]])
+                    gradientRows.append(
+                        [layerIdx, [[self._alphaGradTitle(layer, idx), '{:.5f}'.format(alphas.grad[idx])] for idx in range(len(alphas))]]
+                    )
                 # init data row
                 dataRow = {self.batchNumKey: batchNum, self.archLossKey: trainStats.batchLoss(),
                            self.pathsListKey: trainLogger.createInfoTable('Show', pathsListRows), self.timeKey: endTime - startTime,

@@ -17,6 +17,9 @@ class MultinomialSearchRegime(SearchRegime):
         layer = model.layersList()[0]
         return [{self._alphaPlotTitle(layer, idx): [] for idx in range(len(alphas))} for alphas in model.alphas()]
 
+    def _alphaGradTitle(self, layer, alphaIdx: int):
+        return layer.widthRatioByIdx(alphaIdx)
+
     def buildStatsContainers(self) -> dict:
         model = self.model
         lossClass = self.lossClass
