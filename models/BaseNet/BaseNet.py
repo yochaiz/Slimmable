@@ -95,6 +95,11 @@ class BaseNet(Module):
     def choosePathAlphasAsPartition(self):
         raise NotImplementedError('subclasses must override choosePathByAlphas()!')
 
+    # restore model original state_dict structure
+    @abstractmethod
+    def restoreOriginalStateDictStructure(self):
+        raise NotImplementedError('subclasses must override restoreOriginalState()!')
+
     @abstractmethod
     def initAlphas(self, saveFolder: str):
         raise NotImplementedError('subclasses must override initAlphas()!')
@@ -199,6 +204,8 @@ class BaseNet(Module):
 
         # restore model layers current width
         self.setCurrWidthIdx(modelCurrWidthIdx)
+        # restore model original state
+        self.restoreOriginalStateDictStructure()
 
         return baselineResults
 

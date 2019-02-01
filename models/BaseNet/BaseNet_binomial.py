@@ -20,6 +20,11 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
         self._widthList.append(None)
         self._widthRatioList.append(None)
 
+    def restoreOriginalStateDictStructure(self):
+        self.bn[-1] = None
+        self._widthList[-1] = None
+        self._widthRatioList[-1] = None
+
     def flopsWidthList(self):
         return list(range(1, self.outputChannels() + 1))
 
@@ -108,6 +113,10 @@ class BaseNet_Binomial(BaseNet):
         # update curr width changes in each block
         for block in self.blocks:
             block.updateCurrWidth()
+
+    def restoreOriginalStateDictStructure(self):
+        for layer in self._layers.forwardCounters():
+            layer.restoreOriginalStateDictStructure()
 
     def initAlphas(self, saveFolder: str):
         return AlphaPerLayer(self, saveFolder)

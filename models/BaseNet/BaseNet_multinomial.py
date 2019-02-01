@@ -66,6 +66,9 @@ class BaseNet_Multinomial(BaseNet):
         # set partition as model path
         self._setPartitionPath(partition)
 
+    def restoreOriginalStateDictStructure(self):
+        pass
+
     def initAlphas(self, saveFolder: str):
         return AlphasPerModel(self, saveFolder)
 

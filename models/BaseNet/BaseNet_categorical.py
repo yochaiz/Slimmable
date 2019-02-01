@@ -70,6 +70,9 @@ class BaseNet_Categorical(BaseNet):
         for block in self.blocks:
             block.updateCurrWidth()
 
+    def restoreOriginalStateDictStructure(self):
+        pass
+
     def initAlphas(self, saveFolder: str):
         return AlphasPerLayer(self, saveFolder)
 
