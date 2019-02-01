@@ -71,6 +71,8 @@ class MultinomialReplica(Replica):
     # restore cModel weights before training paths
     def restoreModelOriginalWeights(self):
         model = self._cModel
+        # restore model state_dict structure
+        model.restoreOriginalStateDictStructure()
         # load original weights
         model.load_state_dict(self._originalWeightsDict)
 
