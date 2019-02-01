@@ -72,6 +72,8 @@ class ModelReplicator:
 
     # update source model weights & alphas values
     def initNewEpoch(self, srcModel: BaseNet):
+        # restore srcModel original state_dict structure
+        srcModel.restoreOriginalStateDictStructure()
         # update replications weights source
         self._modelStateDict = self._cloneModelStateDict(srcModel.state_dict())
 
