@@ -50,12 +50,11 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
         self.generateWidthBN(newWidth)
 
     def _sampleWidthByAlphas(self):
-        width = 0
-        while width == 0:
-            # define Binomial distribution
-            dist = Binomial(self.outputChannels(), logits=self._alphas)
-            width = dist.sample().type(int32).item()
-
+        # define Binomial distribution
+        dist = Binomial(self.outputChannels(), logits=self._alphas)
+        width = dist.sample().type(int32).item()
+        # make sure we don't select 0 filters
+        width = max(width, 1)
         return width
 
     def alphaWidthMean(self):
