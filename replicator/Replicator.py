@@ -106,10 +106,10 @@ class ModelReplicator:
             cModel.choosePathByAlphas()
             # get selected path indices
             pathWidthIdx = cModel.currWidthIdx()
-            # get selected path width
-            pathWidth = cModel.currWidth()
-            # check that selected path hasn't been selected before
-            pathExists = ModelReplicator._doesPathExist(pathsHistoryDict, pathWidth)
+            # # get selected path width
+            # pathWidth = cModel.currWidth()
+            # # check that selected path hasn't been selected before
+            # pathExists = ModelReplicator._doesPathExist(pathsHistoryDict, pathWidth)
 
         return pathWidthIdx
 
