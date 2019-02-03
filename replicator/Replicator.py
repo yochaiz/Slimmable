@@ -110,6 +110,7 @@ class ModelReplicator:
             # pathWidth = cModel.currWidth()
             # # check that selected path hasn't been selected before
             # pathExists = ModelReplicator._doesPathExist(pathsHistoryDict, pathWidth)
+            pathExists = False
 
         return pathWidthIdx
 
