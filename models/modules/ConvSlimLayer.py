@@ -82,6 +82,9 @@ class ConvSlimLayer(SlimLayer):
     def outputChannels(self):
         return self.conv.out_channels
 
+    def toStr(self):
+        return 'Conv2d[{}, {}, kernel={}]'.format(self.conv.in_channels, self.conv.out_channels, self.conv.kernel_size)
+
     @abstractmethod
     # returns list of widths we want to calc flops for
     def flopsWidthList(self):

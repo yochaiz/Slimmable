@@ -38,6 +38,11 @@ class SlimLayer(Block):
         raise NotImplementedError('subclasses must override outputChannels()!')
 
     @abstractmethod
+    # number of output channels in layer
+    def toStr(self):
+        raise NotImplementedError('subclasses must override toStr()!')
+
+    @abstractmethod
     # count flops for each width
     def countWidthFlops(self, input_size):
         raise NotImplementedError('subclasses must override countWidthFlops()!')
