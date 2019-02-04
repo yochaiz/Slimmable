@@ -36,10 +36,11 @@ class BinomialSearchRegime(SearchRegime):
         return BinomialReplicator(self)
 
     def _alphaPlotTitle(self, layerIdx):
-        return '[{}]'.format(layerIdx)
+        layer = self.model.layersList()[layerIdx]
+        return '{}'.format(layer.toStr())
 
     def _containerPerAlpha(self, model: BaseNet_Binomial) -> list:
-        return [{self._alphaPlotTitle(layerIdx): [] for layerIdx in range(len(model.alphas()))}]
+        return [{self._alphaPlotTitle(layerIdx): []} for layerIdx in range(len(model.alphas()))]
 
     def _alphaGradTitle(self, layer, alphaIdx: int):
         return alphaIdx
@@ -62,7 +63,7 @@ class BinomialSearchRegime(SearchRegime):
         # add alphas distribution
         for layerIdx, layer in enumerate(model.layersList()):
             alphaTitle = self._alphaPlotTitle(layerIdx)
-            stats.addValue(lambda containers: containers[self.alphaDistributionKey][0][alphaTitle], layer.probs().item())
+            stats.addValue(lambda containers: containers[self.alphaDistributionKey][layerIdx][alphaTitle], layer.probs().item())
 
     def _pathsListToRows(self, pathsList: list) -> list:
         pathsListRows = [['#', 'Paths']]
