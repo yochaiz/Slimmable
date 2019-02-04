@@ -91,4 +91,4 @@ class AlphasPerLayer(Alphas):
         return [[round(e.item(), self._roundDigits) for e in layer.alphas()] for layer in model.layersList()]
 
     def alphasList(self, model: BaseNet_Categorical):
-        return [(layer.alphas(), layer.probs(), layer.widthList()) for layer in model.layersList()]
+        return [(layer.alphas(), layer.probs(), layer.widthList(), '{}'.format(layer)) for layer in model.layersList()]

@@ -92,4 +92,4 @@ class AlphasPerModel(Alphas):
 
     def alphasList(self, model: BaseNet_Multinomial):
         widthList = model.layersList()[0].widthList()
-        return [(self._alphas[0], self.probs(), widthList)]
+        return [(self._alphas[0], self.probs(), widthList, None)]

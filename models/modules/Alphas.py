@@ -65,14 +65,14 @@ class Alphas:
 
     def _topAlphas(self, model, k):
         top = []
-        for (alphas, probs, widthList) in self.alphasList(model):
+        for (alphas, probs, widthList, layer) in self.alphasList(model):
             # sort alphas probabilities
             wSorted, wIndices = probs.sort(descending=True)
             # keep only top-k
             wSorted = wSorted[:k]
             wIndices = wIndices[:k]
             # add to top
-            top.append([(i, w.item(), alphas[i], widthList[i]) for w, i in zip(wSorted, wIndices)])
+            top.append([layer, [(i, w.item(), alphas[i], widthList[i]) for w, i in zip(wSorted, wIndices)]])
 
         return top
 
@@ -80,18 +80,18 @@ class Alphas:
         if (not loggerFuncs) or (len(loggerFuncs) == 0):
             return
 
-        rows = [['Layer #', self._alphasKey]]
+        rows = [['Layer #', 'Layer', self._alphasKey]]
         alphaCols = ['Index', 'Ratio', 'Value', 'Width']
 
         top = self._topAlphas(model, k)
-        for i, layerTop in enumerate(top):
+        for i, (layer, layerTop) in enumerate(top):
             layerRow = [alphaCols]
             for idx, w, alpha, width in layerTop:
                 alphaRow = [idx, '{:.5f}'.format(w), '{:.5f}'.format(alpha), width]
                 # add alpha data row to layer data table
                 layerRow.append(alphaRow)
             # add layer data table to model table as row
-            rows.append([i, layerRow])
+            rows.append([i, layer, layerRow])
 
         # apply loggers functions
         for f in loggerFuncs:
