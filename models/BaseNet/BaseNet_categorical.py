@@ -8,8 +8,8 @@ from torch.distributions.categorical import Categorical
 
 
 class ConvSlimLayerWithAlphas(ConvSlimLayer):
-    def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
-        super(ConvSlimLayerWithAlphas, self).__init__(widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer)
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer):
+        super(ConvSlimLayerWithAlphas, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer)
 
         # init alphas
         self._alphas = zeros(self.nWidths()).cuda().clone().detach().requires_grad_(True)
@@ -37,8 +37,8 @@ class ConvSlimLayerWithAlphas(ConvSlimLayer):
 
 
 class BasicBlock_Categorical(BasicBlock):
-    def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
-        super(BasicBlock_Categorical, self).__init__(widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer)
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer):
+        super(BasicBlock_Categorical, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer)
 
     @staticmethod
     def ConvSlimLayer() -> ConvSlimLayer:

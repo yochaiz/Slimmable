@@ -8,8 +8,8 @@ from utils.flops_benchmark import count_flops
 
 
 class ConvSlimLayer(SlimLayer):
-    def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
-        super(ConvSlimLayer, self).__init__((in_planes, out_planes, kernel_size, stride), widthRatioList,
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer):
+        super(ConvSlimLayer, self).__init__((prevLayer.outputChannels(), out_planes, kernel_size, stride), widthRatioList,
                                             [int(x * out_planes) for x in widthRatioList], prevLayer)
 
         # update get layers functions

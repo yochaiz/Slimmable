@@ -8,16 +8,16 @@ from torch.distributions.multinomial import Multinomial
 
 
 class ConvSlimLayerNoAlphas(ConvSlimLayer):
-    def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
-        super(ConvSlimLayerNoAlphas, self).__init__(widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer)
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer):
+        super(ConvSlimLayerNoAlphas, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer)
 
     def flopsWidthList(self):
         return self.widthList()
 
 
 class BasicBlock_Multinomial(BasicBlock):
-    def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
-        super(BasicBlock_Multinomial, self).__init__(widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer)
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer):
+        super(BasicBlock_Multinomial, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer)
 
     @staticmethod
     def ConvSlimLayer() -> ConvSlimLayer:

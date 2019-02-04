@@ -83,7 +83,6 @@ class TrainRegime:
     def getTrainFolderPath(self):
         return self.trainFolderPath
 
-
 # ==== COMPARE FLOPS CALCULATION ====
 # idxList = [2, 0, 4, 2, 5, 4, 5]
 # # idxList = model.currWidthIdx()

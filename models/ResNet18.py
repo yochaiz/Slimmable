@@ -27,13 +27,13 @@ class Input:
 
 
 class Downsample(Block):
-    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
+    def __init__(self, widthRatioList, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
         super(Downsample, self).__init__()
 
         kernel_size = 1
 
         # init downsample source, i.e. in case we will need it
-        self._downsampleSrc = _ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
+        self._downsampleSrc = _ConvSlimLayer(widthRatioList, out_planes, kernel_size, stride1, prevLayer)
         # init current downsample
         self._downsample = [self.initCurrentDownsample()]
         # init residual function
@@ -84,8 +84,8 @@ class Downsample(Block):
 
 # downsample for block where downsample is always required, even for the same width
 class PermanentDownsample(Downsample):
-    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
-        super(PermanentDownsample, self).__init__(widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer)
+    def __init__(self, widthRatioList, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
+        super(PermanentDownsample, self).__init__(widthRatioList, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer)
 
     def initCurrentDownsample(self):
         return self._downsampleSrc
@@ -102,8 +102,8 @@ class PermanentDownsample(Downsample):
 
 # downsample for block where downsample is required only where following layers have different width
 class TempDownsample(Downsample):
-    def __init__(self, widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
-        super(TempDownsample, self).__init__(widthRatioList, in_planes, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer)
+    def __init__(self, widthRatioList, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
+        super(TempDownsample, self).__init__(widthRatioList, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer)
 
     def initCurrentDownsample(self):
         return None
@@ -134,23 +134,24 @@ class TempDownsample(Downsample):
 class BasicBlock(Block):
     _ConvSlimLayer = None
 
-    def __init__(self, widthRatioList, in_planes, out_planes, kernel_size, stride, prevLayer=None):
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer):
         super(BasicBlock, self).__init__()
         _ConvSlimLayer = self.ConvSlimLayer()
 
+        in_planes = prevLayer.outputChannels()
         stride1 = stride if in_planes == out_planes else (stride + 1)
 
         # build 1st block
-        self.conv1 = _ConvSlimLayer(widthRatioList, in_planes, out_planes, kernel_size, stride1, prevLayer=prevLayer)
+        self.conv1 = _ConvSlimLayer(widthRatioList, out_planes, kernel_size, stride1, prevLayer)
         self.relu1 = ReLU(inplace=True)
 
         # build 2nd block
-        self.conv2 = _ConvSlimLayer(widthRatioList, out_planes, out_planes, kernel_size, stride, prevLayer=self.conv1)
+        self.conv2 = _ConvSlimLayer(widthRatioList, out_planes, kernel_size, stride, prevLayer=self.conv1)
         self.relu2 = ReLU(inplace=True)
 
         # init downsample
         downsampleClass = TempDownsample if in_planes == out_planes else PermanentDownsample
-        self.downsample = downsampleClass(widthRatioList, in_planes, out_planes, stride1, prevLayer, self.conv2, _ConvSlimLayer)
+        self.downsample = downsampleClass(widthRatioList, out_planes, stride1, prevLayer, self.conv2, _ConvSlimLayer)
 
         # # register pre-forward hook
         # self.register_forward_pre_hook(self.preForward)
@@ -263,7 +264,7 @@ def ResNet18_Cifar(BaseClass):
                 if partition:
                     layerWidthRatioList += [partition[i]]
                 # build layer
-                l = blockType(layerWidthRatioList, prevLayer.outputChannels(), out_planes, kernel_size, stride, prevLayer)
+                l = blockType(layerWidthRatioList, out_planes, kernel_size, stride, prevLayer)
                 # add layer to blocks list
                 blocks.append(l)
                 # update previous layer
