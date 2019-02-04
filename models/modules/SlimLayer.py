@@ -10,7 +10,7 @@ class SlimLayer(Block):
 
         assert (len(widthRatioList) == len(widthList))
         # save previous layer
-        self.prevLayer = [prevLayer]
+        self._prevLayer = [prevLayer]
 
         # save width ratio list
         self._widthRatioList = widthRatioList.copy()
@@ -26,7 +26,7 @@ class SlimLayer(Block):
         self.buildModules(buildParams)
 
         # count flops for each width
-        self.flopsDict, self.output_size = self.countWidthFlops(self.prevLayer[0].outputSize())
+        self.flopsDict, self.output_size = self.countWidthFlops(self._prevLayer[0].outputSize())
 
     @abstractmethod
     def buildModules(self, buildParams):
@@ -43,7 +43,7 @@ class SlimLayer(Block):
         raise NotImplementedError('subclasses must override countWidthFlops()!')
 
     def countFlops(self):
-        return self.flopsDict[(self.prevLayer[0].currWidth(), self.currWidth())]
+        return self.flopsDict[(self._prevLayer[0].currWidth(), self.currWidth())]
 
     def updateCurrWidth(self):
         pass
