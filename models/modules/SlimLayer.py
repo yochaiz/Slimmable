@@ -50,6 +50,10 @@ class SlimLayer(Block):
     def countFlops(self):
         return self.flopsDict[(self._prevLayer[0].currWidth(), self.currWidth())]
 
+    @property
+    def prevLayer(self):
+        return self._prevLayer[0]
+
     def updateCurrWidth(self):
         pass
 
