@@ -5,7 +5,7 @@ from .block import Block
 
 # abstract class for model layer
 class SlimLayer(Block):
-    def __init__(self, buildParams, widthRatioList, widthList, prevLayer):
+    def __init__(self, buildParams, widthRatioList, widthList, prevLayer, countFlopsFlag):
         super(SlimLayer, self).__init__()
 
         assert (len(widthRatioList) == len(widthList))
@@ -26,7 +26,7 @@ class SlimLayer(Block):
         self.buildModules(buildParams)
 
         # count flops for each width
-        self.flopsDict, self.output_size = self.countWidthFlops(self._prevLayer[0].outputSize())
+        self.flopsDict, self.output_size = self.countWidthFlops(self.prevLayer.outputSize()) if countFlopsFlag else (None, None)
 
     @abstractmethod
     def buildModules(self, buildParams):
@@ -47,8 +47,11 @@ class SlimLayer(Block):
     def countWidthFlops(self, input_size):
         raise NotImplementedError('subclasses must override countWidthFlops()!')
 
+    def setFlopsData(self, _flopsData):
+        self.flopsDict, self.output_size = _flopsData
+
     def countFlops(self):
-        return self.flopsDict[(self._prevLayer[0].currWidth(), self.currWidth())]
+        return self.flopsDict[(self.prevLayer.currWidth(), self.currWidth())]
 
     @property
     def prevLayer(self):

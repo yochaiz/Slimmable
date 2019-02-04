@@ -8,9 +8,9 @@ from utils.flops_benchmark import count_flops
 
 
 class ConvSlimLayer(SlimLayer):
-    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer):
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag):
         super(ConvSlimLayer, self).__init__((prevLayer.outputChannels(), out_planes, kernel_size, stride), widthRatioList,
-                                            [int(x * out_planes) for x in widthRatioList], prevLayer)
+                                            [int(x * out_planes) for x in widthRatioList], prevLayer, countFlopsFlag)
 
         # update get layers functions
         self.getOptimizationLayers = self.getLayers
@@ -101,11 +101,11 @@ class ConvSlimLayer(SlimLayer):
         # iterate over current layer widths & previous layer widths
         for width in self.flopsWidthList():
             for prevWidth in self.prevLayer.flopsWidthList():
-                print('({},{})'.format(prevWidth, width))
                 conv = Conv2d(prevWidth, width, self.conv.kernel_size, bias=self.conv.bias, stride=self.conv.stride,
                               padding=self.conv.padding, dilation=self.conv.dilation, groups=self.conv.groups)
                 flops, output_size = count_flops(conv, input_size, prevWidth)
                 flopsDict[(prevWidth, width)] = flops
 
+        print(flopsDict.keys())
         print('== Done counting ==')
         return flopsDict, output_size
