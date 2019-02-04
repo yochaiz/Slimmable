@@ -9,8 +9,8 @@ from torch.distributions.binomial import Binomial
 
 
 class ConvSlimLayerWithAlpha(ConvSlimLayer):
-    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer):
-        super(ConvSlimLayerWithAlpha, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer)
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag):
+        super(ConvSlimLayerWithAlpha, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag)
 
         # init alphas
         self._alphas = zeros(1).cuda().clone().detach().requires_grad_(True)
@@ -76,8 +76,8 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
 
 
 class BasicBlock_Binomial(BasicBlock):
-    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer):
-        super(BasicBlock_Binomial, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer)
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag):
+        super(BasicBlock_Binomial, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag)
 
     @staticmethod
     def ConvSlimLayer() -> ConvSlimLayer:
