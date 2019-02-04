@@ -17,7 +17,7 @@ def plotFlopsData(flopsData, funcs, labelsToConnect, fileName, saveFolder):
     # create plots
     plots = [FlopsStandardPlot(xFunc=flopsFunc, yFunc=accFunc),
              FlopsAveragePlot(flopsFunc, accFunc, labelsToConnect),
-             FlopsAveragePlot3D(partitionFunc, accFunc, labelsToConnect),
+             # FlopsAveragePlot3D(partitionFunc, accFunc, labelsToConnect),
              FlopsMaxAccuracyPlot(flopsFunc, accFunc, labelsToConnect),
              MinFlopsPlot(flopsFunc, accFunc, labelsToConnect)
              ]
@@ -315,7 +315,6 @@ class FlopsAveragePlot3D(FlopsAveragePlot):
 
     def setPlotProperties(self):
         Statistics.setPlotProperties(self.fig, self.ax, self.title, xLabel='', yLabel='', yMin=0.0, yMax=1.0)
-        self.ax.get_legend().remove()
 
     def valueToColor(self, value):
         lowerIdx = 0
