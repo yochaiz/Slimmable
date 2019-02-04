@@ -30,7 +30,7 @@ class BaseNet(Module):
         def forwardCounters(self):
             return self._forwardCounters
 
-    _printToFileKey = 'printToFile'
+    _modelFlopsKey = 'modelFlops'
     _partitionKey = 'Partition'
     _baselineFlopsKey = 'baselineFlops'
     _baselineFlopsRatioKey = 'baselineFlopsRatio'
@@ -42,26 +42,19 @@ class BaseNet(Module):
         super(BaseNet, self).__init__()
         # init save folder
         saveFolder = args.save
+        # init count flops flag
+        modelFlops = getattr(args, self._modelFlopsKey)
+        countFlopsFlag = modelFlops is None
         # init layers
-        self.blocks = self.initBlocks(initLayersParams)
+        self.blocks = self.initBlocks(initLayersParams, countFlopsFlag)
         # init Layers class instance
         self._layers = self.Layers(self.blocks)
         # init model alphas
         self._alphas = self.initAlphas(saveFolder)
 
-        # flops = []
-        # for layer in self._layers.forwardCounters():
-        #     flops.append((layer.flopsDict, layer.output_size))
-        #
-        # from torch import save
-        # save(flops, 'flops.pth.tar')
-
-        # from torch import load
-        # modelFlopsDict = load('flops.pth.tar')
-        # for layer, (flopsDict, output_size) in zip(self._layers.forwardCounters(), modelFlopsDict):
-        #     layer.flopsDict = flopsDict
-        #     layer.output_size = output_size
-
+        # set layers flops data from args.modelFlops
+        if not countFlopsFlag:
+            self._setLayersFlops(modelFlops)
         # init dictionary of layer width indices list per width ratio
         self._baselineWidth = self.buildHomogeneousWidthIdx(args.width)
         # add partition to baseline width dictionary
@@ -69,22 +62,23 @@ class BaseNet(Module):
         if args.partition:
             self._baselineWidth[self._partitionKey] = [len(self._baselineWidth)] * len(self._layers.optimization())
         # count baseline models widths flops
-        baselineFlops = self.calcBaselineFlops()
+        baselineFlops = getattr(args, self._baselineFlopsKey, self.calcBaselineFlops())
         # save baseline flops, for calculating flops ratio
         self.baselineFlops = baselineFlops.get(args.baseline)
-        # add baseline models widths flops to args
-        setattr(args, self._baselineFlopsKey, baselineFlops)
-        # add baseline models widths flops ratio to args
-        setattr(args, self._baselineFlopsRatioKey, {k: (v / self.baselineFlops) for k, v in baselineFlops.items()})
-        # print model to file
-        if getattr(args, self._printToFileKey, False) is False:
+        # add values to args
+        if not hasattr(args, self._baselineFlopsKey):
+            # add baseline models widths flops to args
+            setattr(args, self._baselineFlopsKey, baselineFlops)
+            # add baseline models widths flops ratio to args
+            setattr(args, self._baselineFlopsRatioKey, {k: (v / self.baselineFlops) for k, v in baselineFlops.items()})
+            # print model to file
             self.printToFile(saveFolder)
-            setattr(args, self._printToFileKey, True)
-        # calc number of width permutations in model
-        self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self._layers.optimization()])
+
+        # # calc number of width permutations in model
+        # self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self._layers.optimization()])
 
     @abstractmethod
-    def initBlocks(self, params):
+    def initBlocks(self, params, countFlopsFlag):
         raise NotImplementedError('subclasses must override initLayers()!')
 
     @staticmethod
@@ -118,6 +112,10 @@ class BaseNet(Module):
         raise NotImplementedError('subclasses must override initAlphas()!')
 
     @staticmethod
+    def modelFlops():
+        return BaseNet._modelFlopsKey
+
+    @staticmethod
     def partitionKey():
         return BaseNet._partitionKey
 
@@ -135,6 +133,10 @@ class BaseNet(Module):
 
     def additionalLayersToLog(self):
         return []
+
+    def _setLayersFlops(self, _modelFlops):
+        for layer, layerFlopsData in zip(self._layers.forwardCounters(), _modelFlops):
+            layer.setFlopsData(layerFlopsData)
 
     def countFlops(self):
         return sum([block.countFlops() for block in self.blocks])
@@ -288,6 +290,13 @@ class BaseNet(Module):
 
         # reset counters
         self._resetForwardCounters()
+
+# flops = []
+# for layer in self._layers.forwardCounters():
+#     flops.append((layer.flopsDict, layer.output_size))
+#
+# from torch import save
+# save(flops, 'flops.pth.tar')
 
 # def loadPreTrained(self, state_dict):
 #     from collections import OrderedDict
