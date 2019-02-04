@@ -27,13 +27,11 @@ class Input:
 
 
 class Downsample(Block):
-    def __init__(self, widthRatioList, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
+    def __init__(self, buildLayerFunc, conv2):
         super(Downsample, self).__init__()
 
-        kernel_size = 1
-
         # init downsample source, i.e. in case we will need it
-        self._downsampleSrc = _ConvSlimLayer(widthRatioList, out_planes, kernel_size, stride1, prevLayer)
+        self._downsampleSrc = buildLayerFunc()
         # init current downsample
         self._downsample = [self.initCurrentDownsample()]
         # init residual function
@@ -84,8 +82,8 @@ class Downsample(Block):
 
 # downsample for block where downsample is always required, even for the same width
 class PermanentDownsample(Downsample):
-    def __init__(self, widthRatioList, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
-        super(PermanentDownsample, self).__init__(widthRatioList, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer)
+    def __init__(self, buildLayerFunc, conv2):
+        super(PermanentDownsample, self).__init__(buildLayerFunc, conv2)
 
     def initCurrentDownsample(self):
         return self._downsampleSrc
@@ -102,8 +100,8 @@ class PermanentDownsample(Downsample):
 
 # downsample for block where downsample is required only where following layers have different width
 class TempDownsample(Downsample):
-    def __init__(self, widthRatioList, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer):
-        super(TempDownsample, self).__init__(widthRatioList, out_planes, stride1, prevLayer, conv2, _ConvSlimLayer)
+    def __init__(self, buildLayerFunc, conv2):
+        super(TempDownsample, self).__init__(buildLayerFunc, conv2)
 
     def initCurrentDownsample(self):
         return None
@@ -134,7 +132,7 @@ class TempDownsample(Downsample):
 class BasicBlock(Block):
     _ConvSlimLayer = None
 
-    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer):
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag):
         super(BasicBlock, self).__init__()
         _ConvSlimLayer = self.ConvSlimLayer()
 
@@ -142,16 +140,19 @@ class BasicBlock(Block):
         stride1 = stride if in_planes == out_planes else (stride + 1)
 
         # build 1st block
-        self.conv1 = _ConvSlimLayer(widthRatioList, out_planes, kernel_size, stride1, prevLayer)
+        self.conv1 = _ConvSlimLayer(widthRatioList, out_planes, kernel_size, stride1, prevLayer, countFlopsFlag)
         self.relu1 = ReLU(inplace=True)
 
         # build 2nd block
-        self.conv2 = _ConvSlimLayer(widthRatioList, out_planes, kernel_size, stride, prevLayer=self.conv1)
+        self.conv2 = _ConvSlimLayer(widthRatioList, out_planes, kernel_size, stride, prevLayer=self.conv1, countFlopsFlag=countFlopsFlag)
         self.relu2 = ReLU(inplace=True)
 
-        # init downsample
+        # select downsample type
         downsampleClass = TempDownsample if in_planes == out_planes else PermanentDownsample
-        self.downsample = downsampleClass(widthRatioList, out_planes, stride1, prevLayer, self.conv2, _ConvSlimLayer)
+        # init downsample layer builder
+        buildLayer = lambda: _ConvSlimLayer(widthRatioList, out_planes, 1, stride1, prevLayer, countFlopsFlag)
+        # init downsample
+        self.downsample = downsampleClass(buildLayer, self.conv2)
 
         # # register pre-forward hook
         # self.register_forward_pre_hook(self.preForward)
@@ -220,7 +221,7 @@ def ResNet18(BaseNet, BasicBlockClass):
             return 3, [4, 3, 3]
 
         @abstractmethod
-        def initBlocks(self, params):
+        def initBlocks(self, params, countFlopsFlag):
             raise NotImplementedError('subclasses must override initBlocks()!')
 
         @abstractmethod
@@ -245,7 +246,7 @@ def ResNet18_Cifar(BaseClass):
         def __init__(self, args):
             super(ResNet18_Cifar, self).__init__(args)
 
-        def initBlocks(self, params):
+        def initBlocks(self, params, countFlopsFlag):
             widthRatioList, nClasses, input_size, partition = params
 
             blocksPlanes = self.initBlocksPlanes()
@@ -264,7 +265,7 @@ def ResNet18_Cifar(BaseClass):
                 if partition:
                     layerWidthRatioList += [partition[i]]
                 # build layer
-                l = blockType(layerWidthRatioList, out_planes, kernel_size, stride, prevLayer)
+                l = blockType(layerWidthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag)
                 # add layer to blocks list
                 blocks.append(l)
                 # update previous layer
@@ -300,7 +301,7 @@ def ResNet18_Imagenet(BaseClass):
         def __init__(self, args):
             super(ResNet18_Imagenet, self).__init__(args)
 
-        def initBlocks(self, params):
+        def initBlocks(self, params, countFlopsFlag):
             widthRatioList, nClasses, input_size, partition = params
 
             blocksPlanes = self.initBlocksPlanes()
@@ -323,7 +324,7 @@ def ResNet18_Imagenet(BaseClass):
                 if partition:
                     layerWidthRatioList += [partition[i]]
                 # build layer
-                l = blockType(layerWidthRatioList, prevLayer.outputChannels(), out_planes, kernel_size, stride, prevLayer)
+                l = blockType(layerWidthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag)
                 # update kernel size
                 kernel_size = 3
                 # update stride
