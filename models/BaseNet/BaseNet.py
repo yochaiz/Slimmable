@@ -49,6 +49,19 @@ class BaseNet(Module):
         # init model alphas
         self._alphas = self.initAlphas(saveFolder)
 
+        # flops = []
+        # for layer in self._layers.forwardCounters():
+        #     flops.append((layer.flopsDict, layer.output_size))
+        #
+        # from torch import save
+        # save(flops, 'flops.pth.tar')
+
+        # from torch import load
+        # modelFlopsDict = load('flops.pth.tar')
+        # for layer, (flopsDict, output_size) in zip(self._layers.forwardCounters(), modelFlopsDict):
+        #     layer.flopsDict = flopsDict
+        #     layer.output_size = output_size
+
         # init dictionary of layer width indices list per width ratio
         self._baselineWidth = self.buildHomogeneousWidthIdx(args.width)
         # add partition to baseline width dictionary
@@ -253,13 +266,13 @@ class BaseNet(Module):
 
     def logForwardCounters(self, loggerFuncs):
         if isinstance(loggerFuncs, list) and len(loggerFuncs) > 0:
-            rows = [['Layer #', 'Counters']]
+            rows = [['Layer #', 'Layer', 'Counters']]
             counterCols = ['Width', 'Counter']
 
             for layerIdx, layer in enumerate(self._layers.forwardCounters()):
                 layerForwardCounters = layer.forwardCounters()
                 # build layer data row
-                layerRows = [[layer], counterCols]
+                layerRows = [counterCols]
                 # add layer forward counters in descending order to table rows
                 for width, counter in sorted(layerForwardCounters.items(), key=lambda kv: (kv[-1], kv[0]), reverse=True):
                     layerRows.append([width, counter])
@@ -267,7 +280,7 @@ class BaseNet(Module):
                 layerRows.append(['Total', sum(layerForwardCounters.values())])
 
                 # add layer row to model table
-                rows.append([layerIdx, layerRows])
+                rows.append([layerIdx, layer, layerRows])
 
             # apply loggers functions
             for f in loggerFuncs:
