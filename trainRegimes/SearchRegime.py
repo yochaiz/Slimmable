@@ -290,7 +290,6 @@ class SearchRegime(TrainRegime):
                 # apply formats
                 self._applyFormats(dataRow)
                 # add row to data table
-                trainLogger.setMaxTableCellLength(150)
                 trainLogger.addDataRow(dataRow)
 
         epochLossDict = trainStats.epochLoss()
