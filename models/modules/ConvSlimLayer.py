@@ -96,13 +96,16 @@ class ConvSlimLayer(SlimLayer):
         # where in_channels is number of filters in previous layer
         # out_channels in number of filters in current layer
         flopsDict = {}
+        print('== Counting width flops ==')
 
         # iterate over current layer widths & previous layer widths
         for width in self.flopsWidthList():
             for prevWidth in self._prevLayer[0].flopsWidthList():
+                print('({},{})'.format(prevWidth, width))
                 conv = Conv2d(prevWidth, width, self.conv.kernel_size, bias=self.conv.bias, stride=self.conv.stride,
                               padding=self.conv.padding, dilation=self.conv.dilation, groups=self.conv.groups)
                 flops, output_size = count_flops(conv, input_size, prevWidth)
                 flopsDict[(prevWidth, width)] = flops
 
+        print('== Done counting ==')
         return flopsDict, output_size
