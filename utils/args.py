@@ -4,6 +4,7 @@ from time import strftime
 from os import getpid, environ
 from sys import argv
 from socket import gethostname
+from torch import load
 
 from models.BaseNet.BaseNet import BaseNet
 from utils.HtmlLogger import HtmlLogger
@@ -61,6 +62,8 @@ def parseArgs():
     datasets = dict(cifar10=(10, 32), cifar100=(100, 32), imagenet=(1000, None))
     # init BaseNet dict
     baseNetClasses = Switcher.getClassesKeys()
+    # init model flops key
+    modelFlopsKey = BaseNet.modelFlops()
 
     parser = ArgumentParser("Slimmable")
     # BaseNet type
@@ -87,6 +90,7 @@ def parseArgs():
     parser.add_argument('--logInterval', type=int, default=50, choices=range(1, 1000), help='log training once in --logInterval epochs')
     # pre-trained params
     parser.add_argument('--pre_trained', type=str, default=None, help='pre-trained model to copy weights from')
+    parser.add_argument('--{}'.format(modelFlopsKey), type=str, default=None, help='model flops list where each element is a layer flops dict')
     # training params
     parser.add_argument('--search_epochs', type=int, default=100, help='number of search regime epochs')
     parser.add_argument('--weights_epochs', type=int, default=100, help='number of weights training epochs')
@@ -144,6 +148,11 @@ def parseArgs():
     # init partition
     args.partition = None
 
+    # load model flops dict
+    modelFlopsPath = getattr(args, modelFlopsKey)
+    if modelFlopsPath is not None:
+        setattr(args, modelFlopsKey, load(modelFlopsPath))
+
     return args
 
 
@@ -155,24 +164,35 @@ def logParameters(logger, args, model):
     logger.addInfoTable(title='Command line', rows=[[' '.join(argv)], ['PID:[{}]'.format(getpid())], ['Hostname', gethostname()],
                                                     ['CUDA_VISIBLE_DEVICES', environ.get('CUDA_VISIBLE_DEVICES')]])
 
-    # calc number of permutations
-    permutationStr = model.nPerms
-    for p in [12, 9, 6, 3]:
-        v = model.nPerms / (10 ** p)
-        if v > 1:
-            permutationStr = '{:.3f} * 10<sup>{}</sup>'.format(v, p)
-            break
-    # log other parameters
-    logger.addInfoTable('Parameters', HtmlLogger.dictToRows(
-        {
-            'Learnable params': len([param for param in model.parameters() if param.requires_grad]),
-            'Widths per layer': [layer.nWidths() for layer in model.layersList()],
-            'Permutations': permutationStr
-        }, nElementPerRow=2))
-    # log args
+    # # calc number of permutations
+    # permutationStr = model.nPerms
+    # for p in [12, 9, 6, 3]:
+    #     v = model.nPerms / (10 ** p)
+    #     if v > 1:
+    #         permutationStr = '{:.3f} * 10<sup>{}</sup>'.format(v, p)
+    #         break
+    #
+    # # log other parameters
+    # logger.addInfoTable('Parameters', HtmlLogger.dictToRows(
+    #     {
+    #         'Learnable params': len([param for param in model.parameters() if param.requires_grad]),
+    #         'Widths per layer': [layer.nWidths() for layer in model.layersList()],
+    #         'Permutations': permutationStr
+    #     }, nElementPerRow=2))
+
+    # init args dict sorting function
     sortFuncsDict = {k: lambda kv: kv[-1] for k in BaseNet.keysToSortByValue()}
-    logger.addInfoTable('args', HtmlLogger.dictToRows(vars(args), 3, lambda kv: kv[0], sortFuncsDict))
+    # transform args to dictionary
+    argsDict = vars(args)
+    # emit model flops list from args dict
+    modelFlopsKey = BaseNet.modelFlops()
+    modelFlops = argsDict[modelFlopsKey]
+    del argsDict[modelFlopsKey]
+    # log args to html
+    logger.addInfoTable('args', HtmlLogger.dictToRows(argsDict, 3, lambda kv: kv[0], sortFuncsDict))
     # print args
     print(args)
     # save to json
     saveArgsToJSON(args)
+    # bring back model flops list
+    argsDict[modelFlopsKey] = modelFlops
