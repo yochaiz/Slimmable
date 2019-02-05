@@ -76,12 +76,18 @@ class Alphas:
 
         return top
 
-    def logTopAlphas(self, model, k, loggerFuncs=[]):
+    def logTopAlphas(self, model, k, loggerFuncs, logLayer):
         if (not loggerFuncs) or (len(loggerFuncs) == 0):
             return
 
-        rows = [['Layer #', 'Layer', self._alphasKey]]
+        rows = [['Layer #', 'Layer', self._alphasKey]] if logLayer else [['Layer #', self._alphasKey]]
         alphaCols = ['Index', 'Ratio', 'Value', 'Width']
+
+        # init add row functions w/o layer
+        addRowWithLayerFunc = lambda i, layer, layerRow: [i, layer, layerRow]
+        addRowWithoutLayerFunc = lambda i, layer, layerRow: [i, layerRow]
+        # init current addRow function, according to logLayer value
+        addRowFunc = addRowWithLayerFunc if logLayer else addRowWithoutLayerFunc
 
         top = self._topAlphas(model, k)
         for i, (layer, layerTop) in enumerate(top):
@@ -91,7 +97,7 @@ class Alphas:
                 # add alpha data row to layer data table
                 layerRow.append(alphaRow)
             # add layer data table to model table as row
-            rows.append([i, layer, layerRow])
+            rows.append(addRowFunc(i, layer, layerRow))
 
         # apply loggers functions
         for f in loggerFuncs:

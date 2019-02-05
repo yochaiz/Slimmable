@@ -230,8 +230,8 @@ class BaseNet(Module):
     def saveAlphasCsv(self, data: list):
         self._alphas.saveCsv(self, data)
 
-    def logTopAlphas(self, k, loggerFuncs):
-        return self._alphas.logTopAlphas(self, k, loggerFuncs)
+    def logTopAlphas(self, k, loggerFuncs, logLayer=False):
+        return self._alphas.logTopAlphas(self, k, loggerFuncs, logLayer)
 
     def printToFile(self, saveFolder):
         logger = HtmlLogger(saveFolder, 'model')
@@ -257,7 +257,7 @@ class BaseNet(Module):
             layerIdx += 1
 
         # log layers alphas distribution
-        self.logTopAlphas(len(widths), loggerFuncs=[lambda k, rows: logger.addInfoTable(self._alphasDistributionKey, rows)])
+        self.logTopAlphas(len(widths), loggerFuncs=[lambda k, rows: logger.addInfoTable(self._alphasDistributionKey, rows)], logLayer=True)
         # reset table max cell length
         logger.resetMaxTableCellLength()
 
