@@ -50,6 +50,9 @@ class SlimLayer(Block):
     def setFlopsData(self, _flopsData):
         self.flopsDict, self.output_size = _flopsData
 
+    def getFlopsData(self):
+        return self.flopsDict, self.output_size
+
     def countFlops(self):
         return self.flopsDict[(self.prevLayer.currWidth(), self.currWidth())]
 
