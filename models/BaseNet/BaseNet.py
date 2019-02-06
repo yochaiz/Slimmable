@@ -56,7 +56,7 @@ class BaseNet(Module):
             # set layers flops data from args.modelFlops
             self._setLayersFlopsData(modelFlops)
         else:
-            # update args.modelFlops
+            # build args.modelFlops from layers flops data
             setattr(args, self._modelFlopsKey, self._getLayersFlopsData())
 
         # init dictionary of layer width indices list per width ratio
