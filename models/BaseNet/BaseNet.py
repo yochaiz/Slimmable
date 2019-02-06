@@ -58,6 +58,7 @@ class BaseNet(Module):
         else:
             # update args.modelFlops
             setattr(args, self._modelFlopsKey, self._getLayersFlopsData())
+
         # init dictionary of layer width indices list per width ratio
         self._baselineWidth = self.buildHomogeneousWidthIdx(args.width)
         # add partition to baseline width dictionary
