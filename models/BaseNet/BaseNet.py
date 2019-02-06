@@ -52,9 +52,12 @@ class BaseNet(Module):
         # init model alphas
         self._alphas = self.initAlphas(saveFolder)
 
-        # set layers flops data from args.modelFlops
         if not countFlopsFlag:
-            self._setLayersFlops(modelFlops)
+            # set layers flops data from args.modelFlops
+            self._setLayersFlopsData(modelFlops)
+        else:
+            # update args.modelFlops
+            setattr(args, self._modelFlopsKey, self._getLayersFlopsData())
         # init dictionary of layer width indices list per width ratio
         self._baselineWidth = self.buildHomogeneousWidthIdx(args.width)
         # add partition to baseline width dictionary
@@ -134,9 +137,12 @@ class BaseNet(Module):
     def additionalLayersToLog(self):
         return []
 
-    def _setLayersFlops(self, _modelFlops):
+    def _setLayersFlopsData(self, _modelFlops):
         for layer, layerFlopsData in zip(self._layers.forwardCounters(), _modelFlops):
             layer.setFlopsData(layerFlopsData)
+
+    def _getLayersFlopsData(self):
+        return [layer.getFlopsData() for layer in self._layers.forwardCounters()]
 
     def countFlops(self):
         return sum([block.countFlops() for block in self.blocks])
