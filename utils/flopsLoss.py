@@ -34,7 +34,7 @@ class FlopsLoss(Module):
 
         self.flopsLoss = LossFunction(self.baselineFlops).calcLoss
         self.flopsLossImgPath = '{}/flops_loss_func.pdf'.format(args.save)
-        self._plotFunction(self.flopsLoss, min(baselineFlopsDict.values()), max(baselineFlopsDict.values()))
+        self._plotFunction(self.flopsLoss, baselineFlopsDict.values())
 
     @staticmethod
     def lossKeys():
@@ -51,7 +51,8 @@ class FlopsLoss(Module):
 
         return loss
 
-    def _plotFunction(self, func, xMin, xMax):
+    def _plotFunction(self, func, xRange):
+        xMin, xMax = min(xRange), max(xRange)
         # build data for function
         nPts = (5 * 100) + 1
         ptsGap = int((nPts - 1) / 20)
@@ -62,6 +63,9 @@ class FlopsLoss(Module):
         pts = [pts[x] for x in range(0, nPts, ptsGap)]
         y = [y[k] for k in range(0, nPts, ptsGap)]
         data.append([pts, y, 'go'])
+        # add xRange func() values
+        fRange = [func(x).item() for x in xRange]
+        data.append([xRange, fRange, 'ro'])
 
         # plot
         fig, ax = plt.subplots(nrows=1, ncols=1)
