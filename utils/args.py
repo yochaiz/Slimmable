@@ -150,6 +150,7 @@ def parseArgs():
 
     # load model flops dict
     modelFlopsPath = getattr(args, modelFlopsKey)
+    setattr(args, '{}_Path'.format(modelFlopsKey), modelFlopsPath)
     if modelFlopsPath is not None:
         setattr(args, modelFlopsKey, load(modelFlopsPath))
 
