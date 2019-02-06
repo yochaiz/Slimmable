@@ -50,27 +50,25 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
         self.generateWidthBN(newWidth)
 
     def _sampleWidthByAlphas(self):
-        # define Binomial distribution
-        dist = Binomial(self.outputChannels(), logits=self._alphas)
-        width = dist.sample().type(int32).item()
-        # make sure we don't select 0 filters
-        width = max(width, 1)
+        # define Binomial distribution on n-1 layer filters (because we have to choose at least one filter)
+        dist = Binomial(self.outputChannels() - 1, logits=self._alphas)
+        # draw from distribution
+        width = 1 + dist.sample().type(int32).item()
         return width
 
     def alphaWidthMean(self):
-        return self.probs() * self.outputChannels()
+        return 1 + (self.probs() * (self.outputChannels() - 1))
 
     # choose alpha based on alphas distribution
     def choosePathByAlphas(self):
         # sample width from the distribution
         newWidth = self._sampleWidthByAlphas()
+        # set new width
         self._setCurrWidth(newWidth)
 
     # choose layer width based on alpha mean value
     def chooseAlphaMean(self):
         newWidth = roundTensor(self.alphaWidthMean()).type(int32).item()
-        # make sure we don't select 0 filters
-        newWidth = max(newWidth, 1)
         # set new width
         self._setCurrWidth(newWidth)
 
