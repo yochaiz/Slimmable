@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from functools import reduce
+from os.path import exists
 
 from torch.nn import Module
 
@@ -65,19 +65,22 @@ class BaseNet(Module):
         # partition batchnorm is the last one in each layer batchnorms list
         if args.partition:
             self._baselineWidth[self._partitionKey] = [len(self._baselineWidth)] * len(self._layers.optimization())
+            # add partition flops to args.baselineFlops
+            setattr(args, self._baselineFlopsKey, self.calcBaselineFlops())
+
         # count baseline models widths flops
         baselineFlops = getattr(args, self._baselineFlopsKey, self.calcBaselineFlops())
         # save baseline flops, for calculating flops ratio
         self.baselineFlops = baselineFlops.get(args.baseline)
         # add values to args
-        if not hasattr(args, self._baselineFlopsKey):
+        if not hasattr(args, self._baselineFlopsKey) or args.partition:
             # add baseline models widths flops to args
             setattr(args, self._baselineFlopsKey, baselineFlops)
             # add baseline models widths flops ratio to args
             setattr(args, self._baselineFlopsRatioKey, {k: (v / self.baselineFlops) for k, v in baselineFlops.items()})
-            # print model to file
-            self.printToFile(saveFolder)
 
+        # print model to file
+        self.printToFile(saveFolder)
         # # calc number of width permutations in model
         # self.nPerms = reduce(lambda x, y: x * y, [layer.nWidths() for layer in self._layers.optimization()])
 
@@ -241,7 +244,12 @@ class BaseNet(Module):
         return self._alphas.logTopAlphas(self, k, loggerFuncs, logLayer)
 
     def printToFile(self, saveFolder):
-        logger = HtmlLogger(saveFolder, 'model')
+        fileName = 'model'
+        filePath = '{}/{}'.format(saveFolder, fileName)
+        if exists(filePath):
+            return
+
+        logger = HtmlLogger(saveFolder, fileName)
         logger.setMaxTableCellLength(1000)
 
         layerIdxKey = 'Layer#'
