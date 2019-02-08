@@ -162,7 +162,7 @@ def logParameters(logger, args, model):
         return
 
     # log command line
-    logger.addInfoTable(title='Command line', rows=[[' '.join(argv)], ['PID:[{}]'.format(getpid())], ['Hostname', gethostname()],
+    logger.addInfoTable(title='Command line', rows=[[' '.join(argv)], ['PID', getpid()], ['Hostname', gethostname()],
                                                     ['CUDA_VISIBLE_DEVICES', environ.get('CUDA_VISIBLE_DEVICES')]])
 
     # # calc number of permutations
