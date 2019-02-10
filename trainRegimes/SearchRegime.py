@@ -345,6 +345,10 @@ class SearchRegime(TrainRegime):
         job.jobName = jobName
         job.tableKeys = dataRow
         job.width = [0.25, 0.5, 0.75, 1.0]
+        # init model flops key
+        modelFlopsKey = BaseNet.modelFlopsKey()
+        # reset model flops dict
+        setattr(job, modelFlopsKey, None)
         # save job
         jobPath = '{}/{}.pth.tar'.format(self.jobsPath, job.jobName)
         saveCheckpoint(job, jobPath)
