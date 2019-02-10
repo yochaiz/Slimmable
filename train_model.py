@@ -1,7 +1,7 @@
 from argparse import ArgumentParser
 from datetime import datetime
 from numpy import random
-from os import path
+from os.path import dirname, basename, exists
 
 from torch import load as loadCheckpoint
 from torch import manual_seed as torch_manual_seed
@@ -9,6 +9,7 @@ from torch.cuda import manual_seed as cuda_manual_seed
 from torch.cuda import is_available, set_device
 import torch.backends.cudnn as cudnn
 
+from models.BaseNet.BaseNet import BaseNet
 from trainRegimes.OptimalRegime import OptimalRegime
 
 from utils.trainWeights import TrainWeights
@@ -22,7 +23,9 @@ def train(scriptArgs):
     args = loadCheckpoint(scriptArgs.json, map_location=lambda storage, loc: storage.cuda())
 
     # terminate if validAcc exists
-    if hasattr(args, TrainWeights.validAccKey):
+    _validAccKey = TrainWeights.validAccKey
+    if hasattr(args, _validAccKey):
+        print('[{}] exists'.format(_validAccKey))
         exit(0)
 
     if not hasattr(args, 'logInterval'):
@@ -41,13 +44,19 @@ def train(scriptArgs):
     for k, v in vars(scriptArgs).items():
         setattr(args, k, v)
 
+    # load model flops
+    _modelFlopsPathKey = BaseNet.modelFlopsPathKey()
+    modelFlopsPath = getattr(args, _modelFlopsPathKey)
+    if modelFlopsPath and exists(modelFlopsPath):
+        setattr(args, BaseNet.modelFlopsKey(), loadCheckpoint(modelFlopsPath))
+
     # extract args JSON folder path
-    folderName = path.dirname(scriptArgs.json)
+    folderName = dirname(scriptArgs.json)
     # results folder is JSON filename
-    jsonFileName = path.basename(scriptArgs.json)
+    jsonFileName = basename(scriptArgs.json)
     # set results folder path
     args.save = '{}/{}'.format(folderName, jsonFileName[:-len(checkpointFileType) - 1])
-    if not path.exists(args.save):
+    if not exists(args.save):
         create_exp_dir(args.save)
         # init logger
         logger = HtmlLogger(args.save, 'log')

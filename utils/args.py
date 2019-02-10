@@ -63,7 +63,7 @@ def parseArgs():
     # init BaseNet dict
     baseNetClasses = Switcher.getClassesKeys()
     # init model flops key
-    modelFlopsKey = BaseNet.modelFlops()
+    modelFlopsKey = BaseNet.modelFlopsKey()
 
     parser = ArgumentParser("Slimmable")
     # BaseNet type
@@ -150,7 +150,7 @@ def parseArgs():
 
     # load model flops dict
     modelFlopsPath = getattr(args, modelFlopsKey)
-    setattr(args, '{}_Path'.format(modelFlopsKey), modelFlopsPath)
+    setattr(args, BaseNet.modelFlopsPathKey(), modelFlopsPath)
     if modelFlopsPath is not None:
         setattr(args, modelFlopsKey, load(modelFlopsPath))
 
@@ -186,7 +186,7 @@ def logParameters(logger, args, model):
     # transform args to dictionary
     argsDict = vars(args)
     # emit model flops list from args dict
-    modelFlopsKey = BaseNet.modelFlops()
+    modelFlopsKey = BaseNet.modelFlopsKey()
     modelFlops = argsDict[modelFlopsKey]
     del argsDict[modelFlopsKey]
     # log args to html

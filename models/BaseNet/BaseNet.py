@@ -119,8 +119,12 @@ class BaseNet(Module):
         raise NotImplementedError('subclasses must override initAlphas()!')
 
     @staticmethod
-    def modelFlops():
+    def modelFlopsKey():
         return BaseNet._modelFlopsKey
+
+    @staticmethod
+    def modelFlopsPathKey():
+        return '{}_Path'.format(BaseNet.modelFlopsKey())
 
     @staticmethod
     def partitionKey():
