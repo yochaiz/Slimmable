@@ -117,14 +117,14 @@ class ModelReplicator:
     def _splitSamples(self, nSamples: int) -> dict:
         nCopies = len(self.gpuIDs)
         # split number of samples between model replications
-        nSamplesPerCopy = {gpu: floor(nSamples / nCopies) for gpu in self.gpuIDs}
+        nSamplesPerCopy = [floor(nSamples / nCopies) for gpuIdx in range(len(self.gpuIDs))]
         # calc difference between nSamples to samples assigned to copies
-        diff = nSamples - sum(nSamplesPerCopy.values())
+        diff = nSamples - sum(nSamplesPerCopy)
         # split difference evenly between copies
         for idx in range(diff):
-            nSamplesPerCopy[self.gpuIDs[idx]] += 1
+            nSamplesPerCopy[idx] += 1
 
-        assert (sum(nSamplesPerCopy.values()) == nSamples)
+        assert (sum(nSamplesPerCopy) == nSamples)
         return nSamplesPerCopy
 
     def _cloneTensors(self, tensorsList: list) -> dict:
@@ -151,12 +151,12 @@ class ModelReplicator:
 
         return self.processResults(results)
 
-    def buildArgs(self, dataPerGPU: dict, modelAlphas: dict, nSamplesPerCopy: int):
+    def buildArgs(self, dataPerGPU: dict, modelAlphas: dict, nSamplesPerCopy: list):
         regime = self._regime
         args = ((regime.buildModel, regime.flopsLoss, self._modelStateDict[gpu], modelAlphas[gpu], self.initPathsList(), self.initLossDictsList(),
                  (regime.getArgs(), regime.getLogger(), regime.getTrainQueue(), regime.getValidQueue(), regime.getTrainFolderPath()),
-                 dataPerGPU[gpu], nSamplesPerCopy[gpu], gpu, self.iterateOverSamples, self.replicaClass())
-                for gpu in self.gpuIDs)
+                 dataPerGPU[gpu], nSamplesPerCopy[gpuIdx], gpu, self.iterateOverSamples, self.replicaClass())
+                for gpuIdx, gpu in enumerate(self.gpuIDs))
         return args
 
     @abstractmethod
