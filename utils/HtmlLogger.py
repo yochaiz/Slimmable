@@ -18,7 +18,7 @@ class HtmlLogger:
 
     def __init__(self, save_path, filename, overwrite=False):
         self.save_path = save_path
-        self.fullPath = '{}/{}.html'.format(save_path, filename)
+        self._fullPath = '{}/{}.html'.format(save_path, filename)
         self._maxTableCellLength = self._maxTableCellLengthDefault
 
         if not path.exists(save_path):
@@ -56,6 +56,10 @@ class HtmlLogger:
         self.nColsDataTable = None
         self.dataTableRowsNum = 0
         self.nRowsPerColumnsRow = 10
+
+    @property
+    def fullPath(self):
+        return self._fullPath
 
     # converts dictionary to rows with nElementPerRow (k,v) elements at most in each row
     @staticmethod
@@ -318,7 +322,6 @@ class HtmlLogger:
         img = '<img src="data:image/png;base64,{}">'.format(quote(img))
 
         self.addInfoTable(infoTableTitle, [[img]])
-
 
 # class SimpleLogger(HtmlLogger):
 #     def __init__(self, save_path, filename, overwrite=False):
