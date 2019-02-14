@@ -93,23 +93,28 @@ class BaseNet_Binomial(BaseNet):
     def __init__(self, args, initLayersParams):
         super(BaseNet_Binomial, self).__init__(args, initLayersParams)
 
-    # choose alpha based on alphas distribution
-    def choosePathByAlphas(self):
+    # generic method to choose layer path
+    def _choosePath(self, chooseLayerPathFunc):
         for layer in self._layers.optimization():
-            layer.choosePathByAlphas()
+            chooseLayerPathFunc(layer)
 
         # update curr width changes in each block
         for block in self.blocks:
             block.updateCurrWidth()
+
+    # choose alpha based on alphas distribution
+    def choosePathByAlphas(self):
+        def chooseLayerPathFunc(layer: ConvSlimLayerWithAlpha):
+            layer.choosePathByAlphas()
+
+        self._choosePath(chooseLayerPathFunc)
 
     # select maximal alpha in each layer
     def choosePathAlphasAsPartition(self):
-        for layer in self._layers.optimization():
+        def chooseLayerPathFunc(layer: ConvSlimLayerWithAlpha):
             layer.chooseAlphaMean()
 
-        # update curr width changes in each block
-        for block in self.blocks:
-            block.updateCurrWidth()
+        self._choosePath(chooseLayerPathFunc)
 
     def restoreOriginalStateDictStructure(self):
         for layer in self._layers.forwardCounters():
@@ -125,6 +130,11 @@ class AlphaPerLayer(Alphas):
 
     def buildAlphas(self, model: BaseNet_Binomial):
         return [layer.alphas() for layer in model.layersList()]
+
+    def loadFromSource(self, model: BaseNet_Binomial, alphasSrc: list):
+        for layer, layerAlphasSrc in zip(model.layersList(), alphasSrc):
+            layerAlphas = layer.alphas()
+            layerAlphas.data.copy_(layerAlphasSrc.data)
 
     def initColumns(self, model: BaseNet_Binomial):
         return ['Layer_{}'.format(i) for i in range(len(model.layersList()))]
