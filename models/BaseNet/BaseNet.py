@@ -60,7 +60,7 @@ class BaseNet(Module):
             setattr(args, self._modelFlopsKey, self._getLayersFlopsData())
 
         # build dictionary of layer width indices list per width ratio
-        self._baselineWidth = self._buildBaselineWidthDict(args)
+        self._baselineWidth, self.baselineFlops = self._buildBaselineWidthDict(args)
         # print model to file
         self.printToFile(saveFolder)
         # # calc number of width permutations in model
@@ -216,7 +216,7 @@ class BaseNet(Module):
             _baselineFlops = argsBaselineFlops[args.baseline]
             setattr(args, self._baselineFlopsRatioKey, {k: (v / _baselineFlops) for k, v in argsBaselineFlops.items()})
 
-        return _baselineWidth
+        return _baselineWidth, argsBaselineFlops[args.baseline]
 
     def baselineWidthKeys(self):
         return list(self._baselineWidth.keys())
