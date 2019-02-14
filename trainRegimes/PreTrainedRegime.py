@@ -8,7 +8,7 @@ class PreTrainedTrainWeights(TrainWeights):
     pathKey = 'Path'
     tableTitle = 'Train pre-trained model'
     tableCols = [TrainWeights.epochNumKey, TrainWeights.trainLossKey, TrainWeights.trainAccKey,
-                 TrainWeights.validLossKey, TrainWeights.validAccKey, TrainWeights.validFlopsRatioKey, TrainWeights.lrKey]
+                 TrainWeights.validLossKey, TrainWeights.validAccKey, TrainWeights.flopsRatioKey, TrainWeights.lrKey]
 
     def __init__(self, getModel, getModelParallel, getArgs, getLogger, getTrainQueue, getValidQueue, getTrainFolderPath, maxEpoch):
         super(PreTrainedTrainWeights, self).__init__(getModel, getModelParallel, getArgs, getLogger, getTrainQueue, getValidQueue, getTrainFolderPath)
@@ -49,7 +49,7 @@ class PreTrainedTrainWeights(TrainWeights):
         # add learning rate
         trainDataRow[self.lrKey] = self.formats[self.lrKey](optimizer.param_groups[0]['lr'])
         # add flops ratio
-        trainDataRow[self.validFlopsRatioKey] = self.formats[self.validFlopsRatioKey](model.flopsRatio())
+        trainDataRow[self.flopsRatioKey] = self.formats[self.flopsRatioKey](model.flopsRatio())
 
         # merge trainDataRow with validDataRow
         for k, v in validDataRow.items():

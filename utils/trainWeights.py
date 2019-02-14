@@ -39,7 +39,7 @@ class TrainWeights:
     trainAccKey = 'Training acc'
     validLossKey = 'Validation loss'
     validAccKey = 'Validation acc'
-    validFlopsRatioKey = 'Validation flops ratio'
+    flopsRatioKey = 'Flops ratio'
     epochNumKey = 'Epoch #'
     batchNumKey = 'Batch #'
     timeKey = 'Time'
@@ -55,7 +55,7 @@ class TrainWeights:
         trainAccKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
         validLossKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
         validAccKey: lambda x: HtmlLogger.dictToRows(x, nElementPerRow=1),
-        validFlopsRatioKey: lambda x: '{:.3f}'.format(x)
+        flopsRatioKey: lambda x: '{:.3f}'.format(x)
     }
 
     # init tables columns

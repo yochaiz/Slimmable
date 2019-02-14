@@ -108,7 +108,7 @@ class SearchRegime(TrainRegime):
     validAccKey = TrainWeights.validAccKey
     widthKey = TrainWeights.widthKey
     lrKey = TrainWeights.lrKey
-    validFlopsRatioKey = TrainWeights.validFlopsRatioKey
+    validFlopsRatioKey = TrainWeights.flopsRatioKey
 
     # init table columns
     k = 2
