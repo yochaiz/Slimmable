@@ -73,8 +73,8 @@ class BaseNet_Categorical(BaseNet):
     def restoreOriginalStateDictStructure(self):
         pass
 
-    def initAlphas(self, saveFolder: str):
-        return AlphasPerLayer(self, saveFolder)
+    def _alphasClass(self):
+        return AlphasPerLayer
 
 
 class AlphasPerLayer(Alphas):

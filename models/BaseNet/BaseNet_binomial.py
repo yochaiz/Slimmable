@@ -120,8 +120,8 @@ class BaseNet_Binomial(BaseNet):
         for layer in self._layers.forwardCounters():
             layer.restoreOriginalStateDictStructure()
 
-    def initAlphas(self, saveFolder: str):
-        return AlphaPerLayer(self, saveFolder)
+    def _alphasClass(self):
+        return AlphaPerLayer
 
 
 class AlphaPerLayer(Alphas):

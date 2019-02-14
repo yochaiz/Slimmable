@@ -50,7 +50,7 @@ class BaseNet(Module):
         # init Layers class instance
         self._layers = self.Layers(self.blocks)
         # init model alphas
-        self._alphas = self.initAlphas(saveFolder)
+        self._alphas = self._initAlphas(saveFolder)
 
         if not countFlopsFlag:
             # set layers flops data from args.modelFlops
@@ -97,8 +97,12 @@ class BaseNet(Module):
         raise NotImplementedError('subclasses must override restoreOriginalState()!')
 
     @abstractmethod
-    def initAlphas(self, saveFolder: str):
-        raise NotImplementedError('subclasses must override initAlphas()!')
+    def _alphasClass(self):
+        raise NotImplementedError('subclasses must override alphasClass()!')
+
+    def _initAlphas(self, saveFolder: str):
+        _alphasClass = self._alphasClass()
+        return _alphasClass(self, saveFolder)
 
     @staticmethod
     def modelFlopsKey():

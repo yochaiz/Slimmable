@@ -69,8 +69,8 @@ class BaseNet_Multinomial(BaseNet):
     def restoreOriginalStateDictStructure(self):
         pass
 
-    def initAlphas(self, saveFolder: str):
-        return AlphasPerModel(self, saveFolder)
+    def _alphasClass(self):
+        return AlphasPerModel
 
 
 class AlphasPerModel(Alphas):
