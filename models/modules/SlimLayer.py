@@ -5,32 +5,34 @@ from .block import Block
 
 # abstract class for model layer
 class SlimLayer(Block):
-    def __init__(self, buildParams, widthRatioList, widthList, prevLayer, countFlopsFlag):
+    def __init__(self, buildModulesParams: tuple, buildWidthListParams: tuple, widthRatioList: list, prevLayer: Block, countFlopsFlag: bool):
         super(SlimLayer, self).__init__()
-
-        assert (len(widthRatioList) == len(widthList))
         # save previous layer
         self._prevLayer = [prevLayer]
 
         # save width ratio list
         self._widthRatioList = widthRatioList.copy()
         # save list of number of filters
-        self._widthList = widthList.copy()
+        self._widthList = self._buildWidthList(buildWidthListParams)
         # init current number of filters index
         self._currWidthIdx = 0
 
+        # build layer modules
+        self._buildModules(buildModulesParams)
+
         # init forward counters
         self._forwardCounters = self._initForwardCounters()
-
-        # build layer modules
-        self.buildModules(buildParams)
 
         # count flops for each width
         self.flopsDict, self.output_size = self.countWidthFlops(self.prevLayer.outputSize()) if countFlopsFlag else (None, None)
 
     @abstractmethod
-    def buildModules(self, buildParams):
-        raise NotImplementedError('subclasses must override getAllWidths()!')
+    def _buildWidthList(self, buildParams):
+        raise NotImplementedError('subclasses must override buildWidthList()!')
+
+    @abstractmethod
+    def _buildModules(self, buildParams):
+        raise NotImplementedError('subclasses must override buildModules()!')
 
     @abstractmethod
     # number of output channels in layer
@@ -62,6 +64,10 @@ class SlimLayer(Block):
 
     def updateCurrWidth(self):
         pass
+
+    def addWidth(self, widthRatio: float):
+        self._widthRatioList.append(widthRatio)
+        self._widthList.append(int(widthRatio * self.outputChannels()))
 
     def widthList(self):
         return self._widthList

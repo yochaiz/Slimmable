@@ -9,8 +9,8 @@ from utils.flops_benchmark import count_flops
 
 class ConvSlimLayer(SlimLayer):
     def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag):
-        super(ConvSlimLayer, self).__init__((prevLayer.outputChannels(), out_planes, kernel_size, stride), widthRatioList,
-                                            [int(x * out_planes) for x in widthRatioList], prevLayer, countFlopsFlag)
+        super(ConvSlimLayer, self).__init__((prevLayer.outputChannels(), out_planes, kernel_size, stride), out_planes, widthRatioList,
+                                            prevLayer, countFlopsFlag)
 
         # update get layers functions
         self.getOptimizationLayers = self.getLayers
@@ -27,7 +27,10 @@ class ConvSlimLayer(SlimLayer):
     def orgBNs(self):
         return self._orgBNs[0]
 
-    def buildModules(self, params):
+    def _buildWidthList(self, out_planes):
+        return [int(out_planes * r) for r in self._widthRatioList]
+
+    def _buildModules(self, params):
         in_planes, out_planes, kernel_size, stride = params
         # init conv2d module
         self.conv = Conv2d(in_planes, out_planes, kernel_size, stride=stride, padding=floor(kernel_size / 2), bias=False).cuda()
