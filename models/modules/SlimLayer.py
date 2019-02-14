@@ -49,6 +49,11 @@ class SlimLayer(Block):
     def countWidthFlops(self, input_size):
         raise NotImplementedError('subclasses must override countWidthFlops()!')
 
+    @abstractmethod
+    # add new width to layer
+    def addWidth(self, widthRatio: float):
+        raise NotImplementedError('subclasses must override addWidth()!')
+
     def setFlopsData(self, _flopsData):
         self.flopsDict, self.output_size = _flopsData
 
@@ -65,7 +70,7 @@ class SlimLayer(Block):
     def updateCurrWidth(self):
         pass
 
-    def addWidth(self, widthRatio: float):
+    def _addWidthToLists(self, widthRatio: float):
         self._widthRatioList.append(widthRatio)
         self._widthList.append(int(widthRatio * self.outputChannels()))
 

@@ -37,6 +37,13 @@ class ConvSlimLayer(SlimLayer):
         # init independent batchnorm module for number of filters
         self.bn = ModuleList([BatchNorm2d(n) for n in self._widthList]).cuda()
 
+    def addWidth(self, widthRatio: float):
+        # add new width to widthList, widthRatioList
+        self._addWidthToLists(widthRatio)
+        # add new BN
+        newWidth = self._widthList[-1]
+        self.bn.append(BatchNorm2d(newWidth).cuda())
+
     # generate new BNs based on current width
     def generatePathBNs(self, srcLayer):
         if self != srcLayer:
