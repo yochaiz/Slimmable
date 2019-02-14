@@ -1,5 +1,6 @@
 from abc import abstractmethod
 from math import floor
+from time import sleep
 from multiprocessing.pool import Pool
 
 from torch import tensor, no_grad
@@ -8,6 +9,8 @@ from torch.cuda import set_device
 from trainRegimes.regime import TrainRegime
 from models.BaseNet.BaseNet import BaseNet
 from .Replica import Replica
+
+from utils.emails import emailException
 
 
 # from multiprocessing import Process
@@ -146,8 +149,27 @@ class ModelReplicator:
         args = self.buildArgs(dataPerGPU, modelAlphas, nSamplesPerModel)
 
         nCopies = len(self.gpuIDs)
-        with Pool(processes=nCopies, maxtasksperchild=1) as p:
-            results = p.map(self.lossPerReplication, args)
+        # init flag to indicate whether multiprocessing succeeded or failed (due to insufficient space on GPU for example)
+        multiProcSuccess = False
+        # init flag for exception email, we want to send it once
+        emailExceptionSent = False
+        while not multiProcSuccess:
+            try:
+                with Pool(processes=nCopies, maxtasksperchild=1) as p:
+                    results = p.map(self.lossPerReplication, args)
+                # if we got here, then multiprocessing succeeded
+                multiProcSuccess = True
+
+            except Exception as e:
+                # send exception email
+                if not emailExceptionSent:
+                    emailException(e, self._regime.args.folderName)
+                    emailExceptionSent = True
+
+                sleepTime = 60
+                print('*** ERROR: multiprocessing failed: [{}]'.format(e))
+                print('*** ERROR: waiting [{}] seconds'.format(sleepTime))
+                sleep(sleepTime)
 
         return self.processResults(results)
 
