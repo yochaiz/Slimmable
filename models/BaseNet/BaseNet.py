@@ -11,13 +11,13 @@ class BaseNet(Module):
         def __init__(self, blocks):
             self._blocks = blocks
             # assuming these lists layers don't change
-            self._optim = self._buildLayersList(blocks, lambda layer: layer.getOptimizationLayers())
-            self._forwardCounters = self._buildLayersList(blocks, lambda layer: layer.getCountersLayers())
+            self._optim = self._buildLayersList(blocks, lambda block: block.getOptimizationLayers())
+            self._forwardCounters = self._buildLayersList(blocks, lambda block: block.getCountersLayers())
 
         def _buildLayersList(self, blocks, getLayersFunc):
             layersList = []
-            for layer in blocks:
-                layersList.extend(getLayersFunc(layer))
+            for block in blocks:
+                layersList.extend(getLayersFunc(block))
 
             return layersList
 
@@ -25,7 +25,7 @@ class BaseNet(Module):
             return self._optim
 
         def flops(self):
-            return self._buildLayersList(self._blocks, lambda layer: layer.getFlopsLayers())
+            return self._buildLayersList(self._blocks, lambda block: block.getFlopsLayers())
 
         def forwardCounters(self):
             return self._forwardCounters
@@ -59,26 +59,8 @@ class BaseNet(Module):
             # build args.modelFlops from layers flops data
             setattr(args, self._modelFlopsKey, self._getLayersFlopsData())
 
-        # init dictionary of layer width indices list per width ratio
-        self._baselineWidth = self.buildHomogeneousWidthIdx(args.width)
-        # add partition to baseline width dictionary
-        # partition batchnorm is the last one in each layer batchnorms list
-        if args.partition:
-            self._baselineWidth[self._partitionKey] = [len(self._baselineWidth)] * len(self._layers.optimization())
-            # add partition flops to args.baselineFlops
-            setattr(args, self._baselineFlopsKey, self.calcBaselineFlops())
-
-        # count baseline models widths flops
-        baselineFlops = getattr(args, self._baselineFlopsKey, self.calcBaselineFlops())
-        # save baseline flops, for calculating flops ratio
-        self.baselineFlops = baselineFlops.get(args.baseline)
-        # add values to args
-        if not hasattr(args, self._baselineFlopsKey) or args.partition:
-            # add baseline models widths flops to args
-            setattr(args, self._baselineFlopsKey, baselineFlops)
-            # add baseline models widths flops ratio to args
-            setattr(args, self._baselineFlopsRatioKey, {k: (v / self.baselineFlops) for k, v in baselineFlops.items()})
-
+        # build dictionary of layer width indices list per width ratio
+        self._baselineWidth = self._buildBaselineWidthDict(args)
         # print model to file
         self.printToFile(saveFolder)
         # # calc number of width permutations in model
@@ -170,6 +152,68 @@ class BaseNet(Module):
     def updateAlphas(self, srcModelAlphas):
         self._alphas.update(srcModelAlphas)
 
+    # adds partition flops if partition exists
+    def _addPartitionFlops(self, args):
+        # get baseline flops from args
+        argsBaselineFlops = getattr(args, self._baselineFlopsKey, None)
+
+        if args.partition:
+            # add partition width to layers in 1st position in layers' widthList & widthRatioList
+            assert (len(self.layersList()) == len(args.partition))
+            for layer, p in zip(self.layersList(), args.partition):
+                layer.addWidth(p)
+            # add extra width to non-optimization layers
+            nWidthNew = layer.nWidths()
+            for layer in self._layers.forwardCounters():
+                nWidthLayer = layer.nWidths()
+                if nWidthLayer < nWidthNew:
+                    assert ((nWidthNew - nWidthLayer) == 1)
+                    layer.addWidth(0.0)
+
+            # init partition path indices
+            partitionPathIndices = [(layer.nWidths() - 1) for layer in self.layersList()]
+            # make sure partition has been set correctly
+            assert (len(args.partition) == len(partitionPathIndices) == len(self.layersList()))
+            for p, idx, layer in zip(args.partition, partitionPathIndices, self.layersList()):
+                assert (layer.widthRatioByIdx(idx) == p)
+            # add partition path indices to baseline
+            self._baselineWidth = {self._partitionKey: partitionPathIndices}
+            # calc partition path flops
+            # we use calcBaselineFlops() because there is only the partition path in self._baselineWidth
+            argsBaselineFlops.update(self.calcBaselineFlops())
+            # add partition flops to args.baselineFlops
+            setattr(args, self._baselineFlopsKey, argsBaselineFlops)
+            # add partition path flops ratio to args
+            argsFlopsRatio = getattr(args, self._baselineFlopsRatioKey)
+            argsFlopsRatio[self._partitionKey] = argsBaselineFlops[self._partitionKey] / argsBaselineFlops[args.baseline]
+            # add baseline models widths flops ratio to args
+            setattr(args, self._baselineFlopsRatioKey, argsFlopsRatio)
+
+        return argsBaselineFlops
+
+    def _buildBaselineWidthDict(self, args):
+        # add partition flops if partition exists
+        argsBaselineFlops = self._addPartitionFlops(args)
+
+        # init baseline width with homogeneous paths indices
+        _baselineWidth = self.buildHomogeneousWidthIdx(args.width)
+        # add partition path indices to baseline width if partition exists
+        if args.partition:
+            _baselineWidth.update(self._baselineWidth)
+
+        # calc baseline flops if args baseline flops is None
+        if argsBaselineFlops is None:
+            # set self._baselineWidth for calcBaselineFlops()
+            self._baselineWidth = _baselineWidth
+            # calc baseline flops
+            argsBaselineFlops = self.calcBaselineFlops()
+            # update args baseline flops & flops ratio
+            setattr(args, self._baselineFlopsKey, argsBaselineFlops)
+            _baselineFlops = argsBaselineFlops[args.baseline]
+            setattr(args, self._baselineFlopsRatioKey, {k: (v / _baselineFlops) for k, v in argsBaselineFlops.items()})
+
+        return _baselineWidth
+
     def baselineWidthKeys(self):
         return list(self._baselineWidth.keys())
 
@@ -187,10 +231,11 @@ class BaseNet(Module):
         return [layer.currWidthRatio() for layer in self._layers.optimization()]
 
     def setCurrWidthIdx(self, idxList: list):
+        assert (len(self._layers.optimization()) == len(idxList))
         for layer, idx in zip(self._layers.optimization(), idxList):
             layer.setCurrWidthIdx(idx)
 
-        # update curr width changes in each block
+        # update current width changes in each block
         for block in self.blocks:
             block.updateCurrWidth()
 

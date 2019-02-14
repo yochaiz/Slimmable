@@ -261,9 +261,6 @@ def ResNet18_Cifar(BaseClass):
 
             for i, (blockType, out_planes) in enumerate(blocksPlanes):
                 layerWidthRatioList = widthRatioList.copy()
-                # add partition ratio if exists
-                if partition:
-                    layerWidthRatioList += [partition[i]]
                 # build layer
                 l = blockType(layerWidthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag)
                 # add layer to blocks list
