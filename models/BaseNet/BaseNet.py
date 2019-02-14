@@ -298,11 +298,11 @@ class BaseNet(Module):
 
     def printToFile(self, saveFolder):
         fileName = 'model'
-        filePath = '{}/{}'.format(saveFolder, fileName)
-        if exists(filePath):
-            return
 
         logger = HtmlLogger(saveFolder, fileName)
+        if exists(logger.fullPath):
+            return
+
         logger.setMaxTableCellLength(1000)
 
         layerIdxKey = 'Layer#'
