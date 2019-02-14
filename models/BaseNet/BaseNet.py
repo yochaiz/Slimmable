@@ -184,7 +184,7 @@ class BaseNet(Module):
             self._baselineWidth = {self._partitionKey: partitionPathIndices}
             # calc partition path flops
             # we use calcBaselineFlops() because there is only the partition path in self._baselineWidth
-            argsBaselineFlops.update(self.calcBaselineFlops())
+            argsBaselineFlops.update(self.calcBaselineFlops(restoreOrgStateFlag=False))
             # add partition flops to args.baselineFlops
             setattr(args, self._baselineFlopsKey, argsBaselineFlops)
             # add partition path flops ratio to args
@@ -210,7 +210,7 @@ class BaseNet(Module):
             # set self._baselineWidth for calcBaselineFlops()
             self._baselineWidth = _baselineWidth
             # calc baseline flops
-            argsBaselineFlops = self.calcBaselineFlops()
+            argsBaselineFlops = self.calcBaselineFlops(restoreOrgStateFlag=True)
             # update args baseline flops & flops ratio
             setattr(args, self._baselineFlopsKey, argsBaselineFlops)
             _baselineFlops = argsBaselineFlops[args.baseline]
@@ -256,14 +256,14 @@ class BaseNet(Module):
 
         return homogeneousWidth
 
-    def calcBaselineFlops(self):
-        return self.applyOnBaseline(self.countFlops)
+    def calcBaselineFlops(self, restoreOrgStateFlag):
+        return self.applyOnBaseline(self.countFlops, restoreOrgStateFlag)
 
     # apply some function on baseline model
     # baseline model are per layer width
     # this function create a map from baseline width to func() result on baseline model
     # def applyOnBaseline(self, func, applyOnAlphasDistribution=False):
-    def applyOnBaseline(self, func):
+    def applyOnBaseline(self, func, restoreOrgStateFlag):
         baselineResults = {}
         # save current model width indices
         modelCurrWidthIdx = self.currWidthIdx()
@@ -283,7 +283,8 @@ class BaseNet(Module):
         # restore model layers current width
         self.setCurrWidthIdx(modelCurrWidthIdx)
         # restore model original state
-        self.restoreOriginalStateDictStructure()
+        if restoreOrgStateFlag:
+            self.restoreOriginalStateDictStructure()
 
         return baselineResults
 
