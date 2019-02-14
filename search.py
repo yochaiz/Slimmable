@@ -1,7 +1,6 @@
 from datetime import datetime
 from numpy import random as nprandom
 from sys import exit
-from traceback import format_exc
 from multiprocessing import set_start_method
 
 import torch.backends.cudnn as cudnn
@@ -11,7 +10,7 @@ from torch import manual_seed as torch_manual_seed
 
 from trainRegimes import SearchRegimeSwitcher
 from utils.HtmlLogger import HtmlLogger
-from utils.emails import sendEmail
+from utils.emails import emailException
 from utils.args import parseArgs
 
 if __name__ == '__main__':
@@ -50,18 +49,12 @@ if __name__ == '__main__':
         # sendMail()
 
     except Exception as e:
-        # create message content
-        messageContent = '[{}] stopped due to error [{}] \n traceback:[{}]'. \
-            format(args.folderName, str(e), format_exc())
-
+        messageContent = emailException(e, args.folderName)
         # create data table if exception happened before we create data table
         if logger.dataTableCols is None:
             logger.createDataTable('Exception', ['Error message'])
         # log to logger
         logger.addInfoToDataTable(messageContent, color='lightsalmon')
-        # send e-mail with error details
-        subject = '[{}] stopped'.format(args.folderName)
-        sendEmail(['yochaiz.cs@gmail.com'], subject, messageContent)
 
         # forward exception
         raise e

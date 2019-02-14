@@ -5,6 +5,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from base64 import b64decode
+from traceback import format_exc
 
 
 # msg - email message, MIMEMultipart() object
@@ -53,3 +54,13 @@ def sendEmail(toAddr, subject, content, attachments=None):
             print('Sending email failed, error:[{}]'.format(e))
 
     server.close()
+
+
+def emailException(e, folderName):
+    # create message content
+    messageContent = '[{}] stopped due to error [{}] \n traceback:[{}]'.format(folderName, str(e), format_exc())
+    # send e-mail with error details
+    subject = '[{}] stopped'.format(folderName)
+    sendEmail(['yochaiz.cs@gmail.com'], subject, messageContent)
+
+    return messageContent
