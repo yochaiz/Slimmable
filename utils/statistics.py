@@ -88,7 +88,8 @@ class Statistics:
             ax.set_ylim(top=yMax)
         ax.set_title(title)
         # put legend in bottom right corner, transparent (framealpha), small font
-        ax.legend(loc='upper center', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 8})
+        ax.legend(loc='upper center', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 12})
+        # ax.legend(loc='lower right', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 10})
 
     @staticmethod
     def __setFigProperties(fig, figSize=(15, 10)):
@@ -204,10 +205,12 @@ class Statistics:
             figMerged, axMerged = plt.subplots(nrows=nRows, ncols=nCols, sharey=True)
             axRow, axCol = 0, 0
             figs.append(figMerged)
+            if nPlots > 1 and nRows == 1:
+                axMerged = [axMerged]
             # iterate over data elements
             for dataIdx, dataDict in enumerate(dataList):
                 # init axMerged sub-plot
-                ax = axMerged[axRow, axCol] if nPlots > 1 else axMerged
+                ax = axMerged[axRow][axCol] if nPlots > 1 else axMerged
                 # init title
                 title = '[{}]-[{}] over epochs'.format(fileName, dataIdx)
                 # plot container
