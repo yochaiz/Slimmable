@@ -290,14 +290,16 @@ class TrainWeights:
                 checkpoint = loadModel(path, map_location=lambda storage, loc: storage.cuda())
                 # load weights
                 model.loadPreTrained(checkpoint['state_dict'])
-                # load optimizer state dict
-                optimizerStateDict = checkpoint['optimizer']
+                # # load optimizer state dict
+                # optimizerStateDict = checkpoint['optimizer']
                 # add info rows about checkpoint
                 loggerRows = []
                 loggerRows.append(['Path', '{}'.format(path)])
                 validationAccRows = [['Ratio', 'Accuracy']] + HtmlLogger.dictToRows(checkpoint['best_prec1'], nElementPerRow=1)
                 loggerRows.append(['Validation accuracy', validationAccRows])
-                # loggerRows.append(['Optimizer', HtmlLogger.dictToRows(optimizerStateDict, nElementPerRow=3)])
+                # set optimizer table row
+                optimizerRow = HtmlLogger.dictToRows(optimizerStateDict, nElementPerRow=3) if optimizerStateDict else optimizerStateDict
+                loggerRows.append(['Optimizer', optimizerRow])
                 logger.addInfoTable('Pre-trained model', loggerRows)
             else:
                 raise ValueError('Failed to load pre-trained from [{}], path does not exists'.format(path))
