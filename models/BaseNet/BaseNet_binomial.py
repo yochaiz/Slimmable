@@ -8,12 +8,10 @@ from torch import round as roundTensor
 from torch.distributions.binomial import Binomial
 
 
-class ConvSlimLayerWithAlpha(ConvSlimLayer):
+class BinomialConvSlimLayer(ConvSlimLayer):
     def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag):
-        super(ConvSlimLayerWithAlpha, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag)
+        super(BinomialConvSlimLayer, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag)
 
-        # init alphas
-        self._alphas = zeros(1).cuda().clone().detach().requires_grad_(True)
         # add additional BN for selected width
         self.bn.append(None)
         # add additional width & width ratio for selected width
@@ -28,14 +26,6 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
     def flopsWidthList(self):
         return list(range(1, self.outputChannels() + 1))
 
-    # returns alphas value
-    def alphas(self) -> tensor:
-        return self._alphas
-
-    # return alphas probabilities
-    def probs(self):
-        return sigmoid(self._alphas).detach()
-
     # generate new BN for current width
     def generateWidthBN(self, width):
         self.bn[len(self.bn) - 1] = BatchNorm2d(width).cuda()
@@ -43,11 +33,27 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
         self._widthRatioList[-1] = width / self.outputChannels()
 
     # set newWidth as new current layer width
-    def _setCurrWidth(self, newWidth):
+    def setCurrWidth(self, newWidth):
         # set current width index
         self.setCurrWidthIdx(self.nWidths() - 1)
         # build last BN in self.bn according to newWidth
         self.generateWidthBN(newWidth)
+
+
+class BinomialConvSlimLayerWithAlpha(BinomialConvSlimLayer):
+    def __init__(self, widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag):
+        super(BinomialConvSlimLayerWithAlpha, self).__init__(widthRatioList, out_planes, kernel_size, stride, prevLayer, countFlopsFlag)
+
+        # init alphas
+        self._alphas = zeros(1).cuda().clone().detach().requires_grad_(True)
+
+    # returns alphas value
+    def alphas(self) -> tensor:
+        return self._alphas
+
+    # return alphas probabilities
+    def probs(self):
+        return sigmoid(self._alphas).detach()
 
     def _sampleWidthByAlphas(self):
         # define Binomial distribution on n-1 layer filters (because we have to choose at least one filter)
@@ -64,13 +70,13 @@ class ConvSlimLayerWithAlpha(ConvSlimLayer):
         # sample width from the distribution
         newWidth = self._sampleWidthByAlphas()
         # set new width
-        self._setCurrWidth(newWidth)
+        self.setCurrWidth(newWidth)
 
     # choose layer width based on alpha mean value
     def chooseAlphaMean(self):
         newWidth = roundTensor(self.alphaWidthMean()).type(int32).item()
         # set new width
-        self._setCurrWidth(newWidth)
+        self.setCurrWidth(newWidth)
 
 
 class BasicBlock_Binomial(BasicBlock):
@@ -79,7 +85,7 @@ class BasicBlock_Binomial(BasicBlock):
 
     @staticmethod
     def ConvSlimLayer() -> ConvSlimLayer:
-        return ConvSlimLayerWithAlpha
+        return BinomialConvSlimLayerWithAlpha
 
     def updateCurrWidth(self):
         self.downsample.updateCurrWidth()
@@ -104,14 +110,14 @@ class BaseNet_Binomial(BaseNet):
 
     # choose alpha based on alphas distribution
     def choosePathByAlphas(self):
-        def chooseLayerPathFunc(layer: ConvSlimLayerWithAlpha):
+        def chooseLayerPathFunc(layer: BinomialConvSlimLayerWithAlpha):
             layer.choosePathByAlphas()
 
         self._choosePath(chooseLayerPathFunc)
 
     # select maximal alpha in each layer
     def choosePathAlphasAsPartition(self):
-        def chooseLayerPathFunc(layer: ConvSlimLayerWithAlpha):
+        def chooseLayerPathFunc(layer: BinomialConvSlimLayerWithAlpha):
             layer.chooseAlphaMean()
 
         self._choosePath(chooseLayerPathFunc)
