@@ -16,6 +16,7 @@ class Switcher:
     _categoricalKey = 'categorical'
     _multinomialKey = 'multinomial'
     _binomialKey = 'binomial'
+    _blockBinomialKey = 'block_binomial'
 
     @staticmethod
     def categoricalKey():
@@ -30,8 +31,12 @@ class Switcher:
         return Switcher._binomialKey
 
     @staticmethod
+    def blockBinomialKey():
+        return Switcher._blockBinomialKey
+
+    @staticmethod
     def getClassesKeys():
-        return [Switcher.categoricalKey(), Switcher.multinomialKey(), Switcher.binomialKey()]
+        return [Switcher.categoricalKey(), Switcher.multinomialKey(), Switcher.binomialKey(), Switcher.blockBinomialKey()]
 
 
 def saveArgsToJSON(args):
