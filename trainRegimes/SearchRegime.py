@@ -412,6 +412,8 @@ class SearchRegime(TrainRegime):
             # init train weights logger
             wEpochName = '{}_w'.format(epoch)
             weightsLogger = HtmlLogger(self.trainFolderPath, wEpochName)
+            # set random weights to model
+            model.loadRandomWeights(weightsLogger)
             # init train weights instance
             _TrainWeightsClass = self.TrainWeightsClass()
             trainWeights = _TrainWeightsClass(self.getModel, self.getModelParallel, self.getArgs, lambda: weightsLogger, self.getTrainQueue,

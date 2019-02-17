@@ -51,6 +51,8 @@ class BaseNet(Module):
         self._layers = self.Layers(self.blocks)
         # init model alphas
         self._alphas = self._initAlphas(saveFolder)
+        # save model current random weights
+        self._randomWeights = self.state_dict()
 
         if not countFlopsFlag:
             # set layers flops data from args.modelFlops
@@ -137,6 +139,11 @@ class BaseNet(Module):
 
     def _getLayersFlopsData(self):
         return [layer.getFlopsData() for layer in self._layers.forwardCounters()]
+
+    def loadRandomWeights(self, logger=None):
+        self.load_state_dict(self._randomWeights)
+        if logger:
+            logger.addInfoTable('Loaded random weights', [[True]])
 
     def countFlops(self):
         return sum([block.countFlops() for block in self.blocks])
