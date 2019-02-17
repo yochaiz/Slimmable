@@ -142,8 +142,5 @@ class AlphaPerLayer(Alphas):
     def alphasValues(self, model: BaseNet_Binomial):
         return [[round(e.item(), self._roundDigits) for e in layer.alphas()] for layer in model.layersList()]
 
-    def probs(self):
-        return sigmoid(self._alphas, dim=-1).detach()
-
     def alphasList(self, model: BaseNet_Binomial):
         return [(layer.alphas(), layer.probs(), ['{:.3f}'.format(layer.alphaWidthMean().item())], '{}'.format(layer)) for layer in model.layersList()]
