@@ -93,7 +93,7 @@ def parseArgs():
     parser.add_argument('--{}'.format(modelFlopsKey), type=str, default=None, help='model flops list where each element is a layer flops dict')
     # training params
     parser.add_argument('--search_epochs', type=int, default=100, help='number of search regime epochs')
-    parser.add_argument('--weights_epochs', type=int, default=100, help='number of weights training epochs')
+    parser.add_argument('--weights_epochs', type=int, default=300, help='number of weights training epochs')
     # parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
     # parser.add_argument('--train_regime', default='TrainRegime', choices=trainRegimesNames, help='Training regime')
     parser.add_argument('--alphas_data_parts', type=int, default=2, help='split alphas training data to parts. each loop uses single part')
