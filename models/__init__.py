@@ -1,6 +1,7 @@
 from .BaseNet.BaseNet_categorical import BaseNet_Categorical, BasicBlock_Categorical
 from .BaseNet.BaseNet_multinomial import BaseNet_Multinomial, BasicBlock_Multinomial
 from .BaseNet.BaseNet_binomial import BaseNet_Binomial, BasicBlock_Binomial
+from .BaseNet.BaseNet_widthblock_binomial import BaseNet_WidthBlock_Binomial, BasicBlock_WidthBlock_Binomial
 from utils.args import Switcher
 
 
@@ -8,8 +9,12 @@ class ResNetSwitcher:
     _categoricalKey = Switcher.categoricalKey()
     _multinomialKey = Switcher.multinomialKey()
     _binomialKey = Switcher.binomialKey()
-    _BaseNetDict = {_categoricalKey: BaseNet_Categorical, _multinomialKey: BaseNet_Multinomial, _binomialKey: BaseNet_Binomial}
-    _BasicBlockDict = {_categoricalKey: BasicBlock_Categorical, _multinomialKey: BasicBlock_Multinomial, _binomialKey: BasicBlock_Binomial}
+    _blockBinomialKey = Switcher.blockBinomialKey()
+
+    _BaseNetDict = {_categoricalKey: BaseNet_Categorical, _multinomialKey: BaseNet_Multinomial, _binomialKey: BaseNet_Binomial,
+                    _blockBinomialKey: BaseNet_WidthBlock_Binomial}
+    _BasicBlockDict = {_categoricalKey: BasicBlock_Categorical, _multinomialKey: BasicBlock_Multinomial, _binomialKey: BasicBlock_Binomial,
+                       _blockBinomialKey: BasicBlock_WidthBlock_Binomial}
     _ResNetModels = ['resnet18_cifar10', 'resnet18_cifar100', 'resnet18_imagenet']
 
     @staticmethod
