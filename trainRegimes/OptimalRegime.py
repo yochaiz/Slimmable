@@ -92,6 +92,9 @@ class OptimalTrainWeights(TrainWeights):
         # save optimal validation values
         setattr(args, self.validAccKey, optAcc)
         setattr(args, self.validLossKey, optLoss)
+        # remove model flops from args
+        model = self.getModel()
+        setattr(args, model.modelFlopsKey(), None)
 
 
 class OptimalRegime(TrainRegime):
