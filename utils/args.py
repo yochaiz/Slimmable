@@ -1,10 +1,10 @@
 from json import dump
-from argparse import ArgumentParser
+from argparse import ArgumentParser, Namespace
 from time import strftime
 from os import getpid, environ
 from sys import argv
 from socket import gethostname
-from torch import load
+from torch import load, save
 
 from models.BaseNet.BaseNet import BaseNet
 from utils.HtmlLogger import HtmlLogger
@@ -149,6 +149,13 @@ def parseArgs():
     args.folderName = '[{}],[{}],[{}],{},[{}]'.format(args.model, args.dataset, args.lmbda, args.width, args.time)
     args.save = '../results_{}/{}'.format(args.type, args.folderName)
     create_exp_dir(args.save)
+
+    # save GPUs data to file
+    args.gpusDataPath = '{}/gpus.data'.format(args.save)
+    gpusData = Namespace()
+    gpusData.gpu = args.gpu
+    gpusData.nSamples = args.nSamples
+    save(gpusData, args.gpusDataPath)
 
     # init partition
     args.partition = None
