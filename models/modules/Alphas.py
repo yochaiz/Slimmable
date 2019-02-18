@@ -1,5 +1,6 @@
 from abc import abstractmethod
 from pandas import DataFrame
+from os.path import exists
 
 
 class Alphas:
@@ -42,15 +43,16 @@ class Alphas:
         if saveFolder:
             # update save path if saveFolder exists
             self._alphasCsvFileName = '{}/{}'.format(saveFolder, self._alphasCsvFileName)
-            # init DataFrame cols
-            cols = ['Epoch', 'Batch'] + self.initColumns(model)
-            self.cols = cols
-            # init DataFrame
-            self.alphas_df = DataFrame([], columns=cols)
-            # set init data
-            data = ['init', 'init']
-            # save alphas data
-            self.saveCsv(model, data)
+            if not exists(self._alphasCsvFileName):
+                # init DataFrame cols
+                cols = ['Epoch', 'Batch'] + self.initColumns(model)
+                self.cols = cols
+                # init DataFrame
+                self.alphas_df = DataFrame([], columns=cols)
+                # set init data
+                data = ['init', 'init']
+                # save alphas data
+                self.saveCsv(model, data)
 
     # save alphas values to csv
     def saveCsv(self, model, data):
