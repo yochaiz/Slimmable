@@ -3,7 +3,7 @@ from math import floor
 from time import sleep
 from multiprocessing.pool import Pool
 
-from torch import tensor, no_grad
+from torch import tensor, no_grad, load
 from torch.cuda import set_device
 
 from trainRegimes.regime import TrainRegime
@@ -41,25 +41,29 @@ class ModelReplicator:
     def __init__(self, regime: TrainRegime):
         self._regime = regime
         self._model = regime.model
-        self.gpuIDs = regime.args.gpu
-        self._modelStateDict = self._cloneModelStateDict(self._model.state_dict())
-        # create info table
-        regime.logger.addInfoTable(self.title, [['#', len(self.gpuIDs)]])
+        self.gpuIDs = []
+        self._gpusDataPath = regime.args.gpusDataPath
+        self._srcModelStateDict = self._model.state_dict()
+        self._modelStateDict = {}
 
     @abstractmethod
     def processResults(self, results: list) -> (list, list):
         raise NotImplementedError('subclasses must override processResults()!')
 
+    def _cloneStateDictToGPU(self, modelStateDict: dict, gpu: int):
+        # init model state_dict clone for GPU gpu
+        stateDictClone = {}
+        # fill model state_dict clone with tensors on GPU gpu
+        for k, v in modelStateDict.items():
+            stateDictClone[k] = v if (v.device.index == gpu) else v.clone().cuda(gpu)
+
+        return stateDictClone
+
     def _cloneModelStateDict(self, modelStateDict: dict):
         gpuStateDictClones = {}
-        for gpu in self.gpuIDs:
-            # init model state_dict clone for GPU gpu
-            stateDictClone = {}
-            # fill model state_dict clone with tensors on GPU gpu
-            for k, v in modelStateDict.items():
-                stateDictClone[k] = v if (v.device.index == gpu) else v.clone().cuda(gpu)
+        for gpu in set(self.gpuIDs):
             # add model state_dict clone on GPU gpu to GPUs dictionary
-            gpuStateDictClones[gpu] = stateDictClone
+            gpuStateDictClones[gpu] = self._cloneStateDictToGPU(modelStateDict, gpu)
 
         return gpuStateDictClones
 
@@ -77,8 +81,12 @@ class ModelReplicator:
     def initNewEpoch(self, srcModel: BaseNet):
         # restore srcModel original state_dict structure
         srcModel.restoreOriginalStateDictStructure()
-        # update replications weights source
-        self._modelStateDict = self._cloneModelStateDict(srcModel.state_dict())
+        # delete current state dict clones
+        self._modelStateDict.clear()
+        # reset gpuIDs
+        self.gpuIDs = []
+        # update source model state dict
+        self._srcModelStateDict = srcModel.state_dict()
 
     # given paths history dictionary and current path, checks if current path exists in history dictionary
     @staticmethod
@@ -138,7 +146,42 @@ class ModelReplicator:
 
         return dataPerGPU
 
-    def loss(self, input: tensor, target: tensor, nSamples: int):
+    def _updateGPUsData(self):
+        while True:
+            try:
+                gpusData = load(self._gpusDataPath)
+                # init new & old GPUs sets
+                newGPUsSet = set(gpusData.gpu)
+                oldGPUsSet = set(self.gpuIDs)
+                # calc new GPUs and free GPUs
+                newGPUs = newGPUsSet - oldGPUsSet
+                oldGPUs = oldGPUsSet - newGPUsSet
+
+                self.gpuIDs = gpusData.gpu
+                nSamples = gpusData.nSamples
+
+                # update info table
+                self._regime.logger.addInfoTable(self.title, [['#', len(self.gpuIDs)]])
+
+                # clone model state dict to new GPUs
+                stateDict = self._srcModelStateDict
+                for gpu in newGPUs:
+                    if gpu not in self._modelStateDict:
+                        self._modelStateDict[gpu] = self._cloneStateDictToGPU(stateDict, gpu)
+
+                # remove model state dict from GPUs we free
+                for gpu in oldGPUs:
+                    del self._modelStateDict[gpu]
+
+                return nSamples
+
+            except Exception as e:
+                print('*** ERROR: failed to load GPUs data: [{}]'.format(e))
+                sleep(5)
+
+    def loss(self, input: tensor, target: tensor):
+        # update GPUs data
+        nSamples = self._updateGPUsData()
         # clone input & target to all GPUs
         dataPerGPU = self._cloneTensors([input, target])
         # clone model alphas tensors
@@ -171,14 +214,20 @@ class ModelReplicator:
                 print('*** ERROR: waiting [{}] seconds'.format(sleepTime))
                 sleep(sleepTime)
 
-        return self.processResults(results)
+        lossDictsList, pathsList = self.processResults(results)
+        assert (len(lossDictsList) == nSamples)
+        return lossDictsList, pathsList
 
     def buildArgs(self, dataPerGPU: dict, modelAlphas: dict, nSamplesPerCopy: list):
         regime = self._regime
-        args = ((regime.buildModel, regime.flopsLoss, self._modelStateDict[gpu], modelAlphas[gpu], self.initPathsList(), self.initLossDictsList(),
-                 (regime.getArgs(), regime.getLogger(), regime.getTrainQueue(), regime.getValidQueue(), regime.getTrainFolderPath()),
-                 dataPerGPU[gpu], nSamplesPerCopy[gpuIdx], gpu, self.iterateOverSamples, self.replicaClass())
-                for gpuIdx, gpu in enumerate(self.gpuIDs))
+        args = []
+        for gpuIdx, gpu in enumerate(self.gpuIDs):
+            data = (regime.buildModel, regime.flopsLoss, self._modelStateDict[gpu], modelAlphas[gpu], self.initPathsList(), self.initLossDictsList(),
+                    (regime.getArgs(), regime.getLogger(), regime.getTrainQueue(), regime.getValidQueue(), regime.getTrainFolderPath()),
+                    dataPerGPU[gpu], nSamplesPerCopy[gpuIdx], gpu, self.iterateOverSamples, self.replicaClass())
+
+            args.append(data)
+
         return args
 
     @abstractmethod
