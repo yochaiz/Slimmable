@@ -40,6 +40,10 @@ class BaseNet_WidthBlock_Binomial(BaseNet):
             for layer in alphaWidth.layersList:
                 layer.setCurrWidth(newWidth)
 
+        # update curr width changes in each block
+        for block in self.blocks:
+            block.updateCurrWidth()
+
     # choose alpha based on alphas distribution
     def choosePathByAlphas(self):
         def calcNewWidthFunc(width: int, alphaWidth: AlphaPerWidthBlock.AlphaWidth):
