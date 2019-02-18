@@ -6,13 +6,13 @@ from .TrainPathWeights import TrainPathWeights
 class Replica:
     def __init__(self, buildModelFunc: callable, modelStateDict: dict, modelAlphas: list, gpu: int, trainWeightsElements: tuple):
         # can't pass regime class functions, therefore passing functions return value
-        args, logger, trainQueue, validQueue, trainFolderPath = trainWeightsElements
+        args, logger, trainQueue, trainFolderPath = trainWeightsElements
 
         # replicate regime model
         self._replicateModel(buildModelFunc, args, modelStateDict, modelAlphas)
         # init trainWeights instance
         self._trainWeights = TrainPathWeights(getModel=self.getModel, getModelParallel=self.getModel, getArgs=lambda: args, getLogger=lambda: logger,
-                                              getTrainQueue=lambda: trainQueue, getValidQueue=lambda: validQueue,
+                                              getTrainQueue=lambda: trainQueue, getValidQueue=lambda: trainQueue,
                                               getTrainFolderPath=lambda: trainFolderPath, gpu=gpu)
 
     @abstractmethod
