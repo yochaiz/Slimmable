@@ -29,9 +29,8 @@ class WidthBlockBinomialSearchRegime(BinomialSearchRegime):
     # updates statistics
     def _updateAlphasGradients(self, lossDictsPartitionList: list) -> dict:
         model: BaseNet_WidthBlock_Binomial = self.model
-        nSamples = self.args.nSamples
         totalKey = self.flopsLoss.totalKey()
-        assert (len(lossDictsPartitionList) == nSamples)
+        nSamples = len(lossDictsPartitionList)
 
         # get model alphas
         # alphas = model.alphas()

@@ -57,9 +57,8 @@ class MultinomialSearchRegime(SearchRegime):
     # updates statistics
     def _updateAlphasGradients(self, lossDictsPartitionList: list) -> dict:
         model = self.model
-        nSamples = self.args.nSamples
+        nSamples = len(lossDictsPartitionList)
         totalKey = self.flopsLoss.totalKey()
-        assert (len(lossDictsPartitionList) == nSamples)
 
         alphas = model.alphas()[0]
         probs = model.probs()
