@@ -225,7 +225,6 @@ class SearchRegime(TrainRegime):
         print('*** trainAlphas() ***')
         model = self.model
         replicator = self.replicator
-        nSamples = self.args.nSamples
         # init trainingStats instance
         trainStats = AlphaTrainingStats(self.flopsLoss.lossKeys(), useAvg=False)
         # init new epoch in replications
@@ -254,7 +253,7 @@ class SearchRegime(TrainRegime):
             # reset optimizer gradients
             optimizer.zero_grad()
             # evaluate on samples and calc alphas gradients
-            lossAvgDict, pathsList = self._loss(input, target, nSamples)
+            lossAvgDict, pathsList = self._loss(input, target)
             # perform optimizer step
             optimizer.step()
 
@@ -304,9 +303,9 @@ class SearchRegime(TrainRegime):
 
         return epochLossDict, summaryDataRow
 
-    def _loss(self, input: tensor, target: tensor, nSamples: int) -> (dict, list):
+    def _loss(self, input: tensor, target: tensor) -> (dict, list):
         # calc paths loss for each alpha using replicator
-        lossDictsList, pathsList = self.replicator.loss(input, target, nSamples)
+        lossDictsList, pathsList = self.replicator.loss(input, target)
         # update statistics and alphas gradients based on loss
         lossAvgDict = self._updateAlphasGradients(lossDictsList)
 
@@ -413,6 +412,7 @@ class SearchRegime(TrainRegime):
             wEpochName = '{}_w'.format(epoch)
             weightsLogger = HtmlLogger(self.trainFolderPath, wEpochName)
             # set random weights to model
+            model.restoreOriginalStateDictStructure()
             model.loadRandomWeights(weightsLogger)
             # init train weights instance
             _TrainWeightsClass = self.TrainWeightsClass()
