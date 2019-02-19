@@ -35,6 +35,7 @@ class MultinomialSearchRegime(SearchRegime):
         return container
 
     def _pathsListToRows(self, pathsList: list) -> list:
+        raise ValueError('_pathsListToRows() is not compatible with latest changes')
         pathsListRows = [['#', 'Paths']]
         for pathIdx, (path, lossDict) in enumerate(pathsList):
             pathsListRows.append([pathIdx + 1, [['Path', path], ['Loss', HtmlLogger.dictToRows(lossDict, nElementPerRow=2)]]])
