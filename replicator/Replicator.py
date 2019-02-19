@@ -47,7 +47,7 @@ class ModelReplicator:
         self._modelStateDict = {}
 
     @abstractmethod
-    def processResults(self, results: list) -> (list, list):
+    def processResults(self, results: list) -> list:
         raise NotImplementedError('subclasses must override processResults()!')
 
     def _cloneStateDictToGPU(self, modelStateDict: dict, gpu: int):
@@ -69,7 +69,7 @@ class ModelReplicator:
 
     def _cloneModelAlphas(self, modelAlphas: list):
         gpuAlphasClones = {}
-        for gpu in self.gpuIDs:
+        for gpu in set(self.gpuIDs):
             # init model state_dict clone for GPU gpu
             alphasClone = [t.detach() if (t.device.index == gpu) else t.detach().clone().cuda(gpu) for t in modelAlphas]
             # add model alphas clone on GPU gpu to GPUs dictionary
@@ -125,6 +125,7 @@ class ModelReplicator:
 
         return pathWidthIdx
 
+    # split samples between processes
     def _splitSamples(self, nSamples: int) -> dict:
         nCopies = len(self.gpuIDs)
         # split number of samples between model replications
@@ -146,6 +147,9 @@ class ModelReplicator:
 
         return dataPerGPU
 
+    # clone model state dict to new GPUs
+    # delete model state dict GPUs we don't use anymore
+    # get also updated number of samples
     def _updateGPUsData(self):
         while True:
             try:
@@ -179,23 +183,54 @@ class ModelReplicator:
                 print('*** ERROR: failed to load GPUs data: [{}]'.format(e))
                 sleep(5)
 
-    def loss(self, input: tensor, target: tensor):
-        # update GPUs data
-        nSamples = self._updateGPUsData()
-        # clone input & target to all GPUs
-        dataPerGPU = self._cloneTensors([input, target])
-        # clone model alphas tensors
-        modelAlphas = self._cloneModelAlphas(self._model.alphas())
-        # split samples between model copies
-        nSamplesPerModel = self._splitSamples(nSamples)
-        # init loss replication function arguments
-        args = self.buildArgs(dataPerGPU, modelAlphas, nSamplesPerModel)
+    @abstractmethod
+    def initLossDictsList(self) -> list:
+        raise NotImplementedError('subclasses must override initLossDictsList()!')
 
+    @staticmethod
+    @abstractmethod
+    def iterateOverSamples(replica: Replica, lossFunc: callable, dataset, pathsHistoryDict: dict, lossDictsList: list, gpu: int):
+        raise NotImplementedError('subclasses must override iterateOverSamples()!')
+
+    @abstractmethod
+    def replicaClass(self) -> Replica:
+        raise NotImplementedError('subclasses must override replicaClass()!')
+
+    def buildArgs(self, dataset, modelAlphas: dict, nSamplesPerCopy: list):
+        regime = self._regime
+        args = []
+        for gpuIdx, gpu in enumerate(self.gpuIDs):
+            data = (regime.buildModel, regime.flopsLoss, self._modelStateDict[gpu], modelAlphas[gpu], self.initLossDictsList(),
+                    (regime.getArgs(), regime.getLogger(), regime.getTrainQueue(), regime.getTrainFolderPath()),
+                    dataset, nSamplesPerCopy[gpuIdx], gpu, self.iterateOverSamples, self.replicaClass())
+
+            args.append(data)
+
+        return args
+
+    def loss(self, model: BaseNet, dataset):
+        # init new epoch: save model current state dict, clear old state dict from GPUs
+        self.initNewEpoch(model)
+        # update GPUs data, clone model state dict to GPUs
+        nSamples = self._updateGPUsData()
+        # split samples between model copies (processes)
+        nSamplesPerCopy = self._splitSamples(nSamples)
+        # set number of model copies
         nCopies = len(self.gpuIDs)
+        # clone model alphas tensors
+        modelAlphas = self._cloneModelAlphas(model.alphas())
+        # clone train set over GPUs
+        # IS IT NECESSARY ???
+
+        # generate args per replication
+        args = self.buildArgs(dataset, modelAlphas, nSamplesPerCopy)
+
         # init flag to indicate whether multiprocessing succeeded or failed (due to insufficient space on GPU for example)
         multiProcSuccess = False
         # init flag for exception email, we want to send it once
         emailExceptionSent = False
+        # init sleep time in exception case
+        sleepTime, sleepTimeMax = 60, (60 * 10)
         while not multiProcSuccess:
             try:
                 with Pool(processes=nCopies, maxtasksperchild=1) as p:
@@ -209,82 +244,23 @@ class ModelReplicator:
                     emailException(e, self._regime.args.folderName)
                     emailExceptionSent = True
 
-                sleepTime = 60
                 print('*** ERROR: multiprocessing failed: [{}]'.format(e))
                 print('*** ERROR: waiting [{}] seconds'.format(sleepTime))
                 sleep(sleepTime)
+                # update sleep time in case of recurring exceptions
+                sleepTime = min(sleepTime * 2, sleepTimeMax)
 
-        lossDictsList, pathsList = self.processResults(results)
-        assert (len(lossDictsList) == nSamples)
-        return lossDictsList, pathsList
+        lossDictsList = self.processResults(results)
+        # make sure we have calculated nSamples loss for each batch by validating on 1st batch
+        assert (len(lossDictsList[0]) == nSamples)
 
-    def buildArgs(self, dataPerGPU: dict, modelAlphas: dict, nSamplesPerCopy: list):
-        regime = self._regime
-        args = []
-        for gpuIdx, gpu in enumerate(self.gpuIDs):
-            data = (regime.buildModel, regime.flopsLoss, self._modelStateDict[gpu], modelAlphas[gpu], self.initPathsList(), self.initLossDictsList(),
-                    (regime.getArgs(), regime.getLogger(), regime.getTrainQueue(), regime.getValidQueue(), regime.getTrainFolderPath()),
-                    dataPerGPU[gpu], nSamplesPerCopy[gpuIdx], gpu, self.iterateOverSamples, self.replicaClass())
-
-            args.append(data)
-
-        return args
-
-    @abstractmethod
-    def initPathsList(self) -> list:
-        raise NotImplementedError('subclasses must override initPathsList()!')
-
-    @abstractmethod
-    def initLossDictsList(self) -> list:
-        raise NotImplementedError('subclasses must override initPathsList()!')
-
-    @staticmethod
-    @abstractmethod
-    def iterateOverSamples(replica: Replica, lossFunc: callable, data: tuple, pathsHistoryDict: dict, pathsList: list, lossDictsList: list, gpu: int):
-        raise NotImplementedError('subclasses must override iterateOverSamples()!')
-
-    @abstractmethod
-    def replicaClass(self) -> Replica:
-        raise NotImplementedError('subclasses must override replicaClass()!')
-
-    @staticmethod
-    def evaluateSample(replica: Replica, lossFunc: callable, data: tuple, pathsHistoryDict: dict, pathsList: list, lossDictsList: list,
-                       generateTrainParams: callable, addLossDict: callable):
-        cModel = replica.getModel()
-        input, target = data
-        # select new path based on alphas distribution.
-        # check that selected path hasn't been selected before
-        pathWidthIdx = ModelReplicator._generateNewPath(replica, pathsHistoryDict)
-        # train model on path
-        trainParams = generateTrainParams(pathWidthIdx)
-        trainedPaths = replica.train(trainParams)
-        # switch to eval mode
-        cModel.eval()
-        # init path losses dict
-        pathLossDict = {}
-        # evaluate batch over trained paths
-        with no_grad():
-            for widthRatio, trainedPathIdx in trainedPaths.items():
-                # set cModel path to trained path
-                cModel.setCurrWidthIdx(trainedPathIdx)
-                # forward input in model selected path
-                logits = cModel(input)
-                # calc loss
-                lossDict = lossFunc(logits, target, cModel.countFlops())
-                # add loss to container
-                addLossDict(lossDict, lossDictsList, widthRatio, trainedPathIdx)
-                # add loss to path losses dict
-                pathLossDict[widthRatio] = {k: ModelReplicator._formatLoss(v) for k, v in lossDict.items()}
-
-        # add path and its losses dict to paths list
-        pathWidthRatio = [layer.widthRatioByIdx(p) for p, layer in zip(pathWidthIdx, cModel.layersList())]
-        pathsList.append((pathWidthRatio, pathLossDict))
+        return lossDictsList
 
     @staticmethod
     def lossPerReplication(params):
         # extract transferred params to process
-        buildModelFunc, lossFunc, modelStateDict, modelAlphas, pathsList, lossDictsList, trainWeightsElements, \
-        data, nSamples, gpu, iterateOverSamples, replicaClass = params
+        buildModelFunc, lossFunc, modelStateDict, modelAlphas, lossDictsList, trainWeightsElements, \
+        dataset, nSamples, gpu, iterateOverSamples, replicaClass = params
         # set process GPU
         set_device(gpu)
         # init Replica instance on GPU with updated weights & alphas
@@ -295,10 +271,152 @@ class ModelReplicator:
         # iterate over samples. generate a sample (path), train it and evaluate alphas on sample
         for sampleIdx in range(nSamples):
             print('===== Sample idx:[{}/{}] - GPU:[{}] ====='.format(sampleIdx, nSamples, gpu))
-            iterateOverSamples(replica, lossFunc, data, pathsHistoryDict, pathsList, lossDictsList, gpu)
+            iterateOverSamples(replica, lossFunc, dataset, pathsHistoryDict, lossDictsList, gpu)
 
-        return lossDictsList, pathsList
+        return lossDictsList
 
+    @staticmethod
+    def evaluateSample(replica: Replica, lossFunc: callable, dataset, pathsHistoryDict: dict, lossDictsList: list,
+                       generateTrainParams: callable, addLossDict: callable):
+        cModel = replica.getModel()
+        print('indices:{}'.format(dataset.sampler.indices[0:10]))
+        # select new path based on alphas distribution.
+        # check that selected path hasn't been selected before
+        pathWidthIdx = ModelReplicator._generateNewPath(replica, pathsHistoryDict)
+        # train model on path
+        trainParams = generateTrainParams(pathWidthIdx)
+        trainedPaths = replica.train(trainParams)
+        # switch to eval mode
+        cModel.eval()
+        # evaluate batch over trained paths
+        with no_grad():
+            for input, target in dataset:
+                input = input.cuda().clone().detach().requires_grad_(False)
+                target = target.cuda(async=True).clone().detach().requires_grad_(False)
+
+                for widthRatio, trainedPathIdx in trainedPaths.items():
+                    # set cModel path to trained path
+                    cModel.setCurrWidthIdx(trainedPathIdx)
+                    # forward input in model selected path
+                    logits = cModel(input)
+                    # calc loss
+                    lossDict = lossFunc(logits, target, cModel.countFlops())
+                    # add loss to container
+                    addLossDict(lossDict, lossDictsList, widthRatio, trainedPathIdx)
+
+# ======== deprecated path per batch functions =============
+# ======== current functions sample path per data set ======
+# def buildArgs(self, dataPerGPU: dict, modelAlphas: dict, nSamplesPerCopy: list):
+#     regime = self._regime
+#     args = []
+#     for gpuIdx, gpu in enumerate(self.gpuIDs):
+#         data = (regime.buildModel, regime.flopsLoss, self._modelStateDict[gpu], modelAlphas[gpu], self.initLossDictsList(),
+#                 (regime.getArgs(), regime.getLogger(), regime.getTrainQueue(), regime.getTrainFolderPath()),
+#                 dataPerGPU[gpu], nSamplesPerCopy[gpuIdx], gpu, self.iterateOverSamples, self.replicaClass())
+#
+#         args.append(data)
+#
+#     return args
+
+# @abstractmethod
+# def initPathsList(self) -> list:
+#     raise NotImplementedError('subclasses must override initPathsList()!')
+
+# @staticmethod
+# def evaluateSample(replica: Replica, lossFunc: callable, dataset, pathsHistoryDict: dict, lossDictsList: list,
+#                    generateTrainParams: callable, addLossDict: callable):
+#     cModel = replica.getModel()
+#     input, target = data
+#     # select new path based on alphas distribution.
+#     # check that selected path hasn't been selected before
+#     pathWidthIdx = ModelReplicator._generateNewPath(replica, pathsHistoryDict)
+#     # train model on path
+#     trainParams = generateTrainParams(pathWidthIdx)
+#     trainedPaths = replica.train(trainParams)
+#     # switch to eval mode
+#     cModel.eval()
+#     # init path losses dict
+#     pathLossDict = {}
+#     # evaluate batch over trained paths
+#     with no_grad():
+#         for widthRatio, trainedPathIdx in trainedPaths.items():
+#             # set cModel path to trained path
+#             cModel.setCurrWidthIdx(trainedPathIdx)
+#             # forward input in model selected path
+#             logits = cModel(input)
+#             # calc loss
+#             lossDict = lossFunc(logits, target, cModel.countFlops())
+#             # add loss to container
+#             addLossDict(lossDict, lossDictsList, widthRatio, trainedPathIdx)
+#             # add loss to path losses dict
+#             pathLossDict[widthRatio] = {k: ModelReplicator._formatLoss(v) for k, v in lossDict.items()}
+#
+#     # add path and its losses dict to paths list
+#     pathWidthRatio = [layer.widthRatioByIdx(p) for p, layer in zip(pathWidthIdx, cModel.layersList())]
+#     pathsList.append((pathWidthRatio, pathLossDict))
+
+# def loss(self, input: tensor, target: tensor):
+#     # update GPUs data
+#     nSamples = self._updateGPUsData()
+#     # clone input & target to all GPUs
+#     dataPerGPU = self._cloneTensors([input, target])
+#     # clone model alphas tensors
+#     modelAlphas = self._cloneModelAlphas(self._model.alphas())
+#     # split samples between model copies (processes)
+#     nSamplesPerModel = self._splitSamples(nSamples)
+#     # init loss replication function arguments
+#     args = self.buildArgs(dataPerGPU, modelAlphas, nSamplesPerModel)
+#
+#     nCopies = len(self.gpuIDs)
+#     # init flag to indicate whether multiprocessing succeeded or failed (due to insufficient space on GPU for example)
+#     multiProcSuccess = False
+#     # init flag for exception email, we want to send it once
+#     emailExceptionSent = False
+#     # init sleep time in exception case
+#     sleepTime, sleepTimeMax = 60, (60 * 10)
+#     while not multiProcSuccess:
+#         try:
+#             with Pool(processes=nCopies, maxtasksperchild=1) as p:
+#                 results = p.map(self.lossPerReplication, args)
+#             # if we got here, then multiprocessing succeeded
+#             multiProcSuccess = True
+#
+#         except Exception as e:
+#             # send exception email
+#             if not emailExceptionSent:
+#                 emailException(e, self._regime.args.folderName)
+#                 emailExceptionSent = True
+#
+#             print('*** ERROR: multiprocessing failed: [{}]'.format(e))
+#             print('*** ERROR: waiting [{}] seconds'.format(sleepTime))
+#             sleep(sleepTime)
+#             # update sleep time in case of recurring exceptions
+#             sleepTime = min(sleepTime * 2, sleepTimeMax)
+#
+#     lossDictsList, pathsList = self.processResults(results)
+#     assert (len(lossDictsList) == nSamples)
+#     return lossDictsList, pathsList
+
+# @staticmethod
+# def lossPerReplication(params):
+#     # extract transferred params to process
+#     buildModelFunc, lossFunc, modelStateDict, modelAlphas, pathsList, lossDictsList, trainWeightsElements, \
+#     data, nSamples, gpu, iterateOverSamples, replicaClass = params
+#     # set process GPU
+#     set_device(gpu)
+#     # init Replica instance on GPU with updated weights & alphas
+#     replica = replicaClass(buildModelFunc, modelStateDict, modelAlphas, gpu, trainWeightsElements)
+#     # init samples (paths) history, to make sure we don't select the same sample twice
+#     pathsHistoryDict = {}
+#
+#     # iterate over samples. generate a sample (path), train it and evaluate alphas on sample
+#     for sampleIdx in range(nSamples):
+#         print('===== Sample idx:[{}/{}] - GPU:[{}] ====='.format(sampleIdx, nSamples, gpu))
+#         iterateOverSamples(replica, lossFunc, data, pathsHistoryDict, pathsList, lossDictsList, gpu)
+#
+#     return lossDictsList, pathsList
+
+# ======== unused deprecated functions ==================
 # def _updateReplicationsAlphas(self):
 #     for replica in self.replications:
 #         cModel = replica.cModel()
