@@ -51,8 +51,12 @@ class BaseNet(Module):
         self._layers = self.Layers(self.blocks)
         # init model alphas
         self._alphas = self._initAlphas(saveFolder)
+
         # save model current random weights
-        self._randomWeights = self.state_dict()
+        self._randomWeights = None
+        if args.saveRandomWeights:
+            self._randomWeights = {k: v.clone() for k, v in self.state_dict().items()}
+            args.saveRandomWeights = False
 
         if not countFlopsFlag:
             # set layers flops data from args.modelFlops

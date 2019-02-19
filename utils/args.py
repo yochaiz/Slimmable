@@ -150,6 +150,9 @@ def parseArgs():
     args.save = '../results_{}/{}'.format(args.type, args.folderName)
     create_exp_dir(args.save)
 
+    # init flag to save model random weights
+    args.saveRandomWeights = True
+
     # save GPUs data to file
     args.gpusDataPath = '{}/gpus.data'.format(args.save)
     gpusData = Namespace()
