@@ -65,10 +65,12 @@ class BinomialSearchRegime(SearchRegime):
             alphaTitle = self._alphaPlotTitle(layerIdx)
             stats.addValue(lambda containers: containers[self.alphaDistributionKey][layerIdx][alphaTitle], layer.probs().item())
 
-    def _pathsListToRows(self, pathsList: list) -> list:
+    def _pathsListToRows(self, batchLossDictsList: list) -> list:
         pathsListRows = [['#', 'Paths']]
-        for pathIdx, (path, lossDict) in enumerate(pathsList):
-            pathsListRows.append([pathIdx + 1, [['Path', path], ['Loss', HtmlLogger.dictToRows(lossDict, nElementPerRow=2)]]])
+        for pathIdx, (lossDict, partition, partitionRatio) in enumerate(batchLossDictsList):
+            # build formatted loss dict
+            formattedLossDict = {k: '{:.3f}'.format(v) for k, v in lossDict.items()}
+            pathsListRows.append([pathIdx + 1, [['Path', partitionRatio], ['Loss', self.formats[self.trainLossKey](formattedLossDict)]]])
 
         return pathsListRows
 
