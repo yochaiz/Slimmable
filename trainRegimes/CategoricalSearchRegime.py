@@ -27,6 +27,7 @@ class CategoricalSearchRegime(SearchRegime):
         return container
 
     def _pathsListToRows(self, pathsList: list) -> list:
+        raise ValueError('_pathsListToRows() is not compatible with latest changes')
         # add numbering to paths list
         pathsListRows = [['Layer #', 'Paths']]
         for layerIdx, layerPaths in enumerate(pathsList):
