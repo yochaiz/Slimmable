@@ -6,15 +6,15 @@ class BinomialReplicator(MultinomialReplicator):
         super(BinomialReplicator, self).__init__(regime)
 
     @staticmethod
-    def iterateOverSamples(replica: MultinomialReplica, lossFunc, data, pathsHistoryDict, pathsList, lossDictsList, gpu: int):
+    def iterateOverSamples(replica: MultinomialReplica, lossFunc, data, pathsHistoryDict, lossDictsList, gpu: int):
         cModel = replica.getModel()
 
         def addLossDict(lossDict: dict, lossDictsList: list, widthRatio: float, trainedPathIdx: list):
-            trainedPathWidth = [layer.widthByIdx(trainedPathIdx[layerIdx]) for layerIdx, layer in enumerate(cModel.layersList())]
-            print('widthRatio:[{}] - trainedPathWidth:{}'.format(widthRatio, trainedPathWidth))
-            lossDictsList.append((lossDict, trainedPathWidth))
+            trainedPathWidth = cModel.currWidth()
+            trainPathWidthRatio = cModel.currWidthRatio()
+            print('trainedPathWidth:{}'.format(trainedPathWidth))
+            lossDictsList.append((lossDict, trainedPathWidth, trainPathWidthRatio))
 
         generateTrainParams = MultinomialReplicator.generateTrainParams
 
-        BinomialReplicator.evaluateSample(replica, lossFunc, data, pathsHistoryDict, pathsList, lossDictsList,
-                                          generateTrainParams, addLossDict)
+        BinomialReplicator.evaluateSample(replica, lossFunc, data, pathsHistoryDict, lossDictsList, generateTrainParams, addLossDict)
