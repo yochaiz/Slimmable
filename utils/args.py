@@ -101,7 +101,7 @@ def parseArgs():
     parser.add_argument('--weights_epochs', type=int, default=300, help='number of weights training epochs')
     # parser.add_argument('--train_portion', type=float, default=1.0, help='portion of training data')
     # parser.add_argument('--train_regime', default='TrainRegime', choices=trainRegimesNames, help='Training regime')
-    parser.add_argument('--alphas_data_parts', type=int, default=2, help='split alphas training data to parts. each loop uses single part')
+    parser.add_argument('--alphas_data_parts', type=int, default=1, help='split alphas training data to parts. each loop uses single part')
     parser.add_argument('--nSamples', type=int, default=5, help='number of samples (paths) to evaluate on each alpha')
     parser.add_argument('--nJobs', type=int, default=5, help='number of jobs (checkpoints) to sample from current alphas distribution')
     parser.add_argument('--lmbda', type=float, default=0.0, help='Lambda value for FlopsLoss')
