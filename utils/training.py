@@ -103,9 +103,8 @@ class AlphaTrainingStats(TrainingStats):
     def __init__(self, widthRatio, useAvg=True):
         super(AlphaTrainingStats, self).__init__(widthRatio, useAvg)
 
-    def update(self, ratio, logits, loss):
-        n = logits.size(0)
-        self._epochLoss[ratio].update(loss, n)
+    def update(self, ratio, loss):
+        self._epochLoss[ratio].update(loss)
         self._batchLoss[ratio] = loss
 
 
