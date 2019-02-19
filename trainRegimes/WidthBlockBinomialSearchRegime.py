@@ -28,7 +28,7 @@ class WidthBlockBinomialSearchRegime(BinomialSearchRegime):
     # updates alphas gradients
     # updates statistics
     def _updateAlphasGradients(self, lossDictsPartitionList: list) -> dict:
-        model: BaseNet_WidthBlock_Binomial = self.model
+        model = self.model
         totalKey = self.flopsLoss.totalKey()
         nSamples = len(lossDictsPartitionList)
 
@@ -43,7 +43,7 @@ class WidthBlockBinomialSearchRegime(BinomialSearchRegime):
         # init model alphas gradient tensor
         alphasGrad = {width: zeros(1, requires_grad=True).cuda() for width in alphasDict.keys()}
         # iterate over losses
-        for lossDict, partition in lossDictsPartitionList:
+        for lossDict, partition, partitionRatio in lossDictsPartitionList:
             # add lossDict to loss dicts list
             lossDictsList.append(lossDict)
             # sum loss by keys
