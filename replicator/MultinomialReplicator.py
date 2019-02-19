@@ -6,8 +6,8 @@ class MultinomialReplicator(ModelReplicator):
     def __init__(self, regime):
         super(MultinomialReplicator, self).__init__(regime)
 
-    def initPathsList(self) -> list:
-        return []
+    # def initPathsList(self) -> list:
+    #     return []
 
     def initLossDictsList(self) -> list:
         return []
@@ -25,19 +25,34 @@ class MultinomialReplicator(ModelReplicator):
         lossDictsList.append((lossDict, trainedPathIdx))
 
     @staticmethod
-    def iterateOverSamples(replica: MultinomialReplica, lossFunc, data, pathsHistoryDict, pathsList, lossDictsList, gpu: int):
+    def iterateOverSamples(replica: MultinomialReplica, lossFunc, data, pathsHistoryDict, lossDictsList, gpu: int):
         generateTrainParams = MultinomialReplicator.generateTrainParams
         addLossDict = MultinomialReplicator.addLossDict
 
-        ModelReplicator.evaluateSample(replica, lossFunc, data, pathsHistoryDict, pathsList, lossDictsList,
-                                       generateTrainParams, addLossDict)
+        ModelReplicator.evaluateSample(replica, lossFunc, data, pathsHistoryDict, lossDictsList, generateTrainParams, addLossDict)
 
-    def processResults(self, results: list) -> (list, list):
-        lossDictsList, pathsList = results[0]
+    def processResults(self, results: list) -> list:
+        lossDictsList = results[0]
+
+        # sort loss dictionaries in lossDictsList by batch
+        # each element in lossDictsList is a list of loss dictionaries of the same batch
+        lossDictsList = [[lossDict] for lossDict in lossDictsList]
 
         # append lists from GPUs
-        for gpuLossDictsList, gpuPathsList in results[1:]:
-            lossDictsList.extend(gpuLossDictsList)
-            pathsList.extend(gpuPathsList)
+        for gpuLossDictsList in results[1:]:
+            # add loss dictionaries by batch
+            assert (len(lossDictsList) == len(gpuLossDictsList))
+            for batchLossDictsList, lossDict in zip(lossDictsList, gpuLossDictsList):
+                batchLossDictsList.append(lossDict)
 
-        return lossDictsList, pathsList
+        return lossDictsList
+
+# def processResults(self, results: list) -> (list, list):
+#     lossDictsList, pathsList = results[0]
+#
+#     # append lists from GPUs
+#     for gpuLossDictsList, gpuPathsList in results[1:]:
+#         lossDictsList.extend(gpuLossDictsList)
+#         pathsList.extend(gpuPathsList)
+#
+# return lossDictsList, pathsList
