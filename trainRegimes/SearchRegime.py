@@ -114,7 +114,7 @@ class SearchRegime(TrainRegime):
     k = 2
     alphasTableTitle = 'Alphas (top [{}])'.format(k)
     # init table columns names
-    colsTrainAlphas = [batchNumKey, archLossKey, alphasTableTitle, pathsListKey, gradientsKey, timeKey]
+    colsTrainAlphas = [batchNumKey, archLossKey, alphasTableTitle, pathsListKey, gradientsKey]
     colsMainLogger = [epochNumKey, archLossKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, widthKey, lrKey]
 
     # init statistics (plots) keys template
@@ -183,7 +183,7 @@ class SearchRegime(TrainRegime):
         raise NotImplementedError('subclasses must override initReplicator()!')
 
     @abstractmethod
-    def _pathsListToRows(self, pathsList: list) -> list:
+    def _pathsListToRows(self, batchLossDictsList: list) -> list:
         raise NotImplementedError('subclasses must override _parsePathsList()!')
 
     @abstractmethod
@@ -227,12 +227,6 @@ class SearchRegime(TrainRegime):
         replicator = self.replicator
         # init trainingStats instance
         trainStats = AlphaTrainingStats(self.flopsLoss.lossKeys(), useAvg=False)
-        # init new epoch in replications
-        replicator.initNewEpoch(model)
-
-        trainLogger = loggers.get(self.trainLoggerKey)
-        if trainLogger:
-            trainLogger.createDataTable('Epoch:[{}] - Alphas'.format(epoch), self.colsTrainAlphas)
 
         def createInfoTable(dict, key, logger, rows):
             dict[key] = logger.createInfoTable('Show', rows)
@@ -242,38 +236,39 @@ class SearchRegime(TrainRegime):
 
         nBatches = len(search_queue)
         # update batch num key format
-        self.formats[self.batchNumKey] = lambda x: '{}/{}'.format(batchNum, nBatches)
+        self.formats[self.batchNumKey] = lambda x: '{}/{}'.format(x, nBatches)
 
-        for batchNum, (input, target) in enumerate(search_queue):
-            startTime = time()
+        startTime = time()
+        # choose nSamples paths, train them, evaluate them over search_queue
+        # lossDictsList is a list of lists where each list contains losses of specific batch
+        lossDictsList = replicator.loss(model, search_queue)
+        calcTime = time() - startTime
 
-            input = input.cuda().clone().detach().requires_grad_(False)
-            target = target.cuda(async=True).clone().detach().requires_grad_(False)
+        trainLogger = loggers.get(self.trainLoggerKey)
+        if trainLogger:
+            trainLogger.createDataTable('Alphas - Epoch:[{}] - Time:[{:.3f}]'.format(epoch, calcTime), self.colsTrainAlphas)
 
+        for batchNum, batchLossDictsList in enumerate(lossDictsList):
             # reset optimizer gradients
             optimizer.zero_grad()
-            # evaluate on samples and calc alphas gradients
-            lossAvgDict, pathsList = self._loss(input, target)
+            # update statistics and alphas gradients based on loss
+            lossAvgDict = self._updateAlphasGradients(batchLossDictsList)
             # perform optimizer step
             optimizer.step()
 
-            endTime = time()
-
             # update training stats
             for lossName, loss in lossAvgDict.items():
-                trainStats.update(lossName, input, loss)
+                trainStats.update(lossName, loss)
             # save alphas to csv
             model.saveAlphasCsv(data=[epoch, batchNum])
             # update alphas distribution statistics (after optimizer step)
             self._calcAlphasDistribStats(model)
             # update statistics plots
             self.statistics.plotData()
-            # save checkpoint
-            save_checkpoint(self.trainFolderPath, model, optimizer, lossAvgDict)
 
             if trainLogger:
-                # parse pathsList to InfoTable rows
-                pathsListRows = self._pathsListToRows(pathsList)
+                # parse paths list to InfoTable rows
+                pathsListRows = self._pathsListToRows(batchLossDictsList)
                 # parse alphas gradients to InfoTable rows
                 gradientRows = [['Layer #', self.gradientsKey]]
                 for layerIdx, (layer, alphas) in enumerate(zip(model.layersList(), model.alphas())):
@@ -282,7 +277,7 @@ class SearchRegime(TrainRegime):
                     )
                 # init data row
                 dataRow = {self.batchNumKey: batchNum, self.archLossKey: trainStats.batchLoss(),
-                           self.pathsListKey: trainLogger.createInfoTable('Show', pathsListRows), self.timeKey: endTime - startTime,
+                           self.pathsListKey: trainLogger.createInfoTable('Show', pathsListRows),
                            self.gradientsKey: trainLogger.createInfoTable('Show', gradientRows)}
                 # add alphas distribution table
                 model.logTopAlphas(self.k, [createAlphasTable])
@@ -292,6 +287,8 @@ class SearchRegime(TrainRegime):
                 trainLogger.addDataRow(dataRow)
 
         epochLossDict = trainStats.epochLoss()
+        # save checkpoint
+        save_checkpoint(self.trainFolderPath, model, optimizer, epochLossDict)
         # log summary row
         summaryDataRow = {self.batchNumKey: self.summaryKey, self.archLossKey: epochLossDict}
         # delete batch num key format
@@ -302,14 +299,6 @@ class SearchRegime(TrainRegime):
         trainLogger.addSummaryDataRow(summaryDataRow)
 
         return epochLossDict, summaryDataRow
-
-    def _loss(self, input: tensor, target: tensor) -> (dict, list):
-        # calc paths loss for each alpha using replicator
-        lossDictsList, pathsList = self.replicator.loss(input, target)
-        # update statistics and alphas gradients based on loss
-        lossAvgDict = self._updateAlphasGradients(lossDictsList)
-
-        return lossAvgDict, pathsList
 
     @staticmethod
     def _getEpochRange(nEpochs: int) -> range:
@@ -432,6 +421,98 @@ class SearchRegime(TrainRegime):
             # save checkpoint
             save_checkpoint(self.trainFolderPath, model, optimizer, {})
 
+# =========== train per batch deprecated functions ===============
+# def _loss(self, input: tensor, target: tensor) -> (dict, list):
+#     # calc paths loss for each alpha using replicator
+#     lossDictsList, pathsList = self.replicator.loss(input, target)
+#     # update statistics and alphas gradients based on loss
+#     lossAvgDict = self._updateAlphasGradients(lossDictsList)
+#
+#     return lossAvgDict, pathsList
+
+# def trainAlphas(self, search_queue, optimizer, epoch, loggers):
+#     print('*** trainAlphas() ***')
+#     model = self.model
+#     replicator = self.replicator
+#     # init trainingStats instance
+#     trainStats = AlphaTrainingStats(self.flopsLoss.lossKeys(), useAvg=False)
+#     # init new epoch in replications
+#     replicator.initNewEpoch(model)
+#
+#     trainLogger = loggers.get(self.trainLoggerKey)
+#     if trainLogger:
+#         trainLogger.createDataTable('Epoch:[{}] - Alphas'.format(epoch), self.colsTrainAlphas)
+#
+#     def createInfoTable(dict, key, logger, rows):
+#         dict[key] = logger.createInfoTable('Show', rows)
+#
+#     def createAlphasTable(k, rows):
+#         createInfoTable(dataRow, self.alphasTableTitle, trainLogger, rows)
+#
+#     nBatches = len(search_queue)
+#     # update batch num key format
+#     self.formats[self.batchNumKey] = lambda x: '{}/{}'.format(x, nBatches)
+#
+#     for batchNum, (input, target) in enumerate(search_queue):
+#         startTime = time()
+#
+#         input = input.cuda().clone().detach().requires_grad_(False)
+#         target = target.cuda(async=True).clone().detach().requires_grad_(False)
+#
+#         # reset optimizer gradients
+#         optimizer.zero_grad()
+#         # evaluate on samples and calc alphas gradients
+#         lossAvgDict, pathsList = self._loss(input, target)
+#         # perform optimizer step
+#         optimizer.step()
+#
+#         endTime = time()
+#
+#         # update training stats
+#         for lossName, loss in lossAvgDict.items():
+#             trainStats.update(lossName, input, loss)
+#         # save alphas to csv
+#         model.saveAlphasCsv(data=[epoch, batchNum])
+#         # update alphas distribution statistics (after optimizer step)
+#         self._calcAlphasDistribStats(model)
+#         # update statistics plots
+#         self.statistics.plotData()
+#         # save checkpoint
+#         save_checkpoint(self.trainFolderPath, model, optimizer, lossAvgDict)
+#
+#         if trainLogger:
+#             # parse pathsList to InfoTable rows
+#             pathsListRows = self._pathsListToRows(pathsList)
+#             # parse alphas gradients to InfoTable rows
+#             gradientRows = [['Layer #', self.gradientsKey]]
+#             for layerIdx, (layer, alphas) in enumerate(zip(model.layersList(), model.alphas())):
+#                 gradientRows.append(
+#                     [layerIdx, [[self._alphaGradTitle(layer, idx), '{:.5f}'.format(alphas.grad[idx])] for idx in range(len(alphas))]]
+#                 )
+#             # init data row
+#             dataRow = {self.batchNumKey: batchNum, self.archLossKey: trainStats.batchLoss(),
+#                        self.pathsListKey: trainLogger.createInfoTable('Show', pathsListRows), self.timeKey: endTime - startTime,
+#                        self.gradientsKey: trainLogger.createInfoTable('Show', gradientRows)}
+#             # add alphas distribution table
+#             model.logTopAlphas(self.k, [createAlphasTable])
+#             # apply formats
+#             self._applyFormats(dataRow)
+#             # add row to data table
+#             trainLogger.addDataRow(dataRow)
+#
+#     epochLossDict = trainStats.epochLoss()
+#     # log summary row
+#     summaryDataRow = {self.batchNumKey: self.summaryKey, self.archLossKey: epochLossDict}
+#     # delete batch num key format
+#     del self.formats[self.batchNumKey]
+#     # apply formats
+#     self._applyFormats(summaryDataRow)
+#     # add row to data table
+#     trainLogger.addSummaryDataRow(summaryDataRow)
+#
+#     return epochLossDict, summaryDataRow
+
+# ============= old unused class ==========================================
 # class TrainPathWeights(TrainWeights):
 #     def __init__(self, regime):
 #         super(TrainPathWeights, self).__init__(regime)
