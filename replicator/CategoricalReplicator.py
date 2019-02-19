@@ -6,8 +6,8 @@ class CategoricalReplicator(ModelReplicator):
     def __init__(self, regime):
         super(CategoricalReplicator, self).__init__(regime)
 
-    def initPathsList(self) -> list:
-        return [[] for _ in self._model.layersList()]
+    # def initPathsList(self) -> list:
+    #     return [[] for _ in self._model.layersList()]
 
     def initLossDictsList(self) -> list:
         flopsLoss = self._regime.flopsLoss
@@ -17,7 +17,7 @@ class CategoricalReplicator(ModelReplicator):
         return CategoricalReplica
 
     @staticmethod
-    def iterateOverSamples(replica: CategoricalReplica, lossFunc, data, pathsHistoryDict, pathsList, lossDictsList, gpu: int):
+    def iterateOverSamples(replica: CategoricalReplica, lossFunc, data, pathsHistoryDict, lossDictsList, gpu: int):
         cModel = replica.getModel()
         # iterate over layers. in each layer iterate over alphas
         for layerIdx, layer in enumerate(cModel.layersList()):
@@ -33,20 +33,19 @@ class CategoricalReplicator(ModelReplicator):
                 for k, loss in lossDict.items():
                     alphaLossDict[k].append(loss.item())
 
-            ModelReplicator.evaluateSample(replica, lossFunc, data, pathsHistoryDict, pathsList[layerIdx], lossDictsList, generateTrainParams,
-                                           addLossDict)
+            ModelReplicator.evaluateSample(replica, lossFunc, data, pathsHistoryDict, lossDictsList, generateTrainParams, addLossDict)
 
-    def processResults(self, results: list) -> (list, list):
-        lossDictsList, pathsList = results[0]
+    def processResults(self, results: list) -> list:
+        raise ValueError('processResults() has NOT been modified to fit latest changes (iterating over all dataset instead of single batch)')
+        lossDictsList = results[0]
 
         # append lists from GPUs
-        for gpuLossDictsList, gpuPathsList in results[1:]:
+        for gpuLossDictsList in results[1:]:
             for layerIdx, layerLossDicts in enumerate(gpuLossDictsList):
-                # add paths to list by layer index
-                pathsList[layerIdx].extend(gpuPathsList[layerIdx])
+                # add loss to list by layer index
                 for alphaIdx, alphaLossDict in enumerate(layerLossDicts):
                     for lossName, lossList in alphaLossDict.items():
                         # add loss values to dict
                         lossDictsList[layerIdx][alphaIdx][lossName].extend(lossList)
 
-        return lossDictsList, pathsList
+        return lossDictsList
