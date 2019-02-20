@@ -263,8 +263,6 @@ class SearchRegime(TrainRegime):
             model.saveAlphasCsv(data=[epoch, batchNum])
             # update alphas distribution statistics (after optimizer step)
             self._calcAlphasDistribStats(model)
-            # update statistics plots
-            self.statistics.plotData()
 
             if trainLogger:
                 # parse paths list to InfoTable rows
@@ -291,6 +289,8 @@ class SearchRegime(TrainRegime):
         save_checkpoint(self.trainFolderPath, model, optimizer, epochLossDict)
         # log summary row
         summaryDataRow = {self.batchNumKey: self.summaryKey, self.archLossKey: epochLossDict}
+        # update statistics plots
+        self.statistics.plotData()
         # delete batch num key format
         del self.formats[self.batchNumKey]
         # apply formats
@@ -394,29 +394,31 @@ class SearchRegime(TrainRegime):
             alphasDataRow.update(additionalData)
             logger.addDataRow(alphasDataRow)
 
-            # create epoch jobs
-            epochDataRows = self._createEpochJobs(epoch)
+            # create jobs and train model weights
+            if (epoch % 20) == 0:
+                # create epoch jobs
+                epochDataRows = self._createEpochJobs(epoch)
 
-            # init train weights logger
-            wEpochName = '{}_w'.format(epoch)
-            weightsLogger = HtmlLogger(self.trainFolderPath, wEpochName)
-            # set random weights to model
-            model.restoreOriginalStateDictStructure()
-            model.loadRandomWeights(weightsLogger)
-            # init train weights instance
-            _TrainWeightsClass = self.TrainWeightsClass()
-            trainWeights = _TrainWeightsClass(self.getModel, self.getModelParallel, self.getArgs, lambda: weightsLogger, self.getTrainQueue,
-                                              self.getValidQueue, self.getTrainFolderPath, args.weights_epochs, epoch)
-            # train weights
-            trainWeights.train(wEpochName)
+                # init train weights logger
+                wEpochName = '{}_w'.format(epoch)
+                weightsLogger = HtmlLogger(self.trainFolderPath, wEpochName)
+                # set random weights to model
+                model.restoreOriginalStateDictStructure()
+                model.loadRandomWeights(weightsLogger)
+                # init train weights instance
+                _TrainWeightsClass = self.TrainWeightsClass()
+                trainWeights = _TrainWeightsClass(self.getModel, self.getModelParallel, self.getArgs, lambda: weightsLogger, self.getTrainQueue,
+                                                  self.getValidQueue, self.getTrainFolderPath, args.weights_epochs, epoch)
+                # train weights
+                trainWeights.train(wEpochName)
 
-            # add data row
-            trainDataRow = trainWeights.avgDictDataRow()
-            trainDataRow[self.epochNumKey] = self.formats[self.epochNumKey](epoch)
-            logger.addDataRow(trainDataRow)
-            # add epoch data rows
-            for jobDataRow in epochDataRows:
-                logger.addDataRow(jobDataRow, trType='<tr bgcolor="#2CBDD6">')
+                # add data row
+                trainDataRow = trainWeights.avgDictDataRow()
+                trainDataRow[self.epochNumKey] = self.formats[self.epochNumKey](epoch)
+                logger.addDataRow(trainDataRow)
+                # add epoch data rows
+                for jobDataRow in epochDataRows:
+                    logger.addDataRow(jobDataRow, trType='<tr bgcolor="#2CBDD6">')
 
             # save checkpoint
             save_checkpoint(self.trainFolderPath, model, optimizer, {})
