@@ -28,8 +28,8 @@ def train(scriptArgs):
         print('[{}] exists'.format(_validAccKey))
         exit(0)
 
-    if not hasattr(args, 'logInterval'):
-        args.logInterval = 50
+    # no need to save model random weights
+    args.saveRandomWeights = False
 
     # update args parameters
     args.seed = datetime.now().microsecond
