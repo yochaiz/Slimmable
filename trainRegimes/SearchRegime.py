@@ -118,11 +118,13 @@ class SearchRegime(TrainRegime):
     colsMainLogger = [epochNumKey, archLossKey, trainLossKey, trainAccKey, validLossKey, validAccKey, validFlopsRatioKey, widthKey, lrKey]
 
     # init statistics (plots) keys template
-    lossAvgTemplate = '{}_Loss_Avg'
-    lossVarianceTemplate = '{}_Loss_Variance'
+    batchLossAvgTemplate = '{}_Loss_Avg_(Batch)'
+    epochLossAvgTemplate = '{}_Loss_Avg_(Epoch)'
+    batchLossVarianceTemplate = '{}_Loss_Variance_(Batch)'
     # init statistics (plots) keys
     entropyKey = 'Alphas_Entropy'
-    alphaDistributionKey = 'Alphas_Distribution'
+    batchAlphaDistributionKey = 'Alphas_Distribution_(Batch)'
+    epochAlphaDistributionKey = 'Alphas_Distribution_(Epoch)'
 
     # init formats for keys
     formats = {
@@ -170,7 +172,9 @@ class SearchRegime(TrainRegime):
         self.secondsBetweenMails = 1 * 3600
 
     def buildStatsRules(self):
-        return {self.alphaDistributionKey: 1.1}
+        _alphaDistributionMaxVal = 1.1
+        return {self.batchAlphaDistributionKey: _alphaDistributionMaxVal,
+                self.epochAlphaDistributionKey: _alphaDistributionMaxVal}
 
     # apply defined format functions on dict values by keys
     def _applyFormats(self, dict):
@@ -195,8 +199,13 @@ class SearchRegime(TrainRegime):
         raise NotImplementedError('subclasses must override _alphaGradTitle()!')
 
     @abstractmethod
-    def _calcAlphasDistribStats(self, model: BaseNet):
+    def _calcAlphasDistribStats(self, model: BaseNet, alphaDistributionKey: str):
         raise NotImplementedError('subclasses must override _calcAlphasDistribStats()!')
+
+    # add epoch loss to statistics plots
+    @abstractmethod
+    def _updateEpochLossStats(self, epochLossDict: dict):
+        raise NotImplementedError('subclasses must override _updateEpochLossStats()!')
 
     # updates alphas gradients
     # updates statistics
@@ -220,6 +229,10 @@ class SearchRegime(TrainRegime):
 
     def TrainWeightsClass(self):
         return EpochTrainWeights
+
+    def _addValuesToStatistics(self, getListFunc: callable, templateStr: str, valuesDict: dict):
+        for k, v in valuesDict.items():
+            self.statistics.addValue(getListFunc(templateStr.format(k)), v)
 
     def trainAlphas(self, search_queue, optimizer, epoch, loggers):
         print('*** trainAlphas() ***')
@@ -261,8 +274,8 @@ class SearchRegime(TrainRegime):
                 trainStats.update(lossName, loss)
             # save alphas to csv
             model.saveAlphasCsv(data=[epoch, batchNum])
-            # update alphas distribution statistics (after optimizer step)
-            self._calcAlphasDistribStats(model)
+            # update batch alphas distribution statistics (after optimizer step)
+            self._calcAlphasDistribStats(model, self.batchAlphaDistributionKey)
 
             if trainLogger:
                 # parse paths list to InfoTable rows
@@ -289,14 +302,19 @@ class SearchRegime(TrainRegime):
         save_checkpoint(self.trainFolderPath, model, optimizer, epochLossDict)
         # log summary row
         summaryDataRow = {self.batchNumKey: self.summaryKey, self.archLossKey: epochLossDict}
-        # update statistics plots
-        self.statistics.plotData()
         # delete batch num key format
         del self.formats[self.batchNumKey]
         # apply formats
         self._applyFormats(summaryDataRow)
         # add row to data table
         trainLogger.addSummaryDataRow(summaryDataRow)
+
+        # update epoch alphas distribution statistics (after optimizer step)
+        self._calcAlphasDistribStats(model, self.epochAlphaDistributionKey)
+        # update epoch loss statistics
+        self._updateEpochLossStats(epochLossDict)
+        # update statistics plots
+        self.statistics.plotData()
 
         return epochLossDict, summaryDataRow
 
