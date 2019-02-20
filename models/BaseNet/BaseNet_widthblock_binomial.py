@@ -75,14 +75,14 @@ class AlphaPerWidthBlock(Alphas):
             self._tensor = _tensor
             self._layers = []
             self._layersIdx = []
-            self._container = None
+            self._container = {}
 
         def addLayer(self, layer, layerIdx):
             self._layers.append(layer)
             self._layersIdx.append(layerIdx)
 
-        def setContainer(self, _container):
-            self._container = _container
+        def addContainer(self, key, _container):
+            self._container[key] = _container
 
         @property
         def tensor(self):
