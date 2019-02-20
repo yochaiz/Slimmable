@@ -24,13 +24,13 @@ class MultinomialSearchRegime(SearchRegime):
         model = self.model
         lossClass = self.lossClass
 
-        container = {self.alphaDistributionKey: self._containerPerAlpha(model),
+        container = {self.batchAlphaDistributionKey: self._containerPerAlpha(model),
                      self.entropyKey: [{0: []}]}
         # add loss average keys
         for k in lossClass.lossKeys():
-            container[self.lossAvgTemplate.format(k)] = [{0: []}]
+            container[self.batchLossAvgTemplate.format(k)] = [{0: []}]
         # add loss variance keys
-        container[self.lossVarianceTemplate.format(lossClass.totalKey())] = [{0: []}]
+        container[self.batchLossVarianceTemplate.format(lossClass.totalKey())] = [{0: []}]
 
         return container
 
@@ -42,7 +42,7 @@ class MultinomialSearchRegime(SearchRegime):
 
         return pathsListRows
 
-    def _calcAlphasDistribStats(self, model: BaseNet_Multinomial):
+    def _calcAlphasDistribStats(self, model: BaseNet_Multinomial, alphaDistributionKey: str):
         stats = self.statistics
         # get probs
         probs = model.probs().cpu()
@@ -52,7 +52,7 @@ class MultinomialSearchRegime(SearchRegime):
         layer = model.layersList()[0]
         for alphaIdx, p in enumerate(probs):
             alphaTitle = self._alphaPlotTitle(layer, alphaIdx)
-            stats.addValue(lambda containers: containers[self.alphaDistributionKey][0][alphaTitle], p.item())
+            stats.addValue(lambda containers: containers[alphaDistributionKey][0][alphaTitle], p.item())
 
     # updates alphas gradients
     # updates statistics
@@ -105,15 +105,12 @@ class MultinomialSearchRegime(SearchRegime):
         lossVariance = [((x[totalKey].item() - lossAvg) ** 2) for x in lossDictsList]
         lossVariance = sum(lossVariance) / (nSamples - 1)
 
-        # get statistics element with a shorter name
-        stats = self.statistics
         # add values to statistics
         # init template for get list function based on container key
         getListFunc = lambda key: lambda containers: containers[key][0][0]
         # add loss average values to statistics
-        for lossKey, lossAvg in lossAvgDict.items():
-            stats.addValue(getListFunc(self.lossAvgTemplate.format(lossKey)), lossAvg)
+        self._addValuesToStatistics(getListFunc, self.batchLossAvgTemplate, lossAvgDict)
         # add loss variance values to statistics
-        stats.addValue(getListFunc(self.lossVarianceTemplate.format(totalKey)), lossVariance)
+        self._addValuesToStatistics(getListFunc, self.batchLossVarianceTemplate, {totalKey: lossVariance})
 
         return lossAvgDict

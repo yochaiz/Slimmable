@@ -16,13 +16,13 @@ class CategoricalSearchRegime(SearchRegime):
         model = self.model
         lossClass = self.lossClass
 
-        container = {self.alphaDistributionKey: self._containerPerAlpha(model),
+        container = {self.batchAlphaDistributionKey: self._containerPerAlpha(model),
                      self.entropyKey: [{layerIdx: [] for layerIdx in range(len(model.layersList()))}]}
         # add loss average keys
         for k in lossClass.lossKeys():
-            container[self.lossAvgTemplate.format(k)] = self._containerPerAlpha(model)
+            container[self.batchLossAvgTemplate.format(k)] = self._containerPerAlpha(model)
         # add loss variance keys
-        container[self.lossVarianceTemplate.format(lossClass.totalKey())] = self._containerPerAlpha(model)
+        container[self.batchLossVarianceTemplate.format(lossClass.totalKey())] = self._containerPerAlpha(model)
 
         return container
 
@@ -45,7 +45,7 @@ class CategoricalSearchRegime(SearchRegime):
     def _alphaGradTitle(self, layer, alphaIdx: int):
         return layer.widthRatioByIdx(alphaIdx)
 
-    def _calcAlphasDistribStats(self, model: BaseNet_Categorical):
+    def _calcAlphasDistribStats(self, model: BaseNet_Categorical, alphaDistributionKey: str):
         stats = self.statistics
         for layerIdx, layer in enumerate(model.layersList()):
             # calc layer alphas distribution
@@ -55,7 +55,7 @@ class CategoricalSearchRegime(SearchRegime):
             # add alphas distribution
             for alphaIdx, p in enumerate(probs):
                 alphaTitle = self._alphaPlotTitle(layer, alphaIdx)
-                stats.addValue(lambda containers: containers[self.alphaDistributionKey][layerIdx][alphaTitle], p.item())
+                stats.addValue(lambda containers: containers[alphaDistributionKey][layerIdx][alphaTitle], p.item())
 
     # updates alphas gradients
     # updates statistics
@@ -69,8 +69,6 @@ class CategoricalSearchRegime(SearchRegime):
         lossAvgDict = {k: 0.0 for k in self.flopsLoss.lossKeys()}
         # count how many alphas we have sum their loss average
         nAlphas = 0
-        # get statistics element with a shorter name
-        stats = self.statistics
         # init model probs list for gradient calcs
         probsList = []
         # after we finished iterating over samples, we can calculate loss average & variance for each alpha
@@ -106,10 +104,9 @@ class CategoricalSearchRegime(SearchRegime):
                 # init template for get list function based on container key
                 getListFunc = lambda key: lambda containers: containers[key][layerIdx][alphaTitle]
                 # add loss average values to statistics
-                for lossKey, lossAvg in alphaLossAvgDict.items():
-                    stats.addValue(getListFunc(self.lossAvgTemplate.format(lossKey)), lossAvg)
+                self._addValuesToStatistics(getListFunc, self.batchLossAvgTemplate, alphaLossAvgDict)
                 # add loss variance values to statistics
-                stats.addValue(getListFunc(self.lossVarianceTemplate.format(totalKey)), alphaLossVariance)
+                self._addValuesToStatistics(getListFunc, self.batchLossVarianceTemplate, {totalKey: alphaLossVariance})
 
             # update layer alphas gradient
             layerAlphas = layer.alphas()

@@ -9,21 +9,40 @@ class WidthBlockBinomialSearchRegime(BinomialSearchRegime):
     def _alphaPlotTitle(self, width: int):
         return 'Width:[{}]'.format(width)
 
-    def _containerPerAlpha(self, model: BaseNet_WidthBlock_Binomial) -> list:
+    def _containerPerAlpha(self, model: BaseNet_WidthBlock_Binomial, alphaDistributionKey: str) -> list:
+        # containersList is a list of containers per block
         containersList = []
         for width, alphaWidth in model.alphasDict().items():
+            # create block container
             container = {self._alphaPlotTitle(width): []}
+            # add block container to containersList
             containersList.append(container)
-            alphaWidth.setContainer(container)
+            # attach container to alpha (block)
+            alphaWidth.addContainer(alphaDistributionKey, container)
 
         return containersList
 
-    def _calcAlphasDistribStats(self, model: BaseNet_WidthBlock_Binomial):
+    def buildStatsContainers(self) -> dict:
+        model = self.model
+        lossClass = self.lossClass
+
+        container = {self.batchAlphaDistributionKey: self._containerPerAlpha(model, self.batchAlphaDistributionKey),
+                     self.epochAlphaDistributionKey: self._containerPerAlpha(model, self.epochAlphaDistributionKey)}
+        # add loss average keys
+        for k in lossClass.lossKeys():
+            container[self.batchLossAvgTemplate.format(k)] = [{0: []}]
+            container[self.epochLossAvgTemplate.format(k)] = [{0: []}]
+        # add loss variance keys
+        container[self.batchLossVarianceTemplate.format(lossClass.totalKey())] = [{0: []}]
+
+        return container
+
+    def _calcAlphasDistribStats(self, model: BaseNet_WidthBlock_Binomial, alphaDistributionKey: str):
         stats = self.statistics
         # add alphas distribution
         for width, alphaWidth in model.alphasDict().items():
             alphaTitle = self._alphaPlotTitle(width)
-            stats.addValue(lambda containers: alphaWidth.container[alphaTitle], alphaWidth.prob.item())
+            stats.addValue(lambda containers: alphaWidth.container[alphaDistributionKey][alphaTitle], alphaWidth.prob.item())
 
     # updates alphas gradients
     # updates statistics
@@ -73,15 +92,12 @@ class WidthBlockBinomialSearchRegime(BinomialSearchRegime):
         lossVariance = [((x[totalKey].item() - lossAvg) ** 2) for x in lossDictsList]
         lossVariance = sum(lossVariance) / (nSamples - 1)
 
-        # get statistics element with a shorter name
-        stats = self.statistics
         # add values to statistics
         # init template for get list function based on container key
         getListFunc = lambda key: lambda containers: containers[key][0][0]
         # add loss average values to statistics
-        for lossKey, lossAvg in lossAvgDict.items():
-            stats.addValue(getListFunc(self.lossAvgTemplate.format(lossKey)), lossAvg)
+        self._addValuesToStatistics(getListFunc, self.batchLossAvgTemplate, lossAvgDict)
         # add loss variance values to statistics
-        stats.addValue(getListFunc(self.lossVarianceTemplate.format(totalKey)), lossVariance)
+        self._addValuesToStatistics(getListFunc, self.batchLossVarianceTemplate, {totalKey: lossVariance})
 
         return lossAvgDict

@@ -49,21 +49,23 @@ class BinomialSearchRegime(SearchRegime):
         model = self.model
         lossClass = self.lossClass
 
-        container = {self.alphaDistributionKey: self._containerPerAlpha(model)}
+        container = {self.batchAlphaDistributionKey: self._containerPerAlpha(model),
+                     self.epochAlphaDistributionKey: self._containerPerAlpha(model)}
         # add loss average keys
         for k in lossClass.lossKeys():
-            container[self.lossAvgTemplate.format(k)] = [{0: []}]
+            container[self.batchLossAvgTemplate.format(k)] = [{0: []}]
+            container[self.epochLossAvgTemplate.format(k)] = [{0: []}]
         # add loss variance keys
-        container[self.lossVarianceTemplate.format(lossClass.totalKey())] = [{0: []}]
+        container[self.batchLossVarianceTemplate.format(lossClass.totalKey())] = [{0: []}]
 
         return container
 
-    def _calcAlphasDistribStats(self, model: BaseNet_Binomial):
+    def _calcAlphasDistribStats(self, model: BaseNet_Binomial, alphaDistributionKey: str):
         stats = self.statistics
         # add alphas distribution
         for layerIdx, layer in enumerate(model.layersList()):
             alphaTitle = self._alphaPlotTitle(layerIdx)
-            stats.addValue(lambda containers: containers[self.alphaDistributionKey][layerIdx][alphaTitle], layer.probs().item())
+            stats.addValue(lambda containers: containers[alphaDistributionKey][layerIdx][alphaTitle], layer.probs().item())
 
     def _pathsListToRows(self, batchLossDictsList: list) -> list:
         pathsListRows = [['#', 'Paths']]
@@ -73,6 +75,12 @@ class BinomialSearchRegime(SearchRegime):
             pathsListRows.append([pathIdx + 1, [['Path', partitionRatio], ['Loss', self.formats[self.trainLossKey](formattedLossDict)]]])
 
         return pathsListRows
+
+    def _getListFunc(self):
+        return lambda key: lambda containers: containers[key][0][0]
+
+    def _updateEpochLossStats(self, epochLossDict: dict):
+        self._addValuesToStatistics(self._getListFunc(), self.epochLossAvgTemplate, epochLossDict)
 
     # updates alphas gradients
     # updates statistics
@@ -116,15 +124,12 @@ class BinomialSearchRegime(SearchRegime):
         lossVariance = [((x[totalKey].item() - lossAvg) ** 2) for x in lossDictsList]
         lossVariance = sum(lossVariance) / (nSamples - 1)
 
-        # get statistics element with a shorter name
-        stats = self.statistics
         # add values to statistics
         # init template for get list function based on container key
-        getListFunc = lambda key: lambda containers: containers[key][0][0]
+        getListFunc = self._getListFunc()
         # add loss average values to statistics
-        for lossKey, lossAvg in lossAvgDict.items():
-            stats.addValue(getListFunc(self.lossAvgTemplate.format(lossKey)), lossAvg)
+        self._addValuesToStatistics(getListFunc, self.batchLossAvgTemplate, lossAvgDict)
         # add loss variance values to statistics
-        stats.addValue(getListFunc(self.lossVarianceTemplate.format(totalKey)), lossVariance)
+        self._addValuesToStatistics(getListFunc, self.batchLossVarianceTemplate, {totalKey: lossVariance})
 
         return lossAvgDict
