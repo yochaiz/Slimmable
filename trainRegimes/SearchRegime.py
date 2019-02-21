@@ -404,8 +404,10 @@ class SearchRegime(TrainRegime):
             # update scheduler
             scheduler.step(epochLossDict.get(self.flopsLoss.totalKey()))
 
+            # calc model choosePathAlphasAsPartition flops ratio
+            model.choosePathAlphasAsPartition()
             # add values to alphas data row
-            additionalData = {self.epochNumKey: epoch, self.lrKey: optimizer.param_groups[0]['lr']}
+            additionalData = {self.epochNumKey: epoch, self.lrKey: optimizer.param_groups[0]['lr'], self.validFlopsRatioKey: model.flopsRatio()}
             self._applyFormats(additionalData)
             alphasDataRow.update(additionalData)
             logger.addDataRow(alphasDataRow)
