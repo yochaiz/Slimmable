@@ -413,7 +413,7 @@ class SearchRegime(TrainRegime):
             logger.addDataRow(alphasDataRow)
 
             # create jobs and train model weights
-            if (epoch % 20) == 0:
+            if (epoch % args.train_weights_interval) == 0:
                 # create epoch jobs
                 epochDataRows = self._createEpochJobs(epoch)
 
