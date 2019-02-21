@@ -32,18 +32,20 @@ class MultinomialReplicator(ModelReplicator):
         ModelReplicator.evaluateSample(replica, lossFunc, data, pathsHistoryDict, lossDictsList, generateTrainParams, addLossDict)
 
     def processResults(self, results: list) -> list:
-        lossDictsList = results[0]
+        gpuLossDictsList = results[0]
 
         # sort loss dictionaries in lossDictsList by batch
         # each element in lossDictsList is a list of loss dictionaries of the same batch
-        lossDictsList = [[lossDict] for lossDict in lossDictsList]
+        pathLossDictsList = gpuLossDictsList[0]
+        lossDictsList = [[] for _ in range(len(pathLossDictsList))]
 
         # append lists from GPUs
-        for gpuLossDictsList in results[1:]:
-            # add loss dictionaries by batch
-            assert (len(lossDictsList) == len(gpuLossDictsList))
-            for batchLossDictsList, lossDict in zip(lossDictsList, gpuLossDictsList):
-                batchLossDictsList.append(lossDict)
+        for gpuLossDictsList in results:
+            for pathLossDictsList in gpuLossDictsList:
+                # add loss dictionaries by batch
+                assert (len(lossDictsList) == len(pathLossDictsList))
+                for batchLossDictsList, lossDict in zip(lossDictsList, pathLossDictsList):
+                    batchLossDictsList.append(lossDict)
 
         return lossDictsList
 

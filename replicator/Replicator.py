@@ -279,6 +279,7 @@ class ModelReplicator:
     def evaluateSample(replica: Replica, lossFunc: callable, dataset, pathsHistoryDict: dict, lossDictsList: list,
                        generateTrainParams: callable, addLossDict: callable):
         cModel = replica.getModel()
+        print('alphas:{}'.format(cModel.alphas()))
         print('indices:{}'.format(dataset.sampler.indices[0:10]))
         # select new path based on alphas distribution.
         # check that selected path hasn't been selected before
@@ -289,6 +290,8 @@ class ModelReplicator:
         trainedPaths = replica.train(trainParams)
         # switch to eval mode
         cModel.eval()
+        # init path loss dictionaries list
+        pathLossDictsList = []
         # evaluate batch over trained paths
         with no_grad():
             for input, target in dataset:
@@ -303,7 +306,10 @@ class ModelReplicator:
                     # calc loss
                     lossDict = lossFunc(logits, target, cModel.countFlops())
                     # add loss to container
-                    addLossDict(lossDict, lossDictsList, widthRatio, trainedPathIdx)
+                    addLossDict(lossDict, pathLossDictsList, widthRatio, trainedPathIdx)
+
+        # add path loss dictionaries list to lossDictsList
+        lossDictsList.append(pathLossDictsList)
 
 # ======== deprecated path per batch functions =============
 # ======== current functions sample path per data set ======
