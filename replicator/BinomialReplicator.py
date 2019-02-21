@@ -12,8 +12,15 @@ class BinomialReplicator(MultinomialReplicator):
         def addLossDict(lossDict: dict, lossDictsList: list, widthRatio: float, trainedPathIdx: list):
             trainedPathWidth = cModel.currWidth()
             trainPathWidthRatio = cModel.currWidthRatio()
-            print('trainedPathWidth:{}'.format(trainedPathWidth))
-            lossDictsList.append((lossDict, trainedPathWidth, trainPathWidthRatio))
+
+            alphasDict = cModel.alphasDict()
+            widthDiffDict = {}
+            for width, alphaWidth in alphasDict.items():
+                # take one of alpha layers index, in order to get actual alpha width in current partition
+                layerIdx = alphaWidth.layersIdxList()[0]
+                widthDiffDict[width] = trainedPathWidth[layerIdx] - alphaWidth.mean(width).item()
+
+            lossDictsList.append((lossDict, widthDiffDict, trainPathWidthRatio))
 
         generateTrainParams = MultinomialReplicator.generateTrainParams
 
