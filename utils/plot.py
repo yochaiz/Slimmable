@@ -384,11 +384,8 @@ def plotCompareFolders(foldersList):
 # widthRatio = [0.25, 0.5, 0.75, 1.0]
 # dataset = 'imagenet'
 # basePath = '/home/vista/Desktop/Architecture_Search/results/{}/'.format(dataset)
-basePath = '/home/vista/Desktop/Architecture_Search/results_categorical/' + \
-           '[resnet18],[cifar10],[0.001],[0.25, 0.375, 0.5, 0.625, 0.75, 1.0],[20190122-123654]'
-folderPath = '{}/jobs/Done/checkpoints'.format(basePath)
 
-folderPath = '/home/vista/Desktop/Architecture_Search/results_categorical/checkpoints'
+folderPath = '/home/vista/Desktop/Architecture_Search/results_block_binomial/checkpoints'
 
 # buildWidthRatioMissingCheckpoints(widthRatio, nBlocks=3)
 # updateCheckpointBlocksPartition(folderPath)
