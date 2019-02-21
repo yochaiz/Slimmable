@@ -69,7 +69,7 @@ class BinomialSearchRegime(SearchRegime):
 
     def _pathsListToRows(self, batchLossDictsList: list) -> list:
         pathsListRows = [['#', 'Paths']]
-        for pathIdx, (lossDict, partition, partitionRatio) in enumerate(batchLossDictsList):
+        for pathIdx, (lossDict, widthDiffDict, partitionRatio) in enumerate(batchLossDictsList):
             # build formatted loss dict
             formattedLossDict = {k: '{:.3f}'.format(v) for k, v in lossDict.items()}
             pathsListRows.append([pathIdx + 1, [['Path', partitionRatio], ['Loss', self.formats[self.trainLossKey](formattedLossDict)]]])
