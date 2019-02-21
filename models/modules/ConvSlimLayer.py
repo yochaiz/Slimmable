@@ -72,7 +72,7 @@ class ConvSlimLayer(SlimLayer):
         # narrow conv weights (i.e. filters) according to current nFilters
         convWeights = self.conv.weight.narrow(0, 0, self._widthList[self._currWidthIdx])
         # narrow conv weights (i.e. filters) according to previous layer nFilters
-        convWeights = convWeights.narrow(1, 0, self.prevLayer.currWidth())
+        convWeights = convWeights.narrow(1, 0, self.prevLayer().currWidth())
 
         # perform forward
         out = conv2d(x, convWeights, bias=self.conv.bias, stride=self.conv.stride, padding=self.conv.padding, dilation=self.conv.dilation,
@@ -110,7 +110,7 @@ class ConvSlimLayer(SlimLayer):
 
         # iterate over current layer widths & previous layer widths
         for width in self.flopsWidthList():
-            for prevWidth in self.prevLayer.flopsWidthList():
+            for prevWidth in self.prevLayer().flopsWidthList():
                 conv = Conv2d(prevWidth, width, self.conv.kernel_size, bias=self.conv.bias, stride=self.conv.stride,
                               padding=self.conv.padding, dilation=self.conv.dilation, groups=self.conv.groups)
                 flops, output_size = count_flops(conv, input_size, prevWidth)

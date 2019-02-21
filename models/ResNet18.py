@@ -110,7 +110,7 @@ class TempDownsample(Downsample):
         return self.standardResidual
 
     def updateCurrWidth(self):
-        _prevLayer = self._downsampleSrc.prevLayer
+        _prevLayer = self._downsampleSrc.prevLayer()
         _conv2 = self.conv2[0]
         # update downsampleSrc currWidthIdx according to conv2 currWidthIdx
         self._downsampleSrc.setCurrWidthIdx(_conv2.currWidthIdx())

@@ -30,14 +30,14 @@ class BaseNet_WidthBlock_Binomial(BaseNet):
         super(BaseNet_WidthBlock_Binomial, self).__init__(args, initLayersParams)
 
     def alphasDict(self):
-        return self._alphas.alphasDict
+        return self._alphas.alphasDict()
 
     def _choosePath(self, calcNewWidthFunc: callable):
-        for width, alphaWidth in self._alphas.alphasDict.items():
+        for width, alphaWidth in self.alphasDict().items():
             # calc new width
             newWidth = calcNewWidthFunc(width, alphaWidth)
             # apply new width to layers
-            for layer in alphaWidth.layersList:
+            for layer in alphaWidth.layersList():
                 layer.setCurrWidth(newWidth)
 
         # update curr width changes in each block
@@ -48,7 +48,7 @@ class BaseNet_WidthBlock_Binomial(BaseNet):
     def choosePathByAlphas(self):
         def calcNewWidthFunc(width: int, alphaWidth: AlphaPerWidthBlock.AlphaWidth):
             # define Binomial distribution on n-1 layer filters (because we have to choose at least one filter)
-            dist = Binomial(width - 1, logits=alphaWidth.tensor)
+            dist = Binomial(width - 1, logits=alphaWidth.tensor())
             # draw from distribution
             return 1 + dist.sample().type(int32).item()
 
@@ -84,33 +84,27 @@ class AlphaPerWidthBlock(Alphas):
         def addContainer(self, key, _container):
             self._container[key] = _container
 
-        @property
         def tensor(self):
             return self._tensor
 
-        @property
         def container(self):
             return self._container
 
-        @property
         def prob(self):
             return sigmoid(self._tensor).detach()
 
         def mean(self, width: int):
-            return 1 + (self.prob * (width - 1))
+            return 1 + (self.prob() * (width - 1))
 
-        @property
         def layersList(self):
             return self._layers
 
-        @property
         def layersIdxList(self):
             return self._layersIdx
 
     def __init__(self, model: BaseNet_WidthBlock_Binomial, saveFolder: str):
         super(AlphaPerWidthBlock, self).__init__(model, saveFolder)
 
-    @property
     def alphasDict(self):
         return self._alphasDict
 
@@ -142,7 +136,7 @@ class AlphaPerWidthBlock(Alphas):
     def alphasList(self, model: BaseNet_WidthBlock_Binomial):
         _alphasList = []
         for width, alphaWidth in self._alphasDict.items():
-            _data = (alphaWidth.tensor, alphaWidth.prob, ['{:.3f}'.format(alphaWidth.mean(width).item())], 'Block width:[{}]'.format(width))
+            _data = (alphaWidth.tensor(), alphaWidth.prob(), ['{:.3f}'.format(alphaWidth.mean(width).item())], 'Block width:[{}]'.format(width))
             _alphasList.append(_data)
 
         return _alphasList

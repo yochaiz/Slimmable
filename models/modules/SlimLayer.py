@@ -24,7 +24,7 @@ class SlimLayer(Block):
         self._forwardCounters = self._initForwardCounters()
 
         # count flops for each width
-        self.flopsDict, self.output_size = self.countWidthFlops(self.prevLayer.outputSize()) if countFlopsFlag else (None, None)
+        self.flopsDict, self.output_size = self.countWidthFlops(self.prevLayer().outputSize()) if countFlopsFlag else (None, None)
 
     @abstractmethod
     def _buildWidthList(self, buildParams):
@@ -61,9 +61,8 @@ class SlimLayer(Block):
         return self.flopsDict, self.output_size
 
     def countFlops(self):
-        return self.flopsDict[(self.prevLayer.currWidth(), self.currWidth())]
+        return self.flopsDict[(self.prevLayer().currWidth(), self.currWidth())]
 
-    @property
     def prevLayer(self):
         return self._prevLayer[0]
 
