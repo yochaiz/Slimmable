@@ -42,7 +42,7 @@ class WidthBlockBinomialSearchRegime(BinomialSearchRegime):
         # add alphas distribution
         for width, alphaWidth in model.alphasDict().items():
             alphaTitle = self._alphaPlotTitle(width)
-            stats.addValue(lambda containers: alphaWidth.container[alphaDistributionKey][alphaTitle], alphaWidth.prob.item())
+            stats.addValue(lambda containers: alphaWidth.container()[alphaDistributionKey][alphaTitle], alphaWidth.prob().item())
 
     # updates alphas gradients
     # updates statistics
@@ -52,7 +52,6 @@ class WidthBlockBinomialSearchRegime(BinomialSearchRegime):
         nSamples = len(lossDictsPartitionList)
 
         # get model alphas
-        # alphas = model.alphas()
         alphasDict = model.alphasDict()
         nAlphas = len(alphasDict.keys())
         # init loss dicts list
@@ -62,23 +61,21 @@ class WidthBlockBinomialSearchRegime(BinomialSearchRegime):
         # init model alphas gradient tensor
         alphasGrad = {width: zeros(1, requires_grad=True).cuda() for width in alphasDict.keys()}
         # iterate over losses
-        for lossDict, partition, partitionRatio in lossDictsPartitionList:
+        for lossDict, widthDiffDict, partitionRatio in lossDictsPartitionList:
             # add lossDict to loss dicts list
             lossDictsList.append(lossDict)
             # sum loss by keys
             for k, v in lossDict.items():
                 lossAvgDict[k] += v.item()
             # calc lossDict contribution to each layer alpha gradient
-            for width, alphaWidth in alphasDict.items():
-                # take one of alpha layers index, in order to get actual alpha width in current partition
-                layerIdx = alphaWidth.layersIdxList[0]
+            for width, widthDiff in widthDiffDict.items():
                 # add element to alpha gradient
-                alphasGrad[width] += ((partition[layerIdx] - alphaWidth.mean(width)) * lossDict[totalKey].item())
+                alphasGrad[width] += (widthDiff * lossDict[totalKey].item())
 
         # average gradient and put in layer.alpha.grad
         assert (nAlphas == len(alphasGrad.keys()))
         for width, alphaWidth in alphasDict.items():
-            alphaTensor = alphaWidth.tensor
+            alphaTensor = alphaWidth.tensor()
             alphaTensor.grad = (alphasGrad[width] / nSamples)
 
         # update gradient
