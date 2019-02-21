@@ -283,6 +283,7 @@ class ModelReplicator:
         # select new path based on alphas distribution.
         # check that selected path hasn't been selected before
         pathWidthIdx = ModelReplicator._generateNewPath(replica, pathsHistoryDict)
+        print('Path width:{}'.format(cModel.currWidth()))
         # train model on path
         trainParams = generateTrainParams(pathWidthIdx)
         trainedPaths = replica.train(trainParams)
