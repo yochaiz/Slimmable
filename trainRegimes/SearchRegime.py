@@ -298,8 +298,6 @@ class SearchRegime(TrainRegime):
                 trainLogger.addDataRow(dataRow)
 
         epochLossDict = trainStats.epochLoss()
-        # save checkpoint
-        save_checkpoint(self.trainFolderPath, model, optimizer, epochLossDict)
         # log summary row
         summaryDataRow = {self.batchNumKey: self.summaryKey, self.archLossKey: epochLossDict}
         # delete batch num key format
@@ -412,6 +410,9 @@ class SearchRegime(TrainRegime):
             alphasDataRow.update(additionalData)
             logger.addDataRow(alphasDataRow)
 
+            # save checkpoint
+            save_checkpoint(self.trainFolderPath, model, optimizer, epochLossDict)
+
             # create jobs and train model weights
             if (epoch % args.train_weights_interval) == 0:
                 # create epoch jobs
@@ -437,9 +438,6 @@ class SearchRegime(TrainRegime):
                 # add epoch data rows
                 for jobDataRow in epochDataRows:
                     logger.addDataRow(jobDataRow, trType='<tr bgcolor="#2CBDD6">')
-
-            # save checkpoint
-            save_checkpoint(self.trainFolderPath, model, optimizer, {})
 
 # =========== train per batch deprecated functions ===============
 # def _loss(self, input: tensor, target: tensor) -> (dict, list):
