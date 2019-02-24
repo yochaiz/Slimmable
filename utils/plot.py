@@ -204,17 +204,16 @@ def fixCheckpointFlops(folderPath):
 def plotFolders(folderPath):
     # init flops data with inner folders as keys, [] as values
     flopsData = {}
+    filesFlopsData = {}
     # init labels to connect list
     labelsToConnect = []
     # Map each partition to index, for easier mapping in plot
     partitionIdxMap = {}
     # init colors
     colormap = plt.cm.hot
-    colors = [colormap(i) for i in linspace(0.7, 0.0, len(listdir(folderPath)))]
-    # set folders color index
-    folderColorIdx = 0
-    # set next color index
-    nextColorIdx = 1
+    folderColorVal = 0.7
+    # init folders color
+    folderColor = colormap(folderColorVal)
     # iterate over folders
     for folder in sorted(listdir(folderPath)):
         fPath = '{}/{}'.format(folderPath, folder)
@@ -223,7 +222,7 @@ def plotFolders(folderPath):
                 # set label
                 label = folder
                 # create PlotLabelData instance
-                labelData = PlotLabelData(label, label, colors[folderColorIdx])
+                labelData = PlotLabelData(label, label, folderColor)
                 # add PlotLabelData instance to folder FlopsData dictionary
                 flopsData[label] = labelData
                 # add to labelsToConnect list
@@ -264,13 +263,26 @@ def plotFolders(folderPath):
                     label = partitionKey
                     # set label to checkpoint
                     setattr(checkpoint, _titleKey, label)
-                    # check if partitionKey exits under folderName
-                    if partitionKey not in flopsData:
+
+                    # save checkpoints by epoch and ID in order to be able to sort them by epoch
+                    epoch = checkpoint.epoch
+                    id = checkpoint.id
+                    if epoch not in filesFlopsData:
+                        filesFlopsData[epoch] = {}
+                    if id not in filesFlopsData[epoch]:
                         # add PlotLabelData instance to folder FlopsData dictionary
-                        flopsData[partitionKey] = PlotLabelData(partitionKey, label, colors[nextColorIdx])
-                        nextColorIdx += 1
+                        filesFlopsData[epoch][id] = PlotLabelData(partitionKey, label)
+
                     # add checkpoint
-                    flopsData[partitionKey].addCheckpoint(checkpoint)
+                    filesFlopsData[epoch][id].addCheckpoint(checkpoint)
+
+                    # # check if partitionKey exits under folderName
+                    # if partitionKey not in flopsData:
+                    #     # add PlotLabelData instance to folder FlopsData dictionary
+                    #     flopsData[partitionKey] = PlotLabelData(partitionKey, label, colors[nextColorIdx])
+                    #     nextColorIdx += 1
+                    # # add checkpoint
+                    # flopsData[partitionKey].addCheckpoint(checkpoint)
 
         except Exception as e:
             print('Missing values in {}'.format(folder))
@@ -283,6 +295,23 @@ def plotFolders(folderPath):
     # # set color to each key
     # for idx, v in enumerate(flopsData.values()):
     #     v.setColor(colors[idx])
+
+    # init list of colors for checkpoints per epoch
+    colors = [colormap(i) for i in linspace(folderColorVal, 0.0, len(filesFlopsData.keys()) + 1)]
+    # set next color index
+    nextColorIdx = 1
+
+    # iterate over checkpoints: set them color per epoch and add them sorted to flopsData
+    for epoch in sorted(filesFlopsData.keys()):
+        for id in sorted(filesFlopsData[epoch].keys()):
+            # get checkpoint
+            elem = filesFlopsData[epoch][id]
+            # set color
+            elem.setColor(colors[nextColorIdx])
+            # add to flopsData
+            flopsData[elem.legendString()] = elem
+        # set new color to new epoch
+        nextColorIdx += 1
 
     # plot
     partitionFunc = lambda checkpoint: getattr(checkpoint, partitionAttrKey, None)
