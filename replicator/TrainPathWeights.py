@@ -12,7 +12,7 @@ class TrainPathWeights(TrainWeights):
         self._gpu = gpu
 
     def stopCondition(self, epoch):
-        return epoch >= 5
+        return epoch >= 150
 
     def widthList(self):
         return self.trainPaths.items()
