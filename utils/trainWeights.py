@@ -184,7 +184,7 @@ class TrainWeights:
 
     # performs single epoch of model weights training
     def weightsEpoch(self, optimizer, epoch, loggers) -> EpochData:
-        print('*** weightsEpoch() ***')
+        # print('*** weightsEpoch() ***')
         model = self.getModel()
         modelParallel = self.getModelParallel()
 
