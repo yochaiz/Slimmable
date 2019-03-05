@@ -26,7 +26,7 @@ def checkpointPrefix(fileName):
 
 def train(scriptArgs):
     # load args from file
-    args = loadCheckpoint('{}/{}'.format(scriptArgs.folderPath, scriptArgs.json), map_location=lambda storage, loc: storage.cuda())
+    args = loadCheckpoint(scriptArgs.json, map_location=lambda storage, loc: storage.cuda())
 
     # terminate if validAcc exists
     _validAccKey = TrainWeights.validAccKey
@@ -56,12 +56,6 @@ def train(scriptArgs):
     if modelFlopsPath and exists(modelFlopsPath):
         setattr(args, BaseNet.modelFlopsKey(), loadCheckpoint(modelFlopsPath))
 
-    # # extract args JSON folder path
-    # folderName = dirname(scriptArgs.json)
-    # # results folder is JSON filename
-    # jsonFileName = basename(scriptArgs.json)
-    # set results folder path
-    args.save = '{}/{}'.format(scriptArgs.folderPath, checkpointPrefix(scriptArgs.json))
     folderNotExists = not exists(args.save)
     if folderNotExists:
         create_exp_dir(args.save)
@@ -89,15 +83,15 @@ def iterateFolder(scriptArgs):
                 prefix = checkpointPrefix(file)
                 folderName = '{}-{}'.format(prefix, scriptArgs.repeatNum)
                 # init checkpoint folder path
-                folderPath = '{}/{}'.format(scriptArgs.folderPath, folderName)
-                if not exists(folderPath):
+                scriptArgs.save = '{}/{}'.format(scriptArgs.folderPath, folderName)
+                if not exists(scriptArgs.save):
                     # init new checkpoint file name
                     scriptArgs.json = '{}.{}'.format(folderName, checkpointFileType)
                     # init original & new checkpoints paths
                     filePath = '{}/{}'.format(scriptArgs.folderPath, file)
-                    jsonPath = '{}/{}'.format(scriptArgs.folderPath, scriptArgs.json)
+                    scriptArgs.json = '{}/{}'.format(scriptArgs.folderPath, scriptArgs.json)
                     # copy checkpoint
-                    copy2(filePath, jsonPath)
+                    copy2(filePath, scriptArgs.json)
                     # train checkpoint
                     trainedCheckpoint = train(scriptArgs)
                     foundCheckpointToTrain = foundCheckpointToTrain or trainedCheckpoint
