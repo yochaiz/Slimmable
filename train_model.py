@@ -102,7 +102,7 @@ def iterateFolder(scriptArgs):
                     trainedCheckpoint = train(scriptArgs)
                     foundCheckpointToTrain = foundCheckpointToTrain or trainedCheckpoint
                     # remove original checkpoint
-                    remove(file)
+                    remove(filePath)
 
 
 if not is_available():
