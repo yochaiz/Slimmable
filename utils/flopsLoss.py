@@ -1,6 +1,9 @@
-from torch import tensor, float32
-from torch.nn import CrossEntropyLoss, Module
 from numpy import linspace
+from bisect import bisect_left
+
+from torch import tensor, float32, sigmoid
+from torch.nn import CrossEntropyLoss, Module, LeakyReLU
+from torch.serialization import load
 import matplotlib
 
 matplotlib.use('Agg')
@@ -8,12 +11,20 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 
+class LossDiff:
+    def __init__(self):
+        self._lossFunc = LeakyReLU(0.1)
+
+    def calcLoss(self, x: tensor) -> tensor:
+        return self._lossFunc.negative_slope + self._lossFunc(x)
+
+
 # loss function class
 class LossFunction:
-    def __init__(self, minFlops):
+    def __init__(self, minFlops: float):
         self.minFlops = minFlops
 
-    def calcLoss(self, modelFlops):
+    def calcLoss(self, modelFlops: float) -> tensor:
         v = (modelFlops / self.minFlops) ** 2
         return tensor(v, dtype=float32).cuda()
 
@@ -25,29 +36,57 @@ class FlopsLoss(Module):
     _flopsKey = 'Flops'
     _lossKeys = [_totalKey, _crossEntropyKey, _flopsKey]
 
-    def __init__(self, args, baselineFlopsDict):
+    def __init__(self, args, baselineFlopsDict: dict):
         super(FlopsLoss, self).__init__()
 
         self.lmbda = args.lmbda
         self.crossEntropyLoss = CrossEntropyLoss().cuda()
         self.baselineFlops = baselineFlopsDict.get(args.baseline)
 
-        self.flopsLoss = LossFunction(self.baselineFlops).calcLoss
+        # self.flopsLoss = LossFunction(self.baselineFlops).calcLoss
+        # self.flopsLossImgPath = '{}/flops_loss_func.pdf'.format(args.save)
+        # self._plotFunction(self.flopsLoss, baselineFlopsDict.values())
+
+        homogeneousLoss = load('homogeneous.pth.tar')
+        self._linearLineParams = homogeneousLoss.linearLineParams
+        self._flopsList = sorted(homogeneousLoss.flopsDict.keys())
+
+        self._flopsLoss = LossDiff().calcLoss
         self.flopsLossImgPath = '{}/flops_loss_func.pdf'.format(args.save)
-        self._plotFunction(self.flopsLoss, baselineFlopsDict.values())
+        self._plotFunction(lambda x: self._flopsLoss(tensor(x)), [-2., -1., -0.1, -0.05, 0., 0.05, 0.1, 1., 2.])
 
     @staticmethod
-    def lossKeys():
+    def lossKeys() -> str:
         return FlopsLoss._lossKeys
 
     @staticmethod
-    def totalKey():
+    def totalKey() -> str:
         return FlopsLoss._totalKey
 
-    def forward(self, input, target, modelFlops):
+    # def forward(self, input: tensor, target: tensor, modelFlops: float) -> dict:
+    #     loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
+    #             self._flopsKey: self.lmbda * self.flopsLoss(modelFlops)}
+    #     loss[self._totalKey] = sum(loss.values())
+    #
+    #     return loss
+
+    def forward(self, input: tensor, target: tensor, modelFlops: float) -> dict:
         loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
-                self._flopsKey: self.lmbda * self.flopsLoss(modelFlops)}
-        loss[self._totalKey] = sum(loss.values())
+                self._flopsKey: tensor(modelFlops, dtype=float32).cuda()}
+
+        # find modelFlops corresponding linear line
+        flopsIdx = bisect_left(self._flopsList, modelFlops)
+        if flopsIdx <= 0:
+            # it is possible to select configuration with flops less than homogeneous 0.25
+            x0, x1 = self._flopsList[0:2]
+        else:
+            x0, x1 = self._flopsList[flopsIdx - 1:flopsIdx + 1]
+            assert (x0 <= modelFlops <= x1)
+        m, b = self._linearLineParams[(x0, x1)]
+        # calc expected loss for modelFlops
+        expectedLoss = (m * modelFlops) + b
+        lossDiff = loss[self._crossEntropyKey] - expectedLoss
+        loss[self._totalKey] = self._flopsLoss(lossDiff / expectedLoss)
 
         return loss
 
