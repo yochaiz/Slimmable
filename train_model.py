@@ -78,7 +78,8 @@ def iterateFolder(scriptArgs):
         foundCheckpointToTrain = False
         checkpointsList = sorted(listdir(scriptArgs.folderPath), reverse=True)
         for file in checkpointsList:
-            if file.endswith('].{}'.format(checkpointFileType)):
+            filePath = '{}/{}'.format(scriptArgs.folderPath, file)
+            if file.endswith('].{}'.format(checkpointFileType)) and exists(filePath):
                 # init folder name
                 prefix = checkpointPrefix(file)
                 folderName = '{}-{}'.format(prefix, scriptArgs.repeatNum)
@@ -88,16 +89,16 @@ def iterateFolder(scriptArgs):
                     # init new checkpoint file name
                     scriptArgs.json = '{}.{}'.format(folderName, checkpointFileType)
                     # init original & new checkpoints paths
-                    filePath = '{}/{}'.format(scriptArgs.folderPath, file)
                     scriptArgs.json = '{}/{}'.format(scriptArgs.folderPath, scriptArgs.json)
                     # copy checkpoint
-                    copy2(filePath, scriptArgs.json)
-                    # train checkpoint
-                    trainedCheckpoint = train(scriptArgs)
-                    foundCheckpointToTrain = foundCheckpointToTrain or trainedCheckpoint
-                    # remove original checkpoint
-                    if trainedCheckpoint and exists(filePath):
-                        remove(filePath)
+                    if exists(filePath):
+                        copy2(filePath, scriptArgs.json)
+                        # train checkpoint
+                        trainedCheckpoint = train(scriptArgs)
+                        foundCheckpointToTrain = foundCheckpointToTrain or trainedCheckpoint
+                        # remove original checkpoint
+                        if trainedCheckpoint and exists(filePath):
+                            remove(filePath)
 
 
 if not is_available():
