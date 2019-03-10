@@ -1,10 +1,14 @@
 from .BinomialSearchRegime import BinomialSearchRegime, zeros
+from replicator.BinomialReplicator import BlockBinomialReplicator
 from models.BaseNet.BaseNet_widthblock_binomial import BaseNet_WidthBlock_Binomial
 
 
 class WidthBlockBinomialSearchRegime(BinomialSearchRegime):
     def __init__(self, args, logger):
         super(WidthBlockBinomialSearchRegime, self).__init__(args, logger)
+
+    def initReplicator(self) -> BlockBinomialReplicator:
+        return BlockBinomialReplicator(self)
 
     def _alphaPlotTitle(self, width: int):
         return 'Width:[{}]'.format(width)
