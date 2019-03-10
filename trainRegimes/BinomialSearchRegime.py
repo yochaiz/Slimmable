@@ -99,15 +99,16 @@ class BinomialSearchRegime(SearchRegime):
         # init model alphas gradient tensor
         alphasGrad = [zeros(1, requires_grad=True).cuda() for _ in range(nAlphas)]
         # iterate over losses
-        for lossDict, partition in lossDictsPartitionList:
+        for lossDict, diffList, partitionRatio in lossDictsPartitionList:
             # add lossDict to loss dicts list
             lossDictsList.append(lossDict)
             # sum loss by keys
             for k, v in lossDict.items():
                 lossAvgDict[k] += v.item()
             # calc lossDict contribution to each layer alpha gradient
-            for layerIdx, layer in enumerate(model.layersList()):
-                alphasGrad[layerIdx] += ((partition[layerIdx] - layer.alphaWidthMean()) * lossDict[totalKey].item())
+            assert (len(alphasGrad) == len(diffList))
+            for layerIdx, diff in enumerate(diffList):
+                alphasGrad[layerIdx] += (diff * lossDict[totalKey].item())
 
         # average gradient and put in layer.alpha.grad
         assert (len(alphas) == len(alphasGrad))
