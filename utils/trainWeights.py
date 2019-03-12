@@ -247,7 +247,7 @@ class TrainWeights:
         # init optimizer
         optimizer = self._initOptimizer()
         # init scheduler
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=2, min_lr=args.learning_rate_min)
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=args.weights_patience, min_lr=args.learning_rate_min)
 
         epoch = 0
         trainLoggerFlag = True

@@ -386,7 +386,7 @@ class SearchRegime(TrainRegime):
         # init optimizer
         optimizer = SGD(model.alphas(), args.search_learning_rate, momentum=args.search_momentum, weight_decay=args.search_weight_decay)
         # init scheduler
-        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=2, min_lr=args.search_learning_rate_min)
+        scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.95, patience=args.search_patience, min_lr=args.search_learning_rate_min)
 
         for epoch in epochRange:
             print('========== Epoch:[{}/{}] =============='.format(epoch, self.nEpochs))
