@@ -92,7 +92,9 @@ def iterateFolder(scriptArgs):
                     scriptArgs.json = '{}/{}'.format(scriptArgs.folderPath, scriptArgs.json)
                     # copy checkpoint
                     if exists(filePath):
-                        copy2(filePath, scriptArgs.json)
+                        dstPath = scriptArgs.json
+                        if not exists(dstPath):
+                            copy2(filePath, dstPath)
                         # train checkpoint
                         trainedCheckpoint = train(scriptArgs)
                         foundCheckpointToTrain = foundCheckpointToTrain or trainedCheckpoint
