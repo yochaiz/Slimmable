@@ -12,13 +12,18 @@ class Replica:
         self._replicateModel(buildModelFunc, args, modelStateDict, modelAlphas)
         # init trainWeights instance
         self._trainWeights = TrainPathWeights(getModel=self.getModel, getModelParallel=self.getModel, getArgs=lambda: args, getLogger=lambda: logger,
-                                              getTrainQueue=lambda: trainQueue, getValidQueue=lambda: trainQueue,
+                                              getTrainQueue=lambda: trainQueue, getValidQueue=lambda: None,
                                               getTrainFolderPath=lambda: trainFolderPath, gpu=gpu)
 
     @abstractmethod
     # init paths for training
-    def initTrainPaths(self, params: tuple):
+    def initTrainPaths(self, params: tuple) -> dict:
         raise NotImplementedError('subclasses must override initTrainPaths()!')
+
+    @abstractmethod
+    # init paths for loss evaluation
+    def initLossEvaluationPaths(self, params: tuple, trainPaths: dict) -> dict:
+        raise NotImplementedError('subclasses must override initLossEvaluationPaths()!')
 
     @abstractmethod
     # restore cModel weights before training paths
@@ -57,11 +62,11 @@ class Replica:
     # assumes cModel has original weights + original BNs, i.e. restoreModelOriginalWeights() has been applied
     def train(self, params: tuple):
         # init training paths
-        layerPaths = self.initTrainPaths(params)
+        trainPaths = self.initTrainPaths(params)
         # train
-        self._trainWeights.train(layerPaths)
+        self._trainWeights.train(trainPaths)
 
-        return layerPaths
+        return self.initLossEvaluationPaths(params, trainPaths)
 
 
 class MultinomialReplica(Replica):
@@ -76,9 +81,20 @@ class MultinomialReplica(Replica):
         # load original weights
         model.load_state_dict(self._originalWeightsDict)
 
-    def initTrainPaths(self, params: tuple):
+    def initTrainPaths(self, params: tuple) -> dict:
         srcPath = params
-        return {0: srcPath}
+        # init trained paths with homogeneous paths
+        trainPaths = {width: path for width, path in self._cModel.baselineWidth()}
+        # add path sampled from distribution
+        trainPaths[self._cModel.partitionKey()] = srcPath
+        print('nTrainedPaths:[{}]'.format(len(trainPaths)))
+
+        # return {self._cModel.partitionKey(): srcPath}
+        return trainPaths
+
+    def initLossEvaluationPaths(self, params: tuple, trainPaths: dict) -> dict:
+        srcPath = params
+        return {self._cModel.partitionKey(): srcPath}
 
 
 class CategoricalReplica(Replica):
@@ -93,7 +109,7 @@ class CategoricalReplica(Replica):
         # load weights
         model.load_state_dict(self._originalWeightsDict)
 
-    def initTrainPaths(self, params: tuple):
+    def initTrainPaths(self, params: tuple) -> dict:
         model = self._cModel
         # extract params
         layer, srcPath = params
@@ -107,6 +123,9 @@ class CategoricalReplica(Replica):
             layerPaths[layer.widthRatioByIdx(idx)] = [idx] * len(srcPath)
 
         return layerPaths
+
+    def initLossEvaluationPaths(self, params: tuple, trainPaths: dict) -> dict:
+        return trainPaths
 
 # def gpu(self) -> int:
 #     return self._gpu
