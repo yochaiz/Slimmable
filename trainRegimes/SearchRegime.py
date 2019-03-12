@@ -167,10 +167,6 @@ class SearchRegime(TrainRegime):
         # init data table row keys to replace
         self.rowKeysToReplace = [self.validLossKey, self.validAccKey]
 
-        # init email time
-        self.lastMailTime = time()
-        self.secondsBetweenMails = 1 * 3600
-
     def buildStatsRules(self):
         _alphaDistributionMaxVal = 1.1
         return {self.batchAlphaDistributionKey: _alphaDistributionMaxVal,
@@ -400,7 +396,8 @@ class SearchRegime(TrainRegime):
             loggersDict = {self.trainLoggerKey: trainLogger}
 
             # train alphas
-            epochLossDict, alphasDataRow = self.trainAlphas(self._getNextSearchQueueDataLoader(), optimizer, epoch, loggersDict)
+            # epochLossDict, alphasDataRow = self.trainAlphas(self._getNextSearchQueueDataLoader(), optimizer, epoch, loggersDict)
+            epochLossDict, alphasDataRow = self.trainAlphas(self.valid_queue, optimizer, epoch, loggersDict)
             # update scheduler
             scheduler.step(epochLossDict.get(self.flopsLoss.totalKey()))
 
