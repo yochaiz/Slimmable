@@ -59,7 +59,7 @@ def load_data(args):
     train_queue = DataLoader(train_data, batch_size=args.batch_size, sampler=SubsetRandomSampler(indices),
                              pin_memory=True, num_workers=args.workers)
 
-    valid_queue = DataLoader(valid_data, batch_size=args.batch_size, shuffle=False, pin_memory=True, num_workers=args.workers)
+    valid_queue = DataLoader(valid_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=args.workers)
 
     # init create DataLoader function
     createDataLoader = lambda data, _indices: DataLoader(data, batch_size=args.batch_size, sampler=SubsetRandomSampler(_indices),
