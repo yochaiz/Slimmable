@@ -47,9 +47,10 @@ class FlopsLoss(Module):
         # self.flopsLossImgPath = '{}/flops_loss_func.pdf'.format(args.save)
         # self._plotFunction(self.flopsLoss, baselineFlopsDict.values())
 
-        homogeneousLoss = load('homogeneous.pth.tar')
-        self._linearLineParams = homogeneousLoss.linearLineParams
-        self._flopsList = sorted(homogeneousLoss.flopsDict.keys())
+        # homogeneousLoss = load('homogeneous.pth.tar')
+        # self._linearLineParams = homogeneousLoss.linearLineParams
+        # self._flopsList = sorted(homogeneousLoss.flopsDict.keys())
+        self._flopsList = sorted(baselineFlopsDict.values())
 
         self._flopsLoss = LossDiff().calcLoss
         self.flopsLossImgPath = '{}/flops_loss_func.pdf'.format(args.save)
@@ -70,11 +71,31 @@ class FlopsLoss(Module):
     #
     #     return loss
 
-    def forward(self, input: tensor, target: tensor, modelFlops: float) -> dict:
+    # def forward(self, input: tensor, target: tensor, modelFlops: float) -> dict:
+    #     loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
+    #             self._flopsKey: tensor(modelFlops, dtype=float32).cuda()}
+    #
+    #     # find modelFlops corresponding linear line
+    #     flopsIdx = bisect_left(self._flopsList, modelFlops)
+    #     if flopsIdx <= 0:
+    #         # it is possible to select configuration with flops less than homogeneous 0.25
+    #         x0, x1 = self._flopsList[0:2]
+    #     else:
+    #         x0, x1 = self._flopsList[flopsIdx - 1:flopsIdx + 1]
+    #         assert (x0 <= modelFlops <= x1)
+    #     m, b = self._linearLineParams[(x0, x1)]
+    #     # calc expected loss for modelFlops
+    #     expectedLoss = (m * modelFlops) + b
+    #     lossDiff = loss[self._crossEntropyKey] - expectedLoss
+    #     loss[self._totalKey] = self._flopsLoss(lossDiff / expectedLoss)
+    #
+    #     return loss
+
+    def forward(self, input: tensor, target: tensor, modelFlops: float, homogeneousLogits: dict) -> dict:
         loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
                 self._flopsKey: tensor(modelFlops, dtype=float32).cuda()}
 
-        # find modelFlops corresponding linear line
+        # find modelFlops interval
         flopsIdx = bisect_left(self._flopsList, modelFlops)
         if flopsIdx <= 0:
             # it is possible to select configuration with flops less than homogeneous 0.25
@@ -82,9 +103,14 @@ class FlopsLoss(Module):
         else:
             x0, x1 = self._flopsList[flopsIdx - 1:flopsIdx + 1]
             assert (x0 <= modelFlops <= x1)
-        m, b = self._linearLineParams[(x0, x1)]
+
+        # calc interval linear line
+        y0, y1 = self.crossEntropyLoss(homogeneousLogits[x0], target), self.crossEntropyLoss(homogeneousLogits[x1], target)
+        m = (y0 - y1) / (x0 - x1)
+        b = y1 - (m * x1)
         # calc expected loss for modelFlops
         expectedLoss = (m * modelFlops) + b
+        # calc loss difference
         lossDiff = loss[self._crossEntropyKey] - expectedLoss
         loss[self._totalKey] = self._flopsLoss(lossDiff / expectedLoss)
 

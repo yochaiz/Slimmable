@@ -280,14 +280,13 @@ class ModelReplicator:
                        generateTrainParams: callable, addLossDict: callable):
         cModel = replica.getModel()
         print('alphas:{}'.format(cModel.alphas()))
-        print('indices:{}'.format(dataset.sampler.indices[0:10]))
         # select new path based on alphas distribution.
         # check that selected path hasn't been selected before
         pathWidthIdx = ModelReplicator._generateNewPath(replica, pathsHistoryDict)
         print('Path width:{}'.format(cModel.currWidth()))
         # train model on path
         trainParams = generateTrainParams(pathWidthIdx)
-        trainedPaths = replica.train(trainParams)
+        evalPaths = replica.train(trainParams)
         # switch to eval mode
         cModel.eval()
         # init path loss dictionaries list
@@ -298,13 +297,24 @@ class ModelReplicator:
                 input = input.cuda().clone().detach().requires_grad_(False)
                 target = target.cuda(async=True).clone().detach().requires_grad_(False)
 
-                for widthRatio, trainedPathIdx in trainedPaths.items():
+                # init homogeneous logits over batch dictionary
+                # keys are the homogeneous width flops, not homogeneous width
+                homogeneousLogits = {}
+                for homogeneousWidth, homogeneousPathIdx in cModel.baselineWidth():
+                    # set cModel path to homogeneous path
+                    cModel.setCurrWidthIdx(homogeneousPathIdx)
+                    # forward input in model selected path
+                    logits = cModel(input)
+                    # add logits to dictionary
+                    homogeneousLogits[cModel.countFlops()] = logits
+
+                for widthRatio, trainedPathIdx in evalPaths.items():
                     # set cModel path to trained path
                     cModel.setCurrWidthIdx(trainedPathIdx)
                     # forward input in model selected path
                     logits = cModel(input)
                     # calc loss
-                    lossDict = lossFunc(logits, target, cModel.countFlops())
+                    lossDict = lossFunc(logits, target, cModel.countFlops(), homogeneousLogits)
                     # add loss to container
                     addLossDict(lossDict, pathLossDictsList, widthRatio, trainedPathIdx)
 
