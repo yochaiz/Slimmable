@@ -10,9 +10,11 @@ class TrainPathWeights(TrainWeights):
         self.trainPaths = {}
         # save GPU device number
         self._gpu = gpu
+        # set number of training epochs
+        self._maxEpoch = getArgs().weights_epochs
 
     def stopCondition(self, epoch):
-        return epoch >= 150
+        return epoch >= self._maxEpoch
 
     def widthList(self):
         return self.trainPaths.items()
