@@ -115,6 +115,7 @@ parser.add_argument('--repeatNum', type=int, required=True, choices=range(1, 100
 parser.add_argument('--gpu', type=str, default='0', help='gpu device id, e.g. 0,1,3')
 parser.add_argument('--workers', type=int, default=0, choices=range(0, 32), help='num of workers')
 parser.add_argument('--optimal_epochs', type=int, default=150, help='stop training weights if there is no new optimum in last optimal_epochs')
+parser.add_argument('--weights_patience', type=int, default=2, help='weights training scheduler epochs patience before lowering learning rate')
 parser.add_argument('--pre_trained', type=str, default=None, help='pre-trained model to copy weights from')
 parser.add_argument('--individual', action='store_true', default=False, help='Trains the partition individually in case value is True')
 
