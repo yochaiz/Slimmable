@@ -31,7 +31,7 @@ def create_exp_dir(resultFolderPath):
     # init path function
     pathFunc = lambda fn: path.relpath(fn, baseFolder)
     # init folders we want to zip
-    foldersToZip = ['models', 'trainRegimes', 'utils']
+    foldersToZip = ['models', 'trainRegimes', 'utils', 'replicator']
     # save folders files
     for folder in foldersToZip:
         zipFolder('{}/{}'.format(baseFolder, folder), pathFunc, zipf)
