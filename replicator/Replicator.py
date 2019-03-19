@@ -297,16 +297,16 @@ class ModelReplicator:
                 input = input.cuda().clone().detach().requires_grad_(False)
                 target = target.cuda(async=True).clone().detach().requires_grad_(False)
 
-                # init homogeneous logits over batch dictionary
-                # keys are the homogeneous width flops, not homogeneous width
-                homogeneousLogits = {}
-                for homogeneousWidth, homogeneousPathIdx in cModel.baselineWidth():
-                    # set cModel path to homogeneous path
-                    cModel.setCurrWidthIdx(homogeneousPathIdx)
-                    # forward input in model selected path
-                    logits = cModel(input)
-                    # add logits to dictionary
-                    homogeneousLogits[cModel.countFlops()] = logits
+                # # init homogeneous logits over batch dictionary
+                # # keys are the homogeneous width flops, not homogeneous width
+                # homogeneousLogits = {}
+                # for homogeneousWidth, homogeneousPathIdx in cModel.baselineWidth():
+                #     # set cModel path to homogeneous path
+                #     cModel.setCurrWidthIdx(homogeneousPathIdx)
+                #     # forward input in model selected path
+                #     logits = cModel(input)
+                #     # add logits to dictionary
+                #     homogeneousLogits[cModel.countFlops()] = logits
 
                 for widthRatio, trainedPathIdx in evalPaths.items():
                     # set cModel path to trained path
@@ -314,7 +314,8 @@ class ModelReplicator:
                     # forward input in model selected path
                     logits = cModel(input)
                     # calc loss
-                    lossDict = lossFunc(logits, target, cModel.countFlops(), homogeneousLogits)
+                    lossDict = lossFunc(logits, target, cModel.countFlops())
+                    # lossDict = lossFunc(logits, target, cModel.countFlops(), homogeneousLogits)
                     # add loss to container
                     addLossDict(lossDict, pathLossDictsList, widthRatio, trainedPathIdx)
 
