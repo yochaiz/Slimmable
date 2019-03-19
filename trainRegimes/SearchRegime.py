@@ -395,6 +395,12 @@ class SearchRegime(TrainRegime):
             # set loggers dictionary
             loggersDict = {self.trainLoggerKey: trainLogger}
 
+            # create epoch jobs
+            epochDataRows = self._createEpochJobs(epoch)
+            # add epoch data rows
+            for jobDataRow in epochDataRows:
+                logger.addDataRow(jobDataRow, trType='<tr bgcolor="#2CBDD6">')
+
             # train alphas
             # epochLossDict, alphasDataRow = self.trainAlphas(self._getNextSearchQueueDataLoader(), optimizer, epoch, loggersDict)
             epochLossDict, alphasDataRow = self.trainAlphas(self.valid_queue, optimizer, epoch, loggersDict)
@@ -406,17 +412,12 @@ class SearchRegime(TrainRegime):
             # add values to alphas data row
             additionalData = {self.epochNumKey: epoch, self.lrKey: optimizer.param_groups[0]['lr'], self.validFlopsRatioKey: model.flopsRatio()}
             self._applyFormats(additionalData)
+            # add alphas data row
             alphasDataRow.update(additionalData)
             logger.addDataRow(alphasDataRow)
 
             # save checkpoint
             save_checkpoint(self.trainFolderPath, model, optimizer, epochLossDict)
-
-            # create epoch jobs
-            epochDataRows = self._createEpochJobs(epoch)
-            # add epoch data rows
-            for jobDataRow in epochDataRows:
-                logger.addDataRow(jobDataRow, trType='<tr bgcolor="#2CBDD6">')
 
             # # create jobs and train model weights
             # if (epoch % args.train_weights_interval) == 0:
