@@ -279,8 +279,7 @@ def plotFolders(folderPath):
                     # # check if partitionKey exits under folderName
                     # if partitionKey not in flopsData:
                     #     # add PlotLabelData instance to folder FlopsData dictionary
-                    #     flopsData[partitionKey] = PlotLabelData(partitionKey, label, colors[nextColorIdx])
-                    #     nextColorIdx += 1
+                    #     flopsData[partitionKey] = PlotLabelData(partitionKey, label)
                     # # add checkpoint
                     # flopsData[partitionKey].addCheckpoint(checkpoint)
 
