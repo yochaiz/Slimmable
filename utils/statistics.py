@@ -81,15 +81,16 @@ class Statistics:
 
     @staticmethod
     def __setAxesProperties(ax, title, xLabel, yLabel, yMax=None, yMin=0.0):
-        ax.set_xlabel(xLabel)
-        ax.set_ylabel(yLabel)
+        ax.set_xlabel(xLabel, fontsize=20)
+        ax.set_ylabel(yLabel, fontsize=20)
+        ax.tick_params(axis='both', which='major', labelsize=16)
         ax.set_ylim(bottom=yMin)
         if yMax:
             ax.set_ylim(top=yMax)
         ax.set_title(title)
         # put legend in bottom right corner, transparent (framealpha), small font
-        ax.legend(loc='upper center', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 12})
-        # ax.legend(loc='lower right', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 10})
+        # ax.legend(loc='upper center', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 12})
+        ax.legend(loc='lower right', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 10})
 
     @staticmethod
     def __setFigProperties(fig, figSize=(15, 10)):
