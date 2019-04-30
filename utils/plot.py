@@ -199,6 +199,87 @@ def fixCheckpointFlops(folderPath):
             save(checkpoint, checkpointPath)
 
 
+def plotMethods(baselineFoldersPath, methodsFoldersPath):
+    # init flops data with inner folders as keys, [] as values
+    flopsData = {}
+    # init labels to connect list
+    labelsToConnect = []
+
+    # init colors
+    colormap = plt.cm.hot
+    baselineColorVal = 0.7
+    # init baseline color
+    baselineColor = colormap(baselineColorVal)
+
+    # iterate over baseline folders
+    folderPath = baselineFoldersPath
+    for folder in sorted(listdir(folderPath)):
+        fPath = '{}/{}'.format(folderPath, folder)
+        if isdir(fPath):
+            # set label
+            label = folder
+            # create PlotLabelData instance
+            labelData = PlotLabelData(label, label, baselineColor)
+            # add PlotLabelData instance to folder FlopsData dictionary
+            flopsData[label] = labelData
+            # add to labelsToConnect list
+            labelsToConnect.append(label)
+            # iterate over checkpoints
+            for file in listdir(fPath):
+                filePath = '{}/{}'.format(fPath, file)
+                # load checkpoint
+                checkpoint = load(filePath)
+                # add checkpoint
+                labelData.addCheckpoint(checkpoint)
+
+    # iterate over methods folders
+    folderPath = methodsFoldersPath
+    foldersList = listdir(folderPath)
+
+    # init list of colors for checkpoints per epoch
+    colors = [colormap(i) for i in linspace(baselineColorVal, 0.0, len(foldersList) + 1)]
+    # init color index
+    colorIdx = 0
+
+    # init dictionary for methods checkpoints
+    filesFlopsData = {}
+
+    newList = [foldersList[0]] + [foldersList[3]] + [foldersList[2]] + [foldersList[1]]
+
+    for folder in newList:
+        print(folder)
+        fPath = '{}/{}'.format(folderPath, folder)
+        # update color index
+        colorIdx += 1
+        if isdir(fPath):
+            # set label
+            label = folder
+            # init folder checkpoints dictionary
+            filesFlopsData[label] = {}
+            # iterate over method checkpoints
+            for file in sorted(listdir(fPath)):
+                checkpointPath = '{}/{}'.format(fPath, file)
+                # load checkpoint
+                checkpoint = load(checkpointPath)
+                # set checkpoint label
+                checkpointLabel = '[{}]-[{}]'.format(checkpoint.epoch, checkpoint.id)
+                if checkpointLabel not in filesFlopsData[label]:
+                    filesFlopsData[label][checkpointLabel] = PlotLabelData(label, '', colors[colorIdx])
+
+                filesFlopsData[label][checkpointLabel].addCheckpoint(checkpoint)
+
+    for folderLabel, folderDict in filesFlopsData.items():
+        for checkpointLabel, checkpointData in folderDict.items():
+            newLabel = '{}-{}'.format(folderLabel, checkpointLabel)
+            flopsData[newLabel] = checkpointData
+
+    # plot
+    partitionAttrKey = 'partition'
+    partitionFunc = lambda checkpoint: getattr(checkpoint, partitionAttrKey, None)
+    plotFlopsData(flopsData.values(), (getPartitionFlops, getPartitionValidAcc, partitionFunc), [labelsToConnect],
+                  't', folderPath)
+
+
 # folderPath should be a path to folder which has folders inside
 # each inner folder will be the title for the checkpoints in it
 def plotFolders(folderPath):
@@ -213,7 +294,8 @@ def plotFolders(folderPath):
     colormap = plt.cm.hot
     folderColorVal = 0.7
     # init folders color
-    folderColor = colormap(folderColorVal)
+    # folderColor = colormap(folderColorVal)
+    folderColor = plt.cm.cool(0.1)
     # iterate over folders
     for folder in sorted(listdir(folderPath)):
         fPath = '{}/{}'.format(folderPath, folder)
@@ -261,6 +343,7 @@ def plotFolders(folderPath):
                     # set label
                     # label = '[{}]'.format(idx)
                     label = partitionKey
+                    # label = ''
                     # set label to checkpoint
                     setattr(checkpoint, _titleKey, label)
 
@@ -290,7 +373,7 @@ def plotFolders(folderPath):
 
     # # init colors
     # colormap = plt.cm.hot
-    # colors = [colormap(i) for i in linspace(0.7, 0.0, len(flopsData.keys()))]
+    # colors = [colormap(i) for i in linspace(folderColorVal, 0.0, len(flopsData.keys()))]
     # # set color to each key
     # for idx, v in enumerate(flopsData.values()):
     #     v.setColor(colors[idx])
@@ -299,7 +382,7 @@ def plotFolders(folderPath):
     colors = [colormap(i) for i in linspace(folderColorVal, 0.0, len(filesFlopsData.keys()) + 1)]
     # set next color index
     nextColorIdx = 1
-
+    #
     # iterate over checkpoints: set them color per epoch and add them sorted to flopsData
     for epoch in sorted(filesFlopsData.keys()):
         for id in sorted(filesFlopsData[epoch].keys()):
@@ -312,10 +395,19 @@ def plotFolders(folderPath):
         # set new color to new epoch
         nextColorIdx += 1
 
+    # homoFlopsData = {}
+    # for label in labelsToConnect:
+    #     v = flopsData[label]
+    #     homoFlopsData[label] = PlotLabelData(v.legendString() + '_', v.annotateString(), v.color())
+    #     for c in v.checkpoints():
+    #         homoFlopsData[label].addCheckpoint(c)
+
     # plot
     partitionFunc = lambda checkpoint: getattr(checkpoint, partitionAttrKey, None)
     plotFlopsData(flopsData.values(), (getPartitionFlops, getPartitionValidAcc, partitionFunc), [labelsToConnect],
                   'acc_vs_flops_summary', folderPath)
+
+    # 'acc_vs_flops_summary'
 
 
 def plotCompareFolders(foldersList):
@@ -413,11 +505,16 @@ def plotCompareFolders(foldersList):
 # dataset = 'imagenet'
 # basePath = '/home/vista/Desktop/Architecture_Search/results/{}/'.format(dataset)
 
-folderPath = '/home/vista/Desktop/Architecture_Search/results_block_binomial/checkpoints'
+folderPath = '/home/vista/Desktop/Architecture_Search/results/imagenet/checkpoints-imagenet'
+# folderPath = '/home/vista/Desktop/Architecture_Search/results_block_binomial/ended/plot_compare_methods'
+# folderPath = '/home/vista/Desktop/F-BANNAS_depracated/6.12/Updated'
+baselinePath = '{}/baseline'.format(folderPath)
+methodsPath = '{}/methods'.format(folderPath)
 
 # buildWidthRatioMissingCheckpoints(widthRatio, nBlocks=3)
 # updateCheckpointBlocksPartition(folderPath)
 plotFolders(folderPath)
+# plotMethods(baselinePath, methodsPath)
 # generateCSV(folderPath)
 # fixCheckpointFlops('/home/vista/Desktop/Architecture_Search/results/mixed_training')
 # plotCompareFolders([('{}/{}'.format(basePath, x), x) for x in ['mixed_training', 'individual_training']])
