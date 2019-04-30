@@ -81,18 +81,38 @@ class Statistics:
 
     @staticmethod
     def __setAxesProperties(ax, title, xLabel, yLabel, yMax=None, yMin=0.0):
-        ax.set_xlabel(xLabel, fontsize=20)
-        ax.set_ylabel(yLabel, fontsize=20)
-        ax.tick_params(axis='both', which='major', labelsize=16)
+        # xLabel = xLabel.replace('Flops', 'Bops')
+        # yLabel = yLabel.replace('Flops', 'Bops')
+        # title = title.replace('Flops', 'Bops')
+
+        ax.set_xlabel(xLabel, fontsize=14)
+        ax.set_ylabel(yLabel, fontsize=14)
+        ax.tick_params(axis='both', which='major', labelsize=10)
         ax.set_ylim(bottom=yMin)
         if yMax:
             ax.set_ylim(top=yMax)
-        ax.set_title(title)
+
+        # special ylim, xlim for zoom
+        # ax.set_ylim(bottom=81.5, top=86.1)
+        # ax.set_xlim(left=0.5 * 1E7, right=1.7*1E7)
+
+        # # remove duplicate labels from legend
+        # handles, labels = ax.get_legend_handles_labels()
+        # # remove baseline labels from legend
+        # labels = labels[13:]
+        # handles = handles[13:]
+        # from collections import OrderedDict
+        # by_label = OrderedDict(zip(labels, handles))
+
+        ax.set_title(title, fontsize=10)
+
         # put legend in bottom right corner, transparent (framealpha), small font
-        # ax.legend(loc='upper center', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 12})
-        ax.legend(loc='lower right', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 10})
+        ax.legend(loc='upper center', ncol=4, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 6})
+        # ax.legend(loc='lower right', ncol=1, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 10})
+        # ax.legend(by_label.values(), by_label.keys(), loc='lower right', ncol=1, fancybox=True, shadow=True, framealpha=0.1, prop={'size': 10})
 
     @staticmethod
+    # def __setFigProperties(fig, figSize=(5, 5)):
     def __setFigProperties(fig, figSize=(15, 10)):
         fig.set_size_inches(figSize)
         fig.tight_layout()
