@@ -10,7 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
-from utils.training import TrainingStats
+# from utils.training import TrainingStats
 
 
 class LossDiff:
