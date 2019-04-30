@@ -87,7 +87,7 @@ class MultinomialReplica(Replica):
         trainPaths = {width: path for width, path in self._cModel.baselineWidth()}
         # add path sampled from distribution
         trainPaths[self._cModel.partitionKey()] = srcPath
-        print('nTrainedPaths:[{}]'.format(len(trainPaths)))
+        print('nTrainedConfigs:[{}]'.format(len(trainPaths)))
 
         # return {self._cModel.partitionKey(): srcPath}
         return trainPaths
