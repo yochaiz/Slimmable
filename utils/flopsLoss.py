@@ -49,15 +49,15 @@ class FlopsLoss(Module):
         # self.flopsLossImgPath = '{}/flops_loss_func.pdf'.format(args.save)
         # self._plotFunction(self.flopsLoss, baselineFlopsDict.values())
 
-        # homogeneousTrainLoss = load('homogeneousTrainLoss.pth.tar')
-        # self._linearLineParams = homogeneousTrainLoss.linearLineParams
-        # self._flopsList = sorted(homogeneousTrainLoss.flopsDict.keys())
+        homogeneousTrainLoss = load('homogeneousTrainLoss.pth.tar')
+        self._linearLineParams = homogeneousTrainLoss.linearLineParams
+        self._flopsList = sorted(homogeneousTrainLoss.flopsDict.keys())
 
-        self._flopsList = sorted(baselineFlopsDict.values())
+        # self._flopsList = sorted(baselineFlopsDict.values())
 
-        homogeneousValidAcc = load('homogeneousValidAcc.pth.tar')
-        self._linearLineParams = homogeneousValidAcc.linearLineParams
-        self._flopsList = sorted(homogeneousValidAcc.flopsDict.keys())
+        # homogeneousValidAcc = load('homogeneousValidAcc.pth.tar')
+        # self._linearLineParams = homogeneousValidAcc.linearLineParams
+        # self._flopsList = sorted(homogeneousValidAcc.flopsDict.keys())
 
         self._flopsLoss = LossDiff().calcLoss
         self.flopsLossImgPath = '{}/flops_loss_func.pdf'.format(args.save)
@@ -71,6 +71,7 @@ class FlopsLoss(Module):
     def totalKey() -> str:
         return FlopsLoss._totalKey
 
+    # # Methods I, II, III loss function
     # def forward(self, input: tensor, target: tensor, modelFlops: float) -> dict:
     #     loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
     #             self._flopsKey: self.lmbda * self.flopsLoss(modelFlops)}
@@ -78,25 +79,27 @@ class FlopsLoss(Module):
     #
     #     return loss
 
-    # def forward(self, input: tensor, target: tensor, modelFlops: float) -> dict:
-    #     loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
-    #             self._flopsKey: tensor(modelFlops, dtype=float32).cuda()}
-    #
-    #     # find modelFlops corresponding linear line
-    #     flopsIdx = bisect_left(self._flopsList, modelFlops)
-    #     if flopsIdx <= 0:
-    #         # it is possible to select configuration with flops less than homogeneous 0.25
-    #         x0, x1 = self._flopsList[0:2]
-    #     else:
-    #         x0, x1 = self._flopsList[flopsIdx - 1:flopsIdx + 1]
-    #         assert (x0 <= modelFlops <= x1)
-    #     m, b = self._linearLineParams[(x0, x1)]
-    #     # calc expected loss for modelFlops
-    #     expectedLoss = (m * modelFlops) + b
-    #     lossDiff = loss[self._crossEntropyKey] - expectedLoss
-    #     loss[self._totalKey] = self._flopsLoss(lossDiff / expectedLoss)
-    #
-    #     return loss
+    # Method IV loss function
+    def forward(self, input: tensor, target: tensor, modelFlops: float) -> dict:
+        loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
+                self._flopsKey: tensor(modelFlops, dtype=float32).cuda()}
+
+        # find modelFlops corresponding linear line
+        flopsIdx = bisect_left(self._flopsList, modelFlops)
+        if flopsIdx <= 0:
+            # it is possible to select configuration with flops less than homogeneous 0.25
+            x0, x1 = self._flopsList[0:2]
+        else:
+            x0, x1 = self._flopsList[flopsIdx - 1:flopsIdx + 1]
+            assert (x0 <= modelFlops <= x1)
+
+        m, b = self._linearLineParams[(x0, x1)]
+        # calc expected loss for modelFlops
+        expectedLoss = (m * modelFlops) + b
+        lossDiff = loss[self._crossEntropyKey] - expectedLoss
+        loss[self._totalKey] = self._flopsLoss(lossDiff / expectedLoss)
+
+        return loss
 
     # def forward(self, input: tensor, target: tensor, modelFlops: float, homogeneousLogits: dict) -> dict:
     #     loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
@@ -123,30 +126,30 @@ class FlopsLoss(Module):
     #
     #     return loss
 
-    def forward(self, input: tensor, target: tensor, modelFlops: float) -> dict:
-        loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
-                self._flopsKey: tensor(modelFlops, dtype=float32).cuda()}
-
-        # find modelFlops corresponding linear line
-        flopsIdx = bisect_left(self._flopsList, modelFlops)
-        if flopsIdx <= 0:
-            # it is possible to select configuration with flops less than homogeneous 0.25
-            x0, x1 = self._flopsList[0:2]
-        else:
-            x0, x1 = self._flopsList[flopsIdx - 1:flopsIdx + 1]
-            assert (x0 <= modelFlops <= x1)
-
-        # get linear line parameters
-        m, b = self._linearLineParams[(x0, x1)]
-        # calc expected accuracy for modelFlops
-        expectedAcc = (m * modelFlops) + b
-        # calculate current accuracy
-        currAcc = TrainingStats.accuracy(input, target)[0]
-        # calc total loss
-        lossDiff = expectedAcc - currAcc
-        loss[self._totalKey] = self._flopsLoss(lossDiff / expectedAcc)
-
-        return loss
+    # def forward(self, input: tensor, target: tensor, modelFlops: float) -> dict:
+    #     loss = {self._crossEntropyKey: self.crossEntropyLoss(input, target),
+    #             self._flopsKey: tensor(modelFlops, dtype=float32).cuda()}
+    #
+    #     # find modelFlops corresponding linear line
+    #     flopsIdx = bisect_left(self._flopsList, modelFlops)
+    #     if flopsIdx <= 0:
+    #         # it is possible to select configuration with flops less than homogeneous 0.25
+    #         x0, x1 = self._flopsList[0:2]
+    #     else:
+    #         x0, x1 = self._flopsList[flopsIdx - 1:flopsIdx + 1]
+    #         assert (x0 <= modelFlops <= x1)
+    #
+    #     # get linear line parameters
+    #     m, b = self._linearLineParams[(x0, x1)]
+    #     # calc expected accuracy for modelFlops
+    #     expectedAcc = (m * modelFlops) + b
+    #     # calculate current accuracy
+    #     currAcc = TrainingStats.accuracy(input, target)[0]
+    #     # calc total loss
+    #     lossDiff = expectedAcc - currAcc
+    #     loss[self._totalKey] = self._flopsLoss(lossDiff / expectedAcc)
+    #
+    #     return loss
 
     def _plotFunction(self, func, xRange):
         xMin, xMax = min(xRange), max(xRange)
