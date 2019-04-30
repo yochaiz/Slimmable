@@ -63,7 +63,8 @@ class PlotLabelData:
         self._checkpoints.append(checkpoint)
 
     def setColor(self, color):
-        self._color = color
+        if self._color is None:
+            self._color = color
 
 
 class FlopsPlot:
@@ -187,7 +188,7 @@ class FlopsPlotWithLine(FlopsPlot):
                 # connect points
                 if len(self.linePoints[idx]) > 0:
                     xPrev, yPrev = self.linePoints[idx][-1]
-                    self.ax.plot([xPrev, x], [yPrev, y], self.lineStyle, c=self.lineColor[idx])
+                    self.ax.plot([xPrev, x], [yPrev, y], self.lineStyle, c=self.lineColor[idx], zorder=900)
                 # add point data to self.linePoints while keeping it sorted
                 insort_left(self.linePoints[idx], (x, y))
 
@@ -218,10 +219,10 @@ class FlopsAveragePlot(FlopsPlotWithLine):
                 xPrev, yPrev, confidenceHalfIntervalPrev = prevError
                 # connect bar bottom
                 self.ax.plot([xPrev, x], [yPrev - confidenceHalfIntervalPrev, y - confidenceHalfInterval],
-                             self.lineStyle, c=self.lineErrorBarColor[idx])
+                             self.lineStyle, c=self.lineErrorBarColor[idx], zorder=800)
                 # connect bar top
                 self.ax.plot([xPrev, x], [yPrev + confidenceHalfIntervalPrev, y + confidenceHalfInterval],
-                             self.lineStyle, c=self.lineErrorBarColor[idx])
+                             self.lineStyle, c=self.lineErrorBarColor[idx], zorder=800)
             # save last point as previous point
             self.prevErrorBar[idx] = (x, y, confidenceHalfInterval)
 
