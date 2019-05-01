@@ -26,6 +26,7 @@ To carry out Slimmable search, use the following command:
 PYTHONPATH=./ CUDA_VISIBLE_DEVICES=0,1 python3 ./search.py --type block_binomial --data ../datasets --width 0.25,0.5,0.75,1.0 --gpu 0,0,1 --nSamples 3 --workers 0 --search_learning_rate 1E-4 --lmbda 0.0 --search_learning_rate_min 1e-5 --modelFlops ./flops.pth.tar
 ```
 Make sure the current directory is the repository main directory.
+
 Notice it is possible to train multiple configurations on the same GPU. the --gpu flag determines how many configurations we train simultaneously. Therefore, --gpu 0,0,1 as in the command line example mean we train 3 configurations simultaneously, two configurations on GPU #0 and another configuration on GPU #1.
 
 ### Checkpoint evaluation
