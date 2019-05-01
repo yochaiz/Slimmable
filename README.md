@@ -27,7 +27,7 @@ PYTHONPATH=./ CUDA_VISIBLE_DEVICES=0,1 python3 ./search.py --type block_binomial
 ```
 Make sure the current directory is the repository main directory.
 
-Notice it is possible to train multiple configurations on the same GPU. the --gpu flag determines how many configurations we train simultaneously. Therefore, --gpu 0,0,1 as in the command line example mean we train 3 configurations simultaneously, two configurations on GPU #0 and another configuration on GPU #1.
+Notice it is possible to train multiple configurations on the same GPU. the --gpu flag determines how many configurations we train simultaneously. Therefore, --gpu 0,0,1 as in the command line example means we train 3 configurations simultaneously, two configurations on GPU #0 and another configuration on GPU #1.
 
 ### Checkpoint evaluation
 During the search, we sample configurations from the current distribution.
