@@ -3,7 +3,7 @@
 Code repository for Slimmable NAS (Chapter 4): https://arxiv.org/abs/1904.09872
 
 ## Installation
-We recommend using TensorFlow with pip virtual environment.
+We recommend using virtual environment.
 Installing instructions can be found in the following link: https://www.tensorflow.org/install/pip
 
 After the virtual environment activation, we have to install the required packages:
@@ -37,8 +37,6 @@ PYTHONPATH=./ CUDA_VISIBLE_DEVICES=0 python3 train_model.py --folderPath ../resu
 ```
 The argument --folderPath holds the path to the folder containing the checkpoints we would like to train.
 It is possible to train different checkpoints from the same folder on different GPUs simultaneously, just replace CUDA_VISIBLE_DEVICES value. 
-
-## Plot checkpoints command ???
 
 ## Acknowledgments  
 The research was funded by ERC StG RAPID.  
